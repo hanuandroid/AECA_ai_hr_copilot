@@ -1,0 +1,86 @@
+"""Provider observability through the existing LLMProvider abstraction.
+
+`observe(llm, operation)` wraps any provider (real or fake) and records AI_PROVIDER_REQUEST /
+AI_PROVIDER_RESPONSE / AI_PROVIDER_ERROR with provider, model, operation, schema, latency and, when
+the provider reports them, token counts. Cost is estimated only when real token usage AND configured
+pricing for that exact model exist; otherwise it is null (never invented, never billing).
+Prompts, completions, keys and headers are never recorded.
+"""
+
+from typing import Any
+
+from app.core.config import Settings, settings
+from app.services.ai.audit.events import AuditEventType, AuditStatus
+from app.services.ai.audit.recorder import Timer, record
+from app.services.ai.errors import AIError
+from app.services.ai.llm.base import LLMMessage, LLMResponse, LLMUsage, StructuredT, usage_sink
+
+
+def estimate_cost_usd(model: str, input_tokens: int | None, output_tokens: int | None,
+                      config: Settings = settings) -> float | None:
+    if input_tokens is None or output_tokens is None:
+        return None
+    pricing = {
+        config.ai_llm_model: (config.ai_llm_input_cost_per_mtok, config.ai_llm_output_cost_per_mtok),
+        config.ai_llm_fast_model: (config.ai_llm_fast_input_cost_per_mtok, config.ai_llm_fast_output_cost_per_mtok),
+    }.get(model)
+    if pricing is None or pricing[0] is None or pricing[1] is None:
+        return None
+    return round((input_tokens * pricing[0] + output_tokens * pricing[1]) / 1_000_000, 6)
+
+
+class ObservedLLMProvider:
+    observed = True
+
+    def __init__(self, inner: Any, operation: str):
+        self._inner = inner
+        self._operation = operation
+        self.name = getattr(inner, "name", "unknown")
+        self.model = getattr(inner, "model", "unknown")
+
+    def _meta(self, schema_name: str | None) -> dict[str, Any]:
+        return {"provider": _token(self.name), "model": _token(self.model), "operation": self._operation,
+                "schema_name": schema_name}
+
+    async def generate(self, messages: list[LLMMessage], **kwargs: Any) -> LLMResponse:
+        response = await self._call(lambda: self._inner.generate(messages, **kwargs), None)
+        return response
+
+    async def generate_structured(self, messages: list[LLMMessage], schema: type[StructuredT], **kwargs: Any) -> StructuredT:
+        return await self._call(lambda: self._inner.generate_structured(messages, schema, **kwargs), schema.__name__)
+
+    async def _call(self, invoke, schema_name: str | None):
+        meta = self._meta(schema_name)
+        record(AuditEventType.AI_PROVIDER_REQUEST, AuditStatus.STARTED, **meta)
+        usage = LLMUsage()
+        token = usage_sink.set(usage)
+        timer = Timer()
+        try:
+            result = await invoke()
+        except AIError as error:
+            record(AuditEventType.AI_PROVIDER_ERROR, AuditStatus.FAILED, duration_ms=timer.ms, error_code=error.code, **meta)
+            raise
+        except Exception:
+            record(AuditEventType.AI_PROVIDER_ERROR, AuditStatus.FAILED, duration_ms=timer.ms, error_code="UNEXPECTED", **meta)
+            raise
+        finally:
+            usage_sink.reset(token)
+        if isinstance(result, LLMResponse) and usage.input_tokens is None:
+            usage.input_tokens, usage.output_tokens = result.input_tokens, result.output_tokens
+        total = None if usage.input_tokens is None or usage.output_tokens is None else usage.input_tokens + usage.output_tokens
+        record(AuditEventType.AI_PROVIDER_RESPONSE, AuditStatus.SUCCESS, duration_ms=timer.ms,
+               input_tokens=usage.input_tokens, output_tokens=usage.output_tokens, total_tokens=total,
+               estimated_cost_usd=estimate_cost_usd(str(self.model), usage.input_tokens, usage.output_tokens), **meta)
+        return result
+
+
+def _token(value: object) -> str:
+    text = str(value)
+    return "".join(ch if ch.isalnum() or ch in "._:-/" else "_" for ch in text)[:120]
+
+
+def observe(llm: Any, operation: str) -> Any:
+    """Wrap a provider once; idempotent."""
+    if getattr(llm, "observed", False):
+        return llm
+    return ObservedLLMProvider(llm, operation)

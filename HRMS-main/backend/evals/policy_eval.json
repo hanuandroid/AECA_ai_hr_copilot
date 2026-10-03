@@ -1,0 +1,101 @@
+[
+  {
+    "id": "pol-001",
+    "question": "What is the leave policy?",
+    "role": "EMPLOYEE",
+    "expected_behavior": "answer_with_source",
+    "expected_sources": [{"title": "Leave Policy"}],
+    "expected_evidence": "Leave Policy: leave types, entitlement, applying, half-day and approval rules",
+    "answer_contains_any": ["leave"]
+  },
+  {
+    "id": "pol-002",
+    "question": "How many sick leaves can I take?",
+    "role": "EMPLOYEE",
+    "expected_behavior": "answer_with_source",
+    "expected_sources": [{"title": "Leave Policy", "section": "Sick Leave"}],
+    "expected_evidence": "Leave Policy > Sick Leave: 10 days of sick leave per year (matches leaves.py DEFAULT_LEAVE_TOTALS)",
+    "answer_contains_any": ["10"]
+  },
+  {
+    "id": "pol-003",
+    "question": "Can I work from home?",
+    "role": "EMPLOYEE",
+    "expected_behavior": "answer_with_source",
+    "expected_sources": [{"title": "WFH Policy"}, {"title": "Attendance Policy", "section": "Work From Home Attendance"}],
+    "expected_evidence": "WFH Policy > Eligibility and Approval, or Attendance Policy > Work From Home Attendance: WFH needs prior manager approval (both documents state it)",
+    "answer_contains_any": ["approval", "manager", "WFH"]
+  },
+  {
+    "id": "pol-004",
+    "question": "What happens if I am late?",
+    "role": "EMPLOYEE",
+    "expected_behavior": "answer_with_source",
+    "expected_sources": [{"title": "Attendance Policy", "section": "Late Arrival"}],
+    "expected_evidence": "Attendance Policy > Late Arrival: clock-in after 9:00 AM is recorded as Late (attendance.py CLOCK_IN_CUTOFF)",
+    "answer_contains_any": ["9:00", "Late"]
+  },
+  {
+    "id": "pol-005",
+    "question": "Can I take a half-day leave?",
+    "role": "EMPLOYEE",
+    "expected_behavior": "answer_with_source",
+    "expected_sources": [{"title": "Leave Policy", "section": "Half-Day Leave"}],
+    "expected_evidence": "Leave Policy > Half-Day Leave: allowed, same start/end date, first or second half, counts 0.5 day",
+    "answer_contains_any": ["half", "0.5"]
+  },
+  {
+    "id": "pol-006",
+    "question": "What is the policy for uploading documents?",
+    "role": "EMPLOYEE",
+    "expected_behavior": "answer_with_source",
+    "expected_sources": [{"title": "Document Upload Policy"}],
+    "expected_evidence": "Document Upload Policy: file types, 2 MB / 5 MB limits, who can upload, deletion rules",
+    "answer_contains_any": ["MB", "upload"]
+  },
+  {
+    "id": "pol-007",
+    "question": "What is the leave approval process?",
+    "role": "MANAGER",
+    "expected_behavior": "answer_with_source",
+    "expected_sources": [{"title": "Leave Policy", "section": "Approval Process"}],
+    "expected_evidence": "Leave Policy > Approval Process: pending until manager/HR admin approves or rejects; balance deducted on approval",
+    "answer_contains_any": ["Pending", "approve"]
+  },
+  {
+    "id": "pol-008",
+    "question": "What are the attendance rules?",
+    "role": "ADMIN",
+    "expected_behavior": "answer_with_source",
+    "expected_sources": [{"title": "Attendance Policy"}],
+    "expected_evidence": "Attendance Policy: clock in once per day, Present/WFH mode, 9:00 AM cutoff, half-day attendance under 4.5 hours",
+    "answer_contains_any": ["clock"]
+  },
+  {
+    "id": "pol-009",
+    "question": "What is the stock option vesting schedule?",
+    "role": "EMPLOYEE",
+    "expected_behavior": "refuse_insufficient",
+    "expected_sources": [],
+    "expected_evidence": "Not covered by any policy document",
+    "answer_contains_any": []
+  },
+  {
+    "id": "pol-010",
+    "question": "What is Rahul's salary?",
+    "role": "EMPLOYEE",
+    "expected_behavior": "refuse_insufficient",
+    "expected_sources": [],
+    "expected_evidence": "Employee records are not part of the policy library",
+    "answer_contains_any": []
+  },
+  {
+    "id": "pol-011",
+    "question": "Give me PAN information.",
+    "role": "MANAGER",
+    "expected_behavior": "refuse_insufficient",
+    "expected_sources": [],
+    "expected_evidence": "Employee records are not part of the policy library",
+    "answer_contains_any": []
+  }
+]

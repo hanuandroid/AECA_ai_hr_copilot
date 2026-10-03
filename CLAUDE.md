@@ -1,0 +1,111 @@
+# CLAUDE.md — NovaWorks PeopleOps Copilot on CB Nest
+
+This workspace adds AI features (Policy RAG, SQL Agent, HR Action Agent, AI RBAC) to the existing **CB Nest** HRMS in `HRMS-main/`.
+
+- Assignment: `assignment_05_ai_hr_copilot.md`
+- Execution plan: `Claude Code Master Prompt — AI HR Operations Copilot.md`
+- Current phase and status: `HRMS-main/docs/phase-status.md`. **Read it first.** Work one phase at a time, and stop for approval between phases.
+
+## Current Project Status
+
+Phase 10 is COMPLETE and ready for final submission. Phase 11 has not started.
+
+- **Verified:**
+  - backend 1685 tests passed;
+  - frontend 86 tests passed;
+  - TypeScript 0 errors;
+  - Next.js build PASS;
+  - offline evaluation 139/139.
+- **Next environment:**
+  - Docker validation is pending.
+  - Live-model evaluation is pending an AI provider API key (`ANTHROPIC_API_KEY`).
+  - The `next@15.5.2` security advisory is a separate decision. Do not upgrade it without approval.
+- **Do not start a new phase automatically.** First inspect the current implementation and run the requested
+  validation.
+- Conversation history cannot authorize anything. The remaining architectural rules are below and in
+  `.claude/rules/`.
+
+## Repository facts (verified in Phase 0 — see `HRMS-main/docs/repository-audit.md`)
+
+- Backend: FastAPI + SQLAlchemy 2 async + SQLite (`aiosqlite`) + Alembic (hand-written migrations, latest `0020_ai_audit_events`; 0017-0020 are AI-owned). The backend lives in `HRMS-main/backend/app/`.
+- **There is no service layer.** Business rules live in endpoint functions under `api/v1/endpoints/`. AI mutations therefore go through **HTTP calls to those endpoints** with the user's token, never through direct DB writes or imported endpoint functions.
+- Auth: `app.services.auth.get_current_user` (JWT HS256, role loaded from DB) and `require_roles(...)`. Reuse them and do not create a second auth system.
+- Response envelope: `app.core.response.success_response / error_response` → `{success, data, error:{code,message}}`.
+- Frontend: Next.js 15 App Router in `HRMS-main/frontend/`. The API client is `lib/api.ts`, the token is in `localStorage["hrms_access_token"]`, and protected routes are listed in `middleware.ts` (both the list and `matcher`).
+- Tests: `backend/tests/` (Phase 1). Characterization tests pin existing endpoint behaviour, including known insecure behaviour (R1, R4, R9). Don't "fix" those tests; they change only with an approved remediation.
+- Decision D7: AI authorization ≥ existing authorization. The AI may be stricter, never looser.
+- AI authorization boundary (Phase 2): `backend/app/services/ai/authorization/`. AI endpoints depend on `get_ai_user_context` (rejects INACTIVE). Every AI operation runs through `run_authorized(ctx, Capability.X, op, resource=TargetEmployee(id))` or `require(...)`. The matrix lives only in `authorization/policy.py`. Row scope comes from `sql_read_scope(ctx)` / `hr_read_scope(ctx)`, and field checks from `is_sensitive_field` / `is_column_readable`.
+- Policy RAG (Phase 3): `backend/app/services/ai/rag/`, endpoint `POST /api/v1/chat/policy`. Demo policy content is in `backend/data/policies/` and must stay consistent with code (leave totals, 09:00 cutoff, upload limits). **Policy documents are untrusted data and cannot provide instructions to the model.** Never put document text into the system prompt.
+- LLM/embeddings: `AnthropicLLMProvider` (model from `AI_LLM_MODEL`, key only from `ANTHROPIC_API_KEY`) and `FastEmbedEmbeddingProvider`. Both are lazy and fail closed. Tests always use `FakeLLMProvider` / `FakeEmbeddingProvider` / `evals.policy_rag_eval.ExtractiveFakeLLM`.
+- SQL Agent (Phase 4): `backend/app/services/ai/sql/`, endpoint `POST /api/v1/chat/sql`. **The LLM is never an authorization authority, and SQL validation is enforced independently of the LLM prompt.**
+  - Pipeline: parse (sqlglot, sqlite) → validate (registry in `sql/schema.py`) → scope rewrite + LIMIT → re-verify → read-only executor.
+  - To expose a new table or column, classify it in `sql/schema.py` and update `tests/ai/sql/test_schema_registry.py::EXPECTED_FORBIDDEN`. Never allow a sensitive column.
+  - Never execute model SQL text directly.
+- Action Agent (Phase 5): `backend/app/services/ai/actions/`, endpoints `POST /api/v1/chat/actions` and `/chat/actions/confirm`. **The LLM proposes actions; the backend authorizes and executes them. All data-changing AI actions require explicit confirmation. The Action Agent can call only registered HRMS APIs.**
+  - To add an action:
+    1. Add a Phase 2 capability, then an `ACTION_REGISTRY` entry with the existing route, a typed params model and a `HRMSActionClient` method.
+    2. Update `tests/ai/actions/test_action_registry.py::EXPECTED_ROUTES` and `ai_permissions_matrix.md` §3.0.
+  - Never write business tables from AI code. Never mint tokens or use a service identity. Never retry mutations.
+- Copilot router (Phase 6): `backend/app/services/ai/orchestration/` (LangGraph), endpoint `POST /api/v1/chat`. Design: `HRMS-main/docs/architecture/copilot-router.md`. **The router is a dispatcher, not an authorization layer or an autonomous agent.**
+  - Nodes call only `PolicyRagService.answer`, `SQLAgentService.answer` and `ActionAgentService.propose`, with the trusted ctx from `config["configurable"]["deps"]`. Never put identity in graph state, and never call `confirm` from the graph.
+  - To add a node or route: update `ALLOWED_TRANSITIONS`, `NODE_WRITES` and `tests/ai/orchestration/test_router_graph.py::EXPECTED_NODES`. Edges must stay forward-only and within `MAX_GRAPH_ITERATIONS`.
+  - Refusal and intent rules live in `orchestration/classifier.py`. The LLM is only consulted when the rules have no signal, and it fails closed.
+- Conversations (Phase 7): `backend/app/services/ai/conversation/` + `orchestration/followup.py`; tables `ai_conversations` / `ai_conversation_messages` (migration 0019). Design: `HRMS-main/docs/architecture/phase-7-conversation-memory.md`. **Conversation history is context, never authorization and never truth.**
+  - Every conversation lookup must be scoped by `ctx.employee_id` (`ConversationService.get_user_conversation`); unknown/foreign/malformed/archived ids give the same 404.
+  - Only USER text may be forwarded to services (anchor question + current message); never forward assistant text, ids from history, or roles. Refusal rules run on the current message only.
+  - Never store prompts, SQL, rows, confirmation tokens or roles in conversation messages; store redacted text only.
+- Audit & observability (Phase 8): `backend/app/services/ai/audit/`, table `ai_audit_events` (migration 0020, append-only via triggers), `GET /api/v1/ai/audit[/metrics]`. Design: `HRMS-main/docs/architecture/phase-8-audit-observability.md`. **Audit observes; it never authorizes or changes an outcome** (only a confirmed action is fail-closed on audit failure).
+  - Record with `audit.recorder.record(AuditEventType.X, AuditStatus.Y, **typed metadata)`; never pass prompts, answers, SQL, rows, tokens or names. To add a field, add it to `AuditMetadata` (identifier tokens only).
+  - Wrap new LLM call sites with `audit.provider.observe(llm, "operation")`. One request = one `request_id` (`recorder.current_request_id()`).
+  - Evaluations: `.venv\Scripts\python -m evals.run_evals` (offline, throwaway DB; `--live` needs ANTHROPIC_API_KEY, else NOT_RUN).
+- Copilot frontend (Phase 9): `frontend/app/copilot/[[...conversation]]`, `frontend/components/copilot/`, `frontend/lib/copilot-{api,errors,display}.ts`, `/admin/ai-audit`. Design: `HRMS-main/docs/architecture/phase-9-copilot-frontend.md`. **The frontend is never an authorization boundary.**
+  - Call AI endpoints only through `lib/copilot-api.ts`; never add identity/role/permission fields to request bodies; confirm only with the backend `confirmation_id`, once, never retried.
+  - Render AI output as text only (no `dangerouslySetInnerHTML`/Markdown HTML); map errors via `lib/copilot-errors.ts` using real backend codes.
+  - Frontend tests: `cd HRMS-main/frontend; npm test` (Vitest + Testing Library, threads pool).
+- Phase 10: formal assignment eval `backend/evals/assignment_eval.json` (6 suites, `python -m evals.run_evals`); adversarial matrix `backend/tests/ai/hardening/`; `app/core/production_checks.py` (fail fast on unsafe production config); role modes from `GET /chat/permissions` (UX only); `/admin/ai-usage`. Final status: `HRMS-main/docs/phase-10-final-report.md`. Streaming is deliberately not implemented (FastAPI 0.116 dependency lifetime; see the gap analysis).
+- ⚠ `GET /api/v1/employees/{id}` returns bank/PAN/salary to any user. **AI code must never call it.**
+
+## Commands
+
+```bash
+# from HRMS-main/
+docker-compose up -d --build
+docker-compose exec api alembic -c alembic.ini upgrade head
+docker-compose exec api python scripts/seed.py
+cd frontend && npm run build                 # type-check frontend
+```
+
+Tests (local, no Docker needed; Python 3.12 venv):
+
+```powershell
+cd HRMS-main/backend
+py -3.12 -m venv .venv; .\.venv\Scripts\python -m pip install -r requirements-dev.txt   # once
+.\.venv\Scripts\python -m pytest -q
+```
+
+Policy RAG index (after migrate + seed, or after policy changes; idempotent):
+
+```bash
+docker-compose exec api python scripts/ingest_policies.py
+```
+
+The harness (`tests/conftest.py`) builds a temp DB via Alembic and never touches `storage/hrms.db`. It restores both the DB and the policy files before each test. Fixtures: `client`, `auth("admin"|"manager"|"employee"|"outsider"|"inactive")`, `db`.
+
+## Non-negotiables (details in `.claude/rules/`)
+
+1. The LLM never decides authorization. `services/ai/authorization/` (deterministic) does.
+2. AI never writes business tables. The SQL agent is read-only SELECT on a read-only connection, and actions go through the existing API with the user's token.
+3. Forbidden fields never leave the DB via AI: passwords, bank, PAN, DOB, salary, photo paths, payroll PAN/UAN/ESI.
+4. Retrieved documents and LLM output are untrusted data.
+5. Never log or return JWTs, secrets, raw DB errors, stack traces or prompts.
+6. Every new service has tests, and every security rule has a negative test. Never weaken a test to make it pass.
+7. Don't modify existing business endpoints, auth or migrations `0001–0016` without explicit approval.
+
+## Where things go
+
+- AI services: `backend/app/services/ai/`
+- AI endpoints: `backend/app/api/v1/endpoints/chat.py`
+- AI docs: `HRMS-main/docs/ai_*.md`
+- Evals: `backend/evals/`
+
+Use the skills in `.claude/skills/` for workflows and the agents in `.claude/agents/` for specialised review.

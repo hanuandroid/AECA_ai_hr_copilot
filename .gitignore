@@ -1,0 +1,53 @@
+# Secrets: only the placeholder examples are tracked
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node / Next.js
+node_modules/
+.next/
+.turbo/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local runtime data (databases, uploads, model caches, eval reports)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+HRMS-main/backend/storage/*
+!HRMS-main/backend/storage/.gitkeep
+HRMS-main/backend/evals/results/
+
+# Claude Code machine-local settings
+.claude/settings.local.json
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+
+# Phase prompt files and the assignment brief (kept locally, not published)
+/Claude Code — Approve Decisions and Start Phase 1.md
+/Claude Code — Phase *.md
+/Claude Code Prompt — Phase *.md
+/Phase 10 — *.md
+/assignment_05_ai_hr_copilot.md
+/Claude Code Master Prompt — AI HR Operations Copilot.md
