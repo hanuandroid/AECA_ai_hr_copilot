@@ -106,6 +106,33 @@ async def test_role_is_loaded_from_database_not_token_claim(client):
     assert error_code(response) == "FORBIDDEN"
 
 
+async def _refresh_token_for(client, user_key: str) -> str:
+    user = USERS[user_key]
+    response = await client.post("/api/v1/auth/login", json={"email": user.email, "password": PASSWORD})
+    assert response.status_code == 200
+    refresh_token = data(response)["refresh_token"]
+    claims = jwt.decode(refresh_token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+    assert claims["type"] == "refresh"
+    assert "role" not in claims
+    return refresh_token
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/api/v1/employees/me", "/api/v1/chat/permissions"],
+    ids=["business-endpoint", "ai-endpoint"],
+)
+async def test_refresh_token_rejected_as_access_token(client, path):
+    """Approved remediation (2026-10-10): the 7-day refresh token issued by /auth/login was accepted as a bearer
+    access token because get_current_user never checked the `type` claim. get_current_user now rejects
+    `type: "refresh"`, which covers the AI endpoints too (get_ai_user_context builds on get_current_user).
+    """
+    refresh_token = await _refresh_token_for(client, EMPLOYEE.key)
+    response = await client.get(path, headers={"Authorization": f"Bearer {refresh_token}"})
+    assert response.status_code == 401
+    assert error_code(response) == "INVALID_TOKEN"
+
+
 async def test_token_for_deleted_subject_rejected(client):
     token = jwt.encode(
         {"sub": "9999", "role": "ADMIN", "exp": datetime.now(UTC) + timedelta(minutes=5)},

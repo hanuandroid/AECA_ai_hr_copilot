@@ -22,6 +22,10 @@ async def get_current_user(
     except ValueError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=error_response("INVALID_TOKEN", "Token is invalid"))
 
+    # Refresh tokens are not bearer access tokens (access tokens carry no "type" claim yet).
+    if payload.get("type") == "refresh":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=error_response("INVALID_TOKEN", "Token is invalid"))
+
     if subject is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=error_response("INVALID_TOKEN", "Token missing subject"))
 
