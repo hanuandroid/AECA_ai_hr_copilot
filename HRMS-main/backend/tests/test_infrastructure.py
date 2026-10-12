@@ -6,7 +6,14 @@ from app.core.config import settings
 from app.db.session import engine
 from app.models.announcement import Announcement
 from app.models.employee import Employee
-from tests.conftest import REAL_DEV_DB_PATH, TEST_DB_PATH, TEST_ROOT, reset_database
+from tests.conftest import (
+    DEV_DB_FINGERPRINT_AT_START,
+    REAL_DEV_DB_PATH,
+    TEST_DB_PATH,
+    TEST_ROOT,
+    dev_db_fingerprint,
+    reset_database,
+)
 
 EXPECTED_HEAD = "0020_ai_audit_events"  # Phase 3: 0017 policy_chunks; Phase 5: 0018 ai_pending_actions; Phase 7: 0019 conversations; Phase 8: 0020 audit (AI-owned)
 EXPECTED_TABLES = {
@@ -49,5 +56,11 @@ async def test_test_seed_isolated(db, template_db):
 
 
 def test_real_dev_database_untouched():
-    # The checkout has no dev DB; the test run must not create one.
-    assert not REAL_DEV_DB_PATH.exists()
+    """The test run must neither create nor modify the developer's real database.
+
+    Old assertion (until 2026-10-11): `not REAL_DEV_DB_PATH.exists()`, which only held on a fresh checkout and failed on
+    every machine that followed the README (docker-compose creates and seeds storage/hrms.db). Intent kept, and made
+    stricter for that case: absent at session start -> still absent; present -> byte-identical (sha256).
+    Caveat: a dev server writing to the same file during the run would also change it.
+    """
+    assert dev_db_fingerprint() == DEV_DB_FINGERPRINT_AT_START, f"{REAL_DEV_DB_PATH} was created or modified by the test run"

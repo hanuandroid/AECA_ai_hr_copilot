@@ -1,6 +1,8 @@
 """Production configuration audit (Phase 10): fail fast on unsafe production settings; dev/test unaffected."""
 
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -53,9 +55,20 @@ def test_error_messages_never_contain_secret_values():
 
 
 def test_no_real_secrets_are_committed():
+    """Old assertion (until 2026-10-11): `not (BACKEND / ".env").exists()`. That failed for every developer who followed
+    the README (docker-compose requires backend/.env) and did not test "committed" at all. Intent now checked directly:
+    backend/.env is not tracked and is git-ignored, it is excluded from the Docker build context, the example holds
+    no key, and no Anthropic key appears in application code. Requires a git checkout (local runs and CI)."""
     example = (BACKEND / ".env.example").read_text(encoding="utf-8")
     assert re.search(r"^ANTHROPIC_API_KEY=\s*$", example, re.MULTILINE)
-    assert not (BACKEND / ".env").exists()
+    git = shutil.which("git")
+    assert git, "this test needs git and a git checkout to verify that backend/.env is not committed"
+    tracked = subprocess.run([git, "ls-files", "--error-unmatch", ".env"], cwd=BACKEND, capture_output=True, text=True)
+    assert tracked.returncode != 0, "backend/.env is tracked by git"
+    ignored = subprocess.run([git, "check-ignore", "-q", ".env"], cwd=BACKEND, capture_output=True, text=True)
+    assert ignored.returncode == 0, "backend/.env is not git-ignored"
+    dockerignore = (BACKEND / ".dockerignore").read_text(encoding="utf-8").split()
+    assert ".env" in dockerignore, "backend/.env would be copied into the API image"
     for path in (BACKEND / "app").rglob("*.py"):
         assert not re.search(r"sk-ant-[A-Za-z0-9_-]{20,}", path.read_text(encoding="utf-8")), path
 

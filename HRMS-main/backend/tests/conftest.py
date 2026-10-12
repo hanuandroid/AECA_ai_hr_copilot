@@ -10,6 +10,7 @@ Isolation model:
   4. At session end: delete the temp directory.
 """
 
+import hashlib
 import os
 import shutil
 import tempfile
@@ -25,6 +26,17 @@ TEMPLATE_DB_PATH = TEST_ROOT / "template.db"
 POLICY_DIR = TEST_ROOT / "hr-policies"
 TEMPLATE_POLICY_DIR = TEST_ROOT / "hr-policies-template"
 REAL_DEV_DB_PATH = BACKEND_DIR / "storage" / "hrms.db"
+
+
+def dev_db_fingerprint() -> str | None:
+    """sha256 of the real dev DB file, or None if it does not exist (a fresh checkout has none)."""
+    if not REAL_DEV_DB_PATH.exists():
+        return None
+    return hashlib.sha256(REAL_DEV_DB_PATH.read_bytes()).hexdigest()
+
+
+# Taken before the app is imported, so test_infrastructure can prove the run never touched the dev DB.
+DEV_DB_FINGERPRINT_AT_START = dev_db_fingerprint()
 
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{TEST_DB_PATH.as_posix()}"
 os.environ["POLICY_UPLOAD_DIR"] = str(POLICY_DIR)
@@ -44,7 +56,8 @@ from sqlalchemy.orm import Session  # noqa: E402
 
 from app.db.session import SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
-from tests.support.data import PASSWORD, USERS, seed_test_data  # noqa: E402
+from app.core.security import create_access_token  # noqa: E402
+from tests.support.data import INACTIVE, PASSWORD, USERS, seed_test_data  # noqa: E402
 
 _token_cache: dict[str, str] = {}
 
@@ -101,11 +114,18 @@ async def db() -> AsyncIterator:
 
 @pytest.fixture
 def login(client: httpx.AsyncClient) -> Callable[[str], Awaitable[str]]:
-    """Log in through the real POST /auth/login endpoint; tokens are cached per user."""
+    """Log in through the real POST /auth/login endpoint; tokens are cached per user.
+
+    The INACTIVE user can no longer log in (production hardening B-03), so their token is minted exactly as
+    /auth/login would have issued it: it models a token obtained before the account was deactivated, which every
+    protected endpoint must now reject."""
 
     async def _login(user_key: str) -> str:
         if user_key not in _token_cache:
             user = USERS[user_key]
+            if user is INACTIVE:
+                _token_cache[user_key] = create_access_token(subject=str(user.id), role=user.role.value)
+                return _token_cache[user_key]
             response = await client.post("/api/v1/auth/login", json={"email": user.email, "password": PASSWORD})
             assert response.status_code == 200, response.text
             _token_cache[user_key] = response.json()["data"]["access_token"]
