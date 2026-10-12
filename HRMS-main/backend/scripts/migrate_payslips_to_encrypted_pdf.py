@@ -12,6 +12,8 @@ from app.db.session import SessionLocal
 from app.models.employee import Employee
 from app.models.employee_document import EmployeeDocument
 
+MAX_SOURCE_BYTES = 5 * 1024 * 1024  # same as the payslip upload limit (endpoints/employees.py)
+
 
 def resolve_container_path(raw_path: str) -> Path:
     normalized = raw_path.replace("\\", "/")
@@ -80,6 +82,12 @@ async def run() -> None:
             path = resolve_container_path(doc.file_path)
             if not path.exists() or not path.is_file():
                 print(f"[skip] id={doc.id} file missing: {path}")
+                skipped += 1
+                continue
+
+            # Bounded processing: never parse files larger than the payslip upload limit.
+            if path.stat().st_size > MAX_SOURCE_BYTES:
+                print(f"[skip] id={doc.id} file larger than {MAX_SOURCE_BYTES} bytes")
                 skipped += 1
                 continue
 

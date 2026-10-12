@@ -15,6 +15,9 @@ from app.services.ai.rag.models import PolicyDocument
 logger = structlog.get_logger()
 
 TEXT_EXTENSIONS = {".md", ".txt"}
+# Bounded PDF parsing (production hardening B-22): same size as the hr_policies upload limit, plus a page cap.
+MAX_PDF_BYTES = 2 * 1024 * 1024
+MAX_PDF_PAGES = 200
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 _BLANK_LINES_RE = re.compile(r"\n{3,}")
 
@@ -33,8 +36,14 @@ def _read_file(path: Path) -> str | None:
     if suffix == ".pdf":
         from pypdf import PdfReader
 
+        if path.stat().st_size > MAX_PDF_BYTES:
+            logger.warning("ai.rag.pdf_too_large", size_bytes=path.stat().st_size, limit=MAX_PDF_BYTES)
+            return None
         reader = PdfReader(BytesIO(path.read_bytes()))
         if reader.is_encrypted:
+            return None
+        if len(reader.pages) > MAX_PDF_PAGES:
+            logger.warning("ai.rag.pdf_too_many_pages", pages=len(reader.pages), limit=MAX_PDF_PAGES)
             return None
         return "\n\n".join((page.extract_text() or "") for page in reader.pages)
     return None

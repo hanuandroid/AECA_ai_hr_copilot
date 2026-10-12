@@ -66,6 +66,54 @@ async def test_pdf_policies_are_loaded(db):
     assert "monthly internet stipend" in stipend.text
 
 
+# --- Bounded PDF parsing (production hardening B-22) ----------------------------
+
+
+async def _add_pdf_policy(db, title: str, filename: str, content: bytes) -> int:
+    path = Path(settings.policy_upload_dir) / filename
+    path.write_bytes(content)
+    policy = HRPolicy(title=title, category="TEST", original_filename=filename, file_path=str(path), uploaded_by=ADMIN.id)
+    db.add(policy)
+    await db.commit()
+    return policy.id
+
+
+async def test_oversized_pdf_is_skipped_and_reported_without_parsing(db, monkeypatch):
+    from app.services.ai.rag import loader
+
+    def must_not_parse(*_args, **_kwargs):
+        raise AssertionError("an oversized PDF must not reach the PDF parser")
+
+    monkeypatch.setattr("pypdf.PdfReader", must_not_parse)
+    policy_id = await _add_pdf_policy(db, "Huge Policy", "huge.pdf", b"%PDF-1.4\n" + b"0" * (loader.MAX_PDF_BYTES + 1))
+    documents, failed = await load_policy_documents(db, settings.policy_upload_dir)
+    assert policy_id in failed
+    assert all(d.title != "Huge Policy" for d in documents)
+
+
+async def test_pdf_with_too_many_pages_is_skipped(db):
+    from app.services.ai.rag import loader
+
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer)
+    for _ in range(loader.MAX_PDF_PAGES + 1):
+        pdf.drawString(50, 800, "Page")
+        pdf.showPage()
+    pdf.save()
+    assert len(buffer.getvalue()) <= loader.MAX_PDF_BYTES  # rejected for the page count, not the size
+    policy_id = await _add_pdf_policy(db, "Long Policy", "long.pdf", buffer.getvalue())
+    documents, failed = await load_policy_documents(db, settings.policy_upload_dir)
+    assert policy_id in failed
+    assert all(d.title != "Long Policy" for d in documents)
+
+
+async def test_malformed_pdf_fails_safely(db):
+    policy_id = await _add_pdf_policy(db, "Broken Policy", "broken.pdf", b"%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R")
+    documents, failed = await load_policy_documents(db, settings.policy_upload_dir)  # must not raise
+    assert policy_id in failed
+    assert documents and all(d.title != "Broken Policy" for d in documents)  # the other policies still load
+
+
 # --- Chunking -------------------------------------------------------------------
 
 SAMPLE = """# Test Policy
