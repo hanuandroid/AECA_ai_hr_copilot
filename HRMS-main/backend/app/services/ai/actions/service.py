@@ -41,6 +41,7 @@ from app.services.ai.actions.resolver import ClarificationNeeded, TargetResolver
 from app.services.ai.actions.validators import prepare_action
 from app.services.ai.authorization import AIUserContext, TargetEmployee, grant_for, run_authorized
 from app.services.ai.errors import (
+    AIActionOutcomeUnknownError,
     AIBackendUnavailableError,
     AIConfirmationInvalidError,
     AIError,
@@ -178,20 +179,35 @@ class ActionAgentService:
                 await self._confirmations.finish(record.id, "DENIED", "AI_PERMISSION_DENIED")
                 raise
         except AIError as error:
-            audit.outcome, audit.error_code = "rejected", error.code
+            if audit.outcome != "unknown":  # keep the B-10 unknown-outcome classification
+                audit.outcome = "rejected"
+            audit.error_code = error.code
             audit.expired = isinstance(error, AIConfirmationInvalidError) and error.detail == "expired"
             raise
         finally:
             self._log(audit)
 
     async def _execute(self, record_id: int, spec: ActionSpec, prepared, access_token: str, audit: ActionAuditRecord) -> ActionResponse:
-        # Fail-closed: a confirmed mutation runs only if its confirmation is durably audited first.
-        await record_critical(AuditEventType.ACTION_CONFIRMED, AuditStatus.SUCCESS, route="ACTION", action=spec.name.value,
-                              confirmation_record_id=record_id, target_employee_id=prepared.target_employee_id,
-                              resource_id=prepared.resource_id, confirmation_state="CONFIRMED")
+        # B-12: claim first (atomic, single use). Only the request that wins the claim records ACTION_CONFIRMED, so a
+        # replay that loses the race leaves no "confirmed" evidence (it is audited as ACTION_REJECTED instead).
         await self._confirmations.claim(record_id)
+        # Fail-closed: the mutation runs only if the won confirmation is durably audited first. If that write fails,
+        # nothing has executed, so the claim is released back to PENDING (atomically): the user can retry once auditing
+        # works again, and execution stays single-use (a concurrent replay already lost the claim).
+        try:
+            await record_critical(AuditEventType.ACTION_CONFIRMED, AuditStatus.SUCCESS, route="ACTION", action=spec.name.value,
+                                  confirmation_record_id=record_id, target_employee_id=prepared.target_employee_id,
+                                  resource_id=prepared.resource_id, confirmation_state="CONFIRMED")
+        except AIError:
+            await self._confirmations.release(record_id)
+            raise
         try:
             outcome = await self._client_factory(access_token).execute(prepared)
+        except AIActionOutcomeUnknownError:
+            # B-10: deadline exceeded. The business handler may have committed: record UNKNOWN, never retry.
+            await self._confirmations.finish(record_id, "UNKNOWN", AIActionOutcomeUnknownError.code)
+            audit.outcome = "unknown"
+            raise
         except AIBackendUnavailableError:
             await self._confirmations.finish(record_id, "FAILED", AIBackendUnavailableError.code)
             raise
@@ -235,6 +251,10 @@ def _record_action_events(audit: ActionAuditRecord) -> None:
     elif audit.outcome == "completed":
         record(AuditEventType.ACTION_EXECUTED, AuditStatus.SUCCESS, route="ACTION", duration_ms=duration,
                confirmation_state="COMPLETED", **ids)
+    elif audit.outcome == "unknown":
+        # B-10: neither success nor confirmed failure - the business call exceeded its deadline and may have applied.
+        record(AuditEventType.ACTION_OUTCOME_UNKNOWN, AuditStatus.FAILED, route="ACTION", duration_ms=duration,
+               error_code=audit.error_code, confirmation_state="UNKNOWN", **ids)
     elif audit.expired:
         record(AuditEventType.ACTION_EXPIRED, AuditStatus.FAILED, route="ACTION", duration_ms=duration,
                error_code=audit.error_code, confirmation_state="EXPIRED", **ids)
@@ -276,6 +296,6 @@ def get_action_agent_service(request: Request, db: AsyncSession = Depends(get_db
     return ActionAgentService(
         db=db,
         llm_factory=get_llm_provider,
-        client_factory=lambda token: HRMSActionClient(app, token),
+        client_factory=lambda token: HRMSActionClient(app, token, timeout_seconds=settings.ai_action_execution_timeout_seconds),
         ttl_seconds=settings.ai_action_confirmation_ttl_seconds,
     )

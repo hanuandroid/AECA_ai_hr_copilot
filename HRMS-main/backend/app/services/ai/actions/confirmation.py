@@ -106,6 +106,16 @@ class ConfirmationService:
         if result.rowcount != 1:
             raise AIConfirmationInvalidError(detail="already claimed")
 
+    async def release(self, record_id: int) -> None:
+        """Undo a claim when nothing was executed (the confirmation audit could not be written). Atomic: only an
+        EXECUTING record returns to PENDING; expiry is still enforced on the next attempt."""
+        await self._db.execute(
+            update(AIPendingAction)
+            .where(AIPendingAction.id == record_id, AIPendingAction.status == "EXECUTING")
+            .values(status="PENDING", used_at=None)
+        )
+        await self._db.commit()
+
     async def finish(self, record_id: int, status: str, result_code: str | None) -> None:
         await self._set_status(record_id, status, result_code)
 

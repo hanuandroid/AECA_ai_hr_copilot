@@ -171,9 +171,19 @@ def record_error(error: AIError) -> None:
            error_code=error.code, http_status=error.http_status)
 
 
+DEV_FINGERPRINT_KEY = "dev-only-audit-fingerprint-key-not-for-production"
+
+
+def fingerprint_key() -> bytes:
+    """Dedicated AI_AUDIT_FINGERPRINT_KEY (B-13), never derived from the JWT secret. Outside production an unset key
+    falls back to a fixed, clearly non-secret dev value; production_checks refuses to start without a real key."""
+    configured = settings.ai_audit_fingerprint_key.get_secret_value().strip() if settings.ai_audit_fingerprint_key else ""
+    return hashlib.sha256(b"ai-audit-fingerprint:" + (configured or DEV_FINGERPRINT_KEY).encode("utf-8")).digest()
+
+
 def text_fingerprint(text: str) -> tuple[int, str]:
     """(length, keyed hash prefix) of user/assistant text: correlation without storing content."""
-    key = hashlib.sha256(b"ai-audit-fingerprint:" + settings.jwt_secret_key.encode("utf-8")).digest()
+    key = fingerprint_key()
     digest = hmac.new(key, text.encode("utf-8"), hashlib.sha256).hexdigest()[:16]
     return len(text), digest
 

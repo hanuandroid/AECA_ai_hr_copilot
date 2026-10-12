@@ -26,6 +26,7 @@ const MESSAGES: Record<string, string> = {
   // actions
   AI_CONFIRMATION_INVALID: "This confirmation is no longer valid (it may have expired or already been used). Please ask again.",
   AI_AUDIT_UNAVAILABLE: "The action could not be completed right now. Nothing was changed. Please try again.",
+  AI_ACTION_OUTCOME_UNKNOWN: "We couldn't confirm whether this action completed. Please check the related page before trying again.",
   // conversations (a generic message: a foreign conversation looks exactly like a missing one)
   AI_CONVERSATION_NOT_FOUND: "Conversation unavailable.",
   AI_CONVERSATION_LIMIT_REACHED: "This conversation is full. Please start a new conversation.",

@@ -37,8 +37,13 @@ class Settings(BaseSettings):
     ai_sql_max_joins: int = 4
     ai_sql_timeout_seconds: float = 3.0
     ai_action_confirmation_ttl_seconds: int = 300
+    # Deadline for executing a confirmed action via the business API; on expiry the outcome is UNKNOWN (never retried).
+    ai_action_execution_timeout_seconds: float = 10.0
     ai_conversation_max_messages: int = 200
     ai_audit_enabled: bool = True
+    # HMAC key for audit text fingerprints (B-13): must differ from JWT_SECRET_KEY; required in production.
+    # Rotating it breaks correlation between fingerprints made before and after the rotation (by design).
+    ai_audit_fingerprint_key: SecretStr | None = None
     # Optional pricing (USD per million tokens) for ESTIMATED cost; unset -> cost is null. Not billing.
     ai_llm_input_cost_per_mtok: float | None = None
     ai_llm_output_cost_per_mtok: float | None = None

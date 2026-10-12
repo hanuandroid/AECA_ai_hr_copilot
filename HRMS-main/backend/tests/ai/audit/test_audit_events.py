@@ -367,6 +367,62 @@ async def test_expired_confirmation_is_recorded_as_expired(db, ctx_for, audit_sc
     assert "ACTION_EXECUTED" not in [event.event_type.value for event in audit_scope.events]
 
 
+async def test_a_confirmation_that_loses_the_claim_race_records_no_confirmed_event(db, ctx_for, audit_scope, monkeypatch):
+    """Production hardening B-12: ACTION_CONFIRMED is recorded only after the atomic claim is won. Simulates the
+    concurrent case where both requests passed validation and the other one claimed first."""
+    from app.services.ai.actions.confirmation import ConfirmationService
+    from app.services.ai.errors import AIConfirmationInvalidError
+
+    calls = []
+    llm = script(action=APPROVE_RAHUL)
+    service = ActionAgentService(db=db, llm_factory=lambda: llm,
+                                 client_factory=lambda token: calls.append(token) or HRMSActionClient(app, token), ttl_seconds=300)
+    ctx = await ctx_for("manager")
+    proposed = await service.propose(ctx, "Approve Rahul's leave.")
+
+    async def lost_race(self, record_id):
+        raise AIConfirmationInvalidError(detail="already claimed")
+
+    monkeypatch.setattr(ConfirmationService, "claim", lost_race)
+    with pytest.raises(AIConfirmationInvalidError):
+        await service.confirm(ctx, proposed.confirmation_id, "unused-token")
+    event_types = [event.event_type.value for event in audit_scope.events]
+    assert "ACTION_CONFIRMED" not in event_types and "ACTION_EXECUTED" not in event_types
+    assert "ACTION_REJECTED" in event_types
+    assert calls == [] and await leave_status(db, RAHUL_LEAVE) == "PENDING"
+
+
+async def test_action_exceeding_its_deadline_has_an_unknown_outcome_and_is_not_retried(db, ctx_for, audit_scope):
+    """Production hardening B-10: the in-process business call is bounded by a real deadline (httpx timeouts do not
+    apply to ASGITransport). On expiry the record is UNKNOWN - neither success nor confirmed failure - and the
+    business API is called exactly once."""
+    import asyncio
+
+    from app.services.ai.errors import AIActionOutcomeUnknownError
+
+    attempts = []
+
+    async def hanging_business_api(scope, receive, send):
+        attempts.append(scope["path"])
+        await asyncio.sleep(5)
+
+    llm = script(action=APPROVE_RAHUL)
+    service = ActionAgentService(db=db, llm_factory=lambda: llm, ttl_seconds=300,
+                                 client_factory=lambda token: HRMSActionClient(hanging_business_api, token, timeout_seconds=0.05))
+    ctx = await ctx_for("manager")
+    proposed = await service.propose(ctx, "Approve Rahul's leave.")
+    with pytest.raises(AIActionOutcomeUnknownError) as raised:
+        await asyncio.wait_for(service.confirm(ctx, proposed.confirmation_id, "unused-token"), timeout=3)
+    assert raised.value.http_status == 504 and raised.value.code == "AI_ACTION_OUTCOME_UNKNOWN"
+    assert len(attempts) == 1  # never retried
+    db.expire_all()
+    record = (await db.execute(select(AIPendingAction))).scalars().one()
+    assert (record.status, record.result_code) == ("UNKNOWN", "AI_ACTION_OUTCOME_UNKNOWN")
+    event_types = [event.event_type.value for event in audit_scope.events]
+    assert "ACTION_CONFIRMED" in event_types and "ACTION_OUTCOME_UNKNOWN" in event_types
+    assert "ACTION_EXECUTED" not in event_types and "ACTION_REJECTED" not in event_types
+
+
 async def test_confirmed_action_does_not_run_if_its_audit_cannot_be_written(client, auth, install_real, db, monkeypatch, capsys):
     install_real(script(action=APPROVE_RAHUL))
     headers = await auth("manager")

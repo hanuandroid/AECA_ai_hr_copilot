@@ -26,7 +26,7 @@ class AIPendingAction(Base):
     payload_json: Mapped[str] = mapped_column(Text)
     binding_hash: Mapped[str] = mapped_column(String(64))
     summary: Mapped[str] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(20), index=True)  # PENDING|EXECUTING|COMPLETED|FAILED|DENIED|EXPIRED|INVALID
+    status: Mapped[str] = mapped_column(String(20), index=True)  # PENDING|EXECUTING|COMPLETED|FAILED|UNKNOWN|DENIED|EXPIRED|INVALID
     result_code: Mapped[str | None] = mapped_column(String(60), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime)
     expires_at: Mapped[datetime] = mapped_column(DateTime)

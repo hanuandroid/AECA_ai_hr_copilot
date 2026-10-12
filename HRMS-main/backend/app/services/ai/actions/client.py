@@ -10,6 +10,7 @@ Mutations are never retried (no idempotency keys exist in the business API); a t
 reported as AI_BACKEND_UNAVAILABLE without re-sending.
 """
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any
 
@@ -28,7 +29,7 @@ from app.services.ai.actions.models import (
     TicketStatusParams,
 )
 from app.services.ai.actions.registry import ACTION_REGISTRY
-from app.services.ai.errors import AIBackendUnavailableError
+from app.services.ai.errors import AIActionOutcomeUnknownError, AIBackendUnavailableError
 from app.services.ai.guards import assert_route_allowed, strip_sensitive_fields
 
 logger = structlog.get_logger()
@@ -113,9 +114,15 @@ class HRMSActionClient:
         transport = httpx.ASGITransport(app=self._app)
         try:
             async with httpx.AsyncClient(transport=transport, base_url=INTERNAL_BASE_URL, timeout=self._timeout) as client:
-                response = await client.request(
-                    spec.method, path, json=body, headers={"Authorization": f"Bearer {self._token}"}
+                # httpx timeouts are not applied by the in-process ASGITransport, so the deadline is enforced here
+                # (production hardening B-10). On expiry the outcome is UNKNOWN: the handler may have committed.
+                response = await asyncio.wait_for(
+                    client.request(spec.method, path, json=body, headers={"Authorization": f"Bearer {self._token}"}),
+                    timeout=self._timeout,
                 )
+        except TimeoutError as exc:
+            logger.error("ai.action.deadline_exceeded", action=action.value, timeout_seconds=self._timeout)
+            raise AIActionOutcomeUnknownError() from exc
         except httpx.HTTPError as exc:
             logger.error("ai.action.transport_failed", action=action.value, error_type=type(exc).__name__)
             raise AIBackendUnavailableError() from exc

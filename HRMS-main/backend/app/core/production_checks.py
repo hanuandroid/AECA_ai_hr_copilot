@@ -15,6 +15,9 @@ def production_problems(config: Settings) -> list[str]:
     problems: list[str] = []
     if config.jwt_secret_key.strip() in INSECURE_JWT_SECRETS or len(config.jwt_secret_key) < 32:
         problems.append("JWT_SECRET_KEY must be set to a strong secret (at least 32 characters, not a default)")
+    fingerprint_key = config.ai_audit_fingerprint_key.get_secret_value().strip() if config.ai_audit_fingerprint_key else ""
+    if config.ai_audit_enabled and (len(fingerprint_key) < 32 or fingerprint_key == config.jwt_secret_key.strip()):
+        problems.append("AI_AUDIT_FINGERPRINT_KEY must be set to a dedicated secret (at least 32 characters, not the JWT secret)")
     if config.ai_enabled:
         if config.ai_llm_provider.strip().lower() == "fake":
             problems.append("AI_LLM_PROVIDER=fake is for tests only")

@@ -11,12 +11,14 @@ from app.core.config import Settings
 from app.core.production_checks import assert_production_ready, production_problems
 
 STRONG = "x" * 48
+FINGERPRINT = "f" * 48
 BACKEND = Path(__file__).resolve().parents[3]
 
 
 def prod(**overrides) -> Settings:
+    # A valid production config now also needs a dedicated audit fingerprint key (B-13, Phase 2).
     base = {"environment": "production", "jwt_secret_key": STRONG, "anthropic_api_key": "sk-test-placeholder",
-            "ai_llm_provider": "anthropic", "ai_embedding_provider": "fastembed"}
+            "ai_llm_provider": "anthropic", "ai_embedding_provider": "fastembed", "ai_audit_fingerprint_key": FINGERPRINT}
     return Settings(_env_file=None, **{**base, **overrides})
 
 
@@ -31,6 +33,9 @@ def test_a_safe_production_configuration_passes():
     ({"ai_llm_provider": "fake"}, "AI_LLM_PROVIDER=fake"),
     ({"ai_embedding_provider": "fake"}, "AI_EMBEDDING_PROVIDER=fake"),
     ({"anthropic_api_key": None}, "ANTHROPIC_API_KEY"),
+    ({"ai_audit_fingerprint_key": None}, "AI_AUDIT_FINGERPRINT_KEY"),
+    ({"ai_audit_fingerprint_key": "too-short"}, "AI_AUDIT_FINGERPRINT_KEY"),
+    ({"ai_audit_fingerprint_key": STRONG}, "AI_AUDIT_FINGERPRINT_KEY"),  # same value as the JWT secret
 ])
 def test_unsafe_production_settings_stop_startup(overrides, problem):
     config = prod(**overrides)
@@ -46,6 +51,21 @@ def test_ai_disabled_does_not_need_a_key():
 @pytest.mark.parametrize("environment", ["dev", "test", "staging"])
 def test_non_production_environments_keep_their_defaults(environment):
     assert_production_ready(Settings(_env_file=None, environment=environment, jwt_secret_key="change_me", ai_llm_provider="fake"))
+
+
+def test_audit_fingerprint_is_keyed_independently_of_the_jwt_secret(monkeypatch):
+    """B-13: the fingerprint must not change when only the JWT secret changes, and must change with its own key."""
+    from pydantic import SecretStr
+
+    from app.core.config import settings
+    from app.services.ai.audit import recorder
+
+    monkeypatch.setattr(settings, "ai_audit_fingerprint_key", SecretStr("k" * 40))
+    baseline = recorder.text_fingerprint("same text")
+    monkeypatch.setattr(settings, "jwt_secret_key", "a-completely-different-jwt-secret-value-123456")
+    assert recorder.text_fingerprint("same text") == baseline
+    monkeypatch.setattr(settings, "ai_audit_fingerprint_key", SecretStr("z" * 40))
+    assert recorder.text_fingerprint("same text") != baseline
 
 
 def test_error_messages_never_contain_secret_values():

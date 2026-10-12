@@ -90,6 +90,15 @@ class AIBackendUnavailableError(AIError):
     http_status = status.HTTP_502_BAD_GATEWAY
 
 
+class AIActionOutcomeUnknownError(AIError):
+    """The business call did not finish within the execution deadline: it may or may not have been applied.
+    Never retried automatically (business APIs have no idempotency keys)."""
+
+    code = "AI_ACTION_OUTCOME_UNKNOWN"
+    message = "We couldn't confirm whether this action completed. Please check the related page before trying again."
+    http_status = status.HTTP_504_GATEWAY_TIMEOUT
+
+
 # --- Orchestration (copilot router) --------------------------------------------------------------
 
 
