@@ -82,14 +82,25 @@ def _hidden_detail_fields(viewer: Employee, employee: Employee) -> tuple[str, ..
     return DETAIL_FINANCIAL_FIELDS + DETAIL_PERSONAL_FIELDS
 
 
+def _ensure_manager_scope(current_user: Employee, employee: Employee, *, allow_self: bool) -> None:
+    """Employee-targeted manager actions (production hardening B-05 / S-01): admins act for anyone; managers only for
+    their direct reports (employees.manager_id), plus themselves where `allow_self`. Callers already require the
+    ADMIN or MANAGER role. Employee existence is public via the directory, so a 403 reveals nothing new."""
+    if current_user.role == Role.ADMIN:
+        return
+    if employee.manager_id is not None and employee.manager_id == current_user.id:
+        return
+    if allow_self and employee.id == current_user.id:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=error_response("FORBIDDEN", "You can only do this for your direct reports"),
+    )
+
+
 def _ensure_can_manage_projects_of(current_user: Employee, employee: Employee) -> None:
-    """Project assign/remove scope (production hardening B-05): managers only for themselves or their direct reports
-    (employees.manager_id); admins for anyone. Employee existence is already public via the directory."""
-    if current_user.role != Role.ADMIN and employee.id != current_user.id and employee.manager_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=error_response("FORBIDDEN", "You can only manage projects for yourself or your direct reports"),
-        )
+    """Project assign/remove/list scope: managers for themselves or their direct reports; admins for anyone."""
+    _ensure_manager_scope(current_user, employee, allow_self=True)
 
 
 def _employee_directory_payload(e: Employee):
@@ -842,6 +853,8 @@ async def upload_employee_document(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=error_response("EMPLOYEE_NOT_FOUND", "Employee not found"),
         )
+    # S-01b: before the file is read or stored.
+    _ensure_manager_scope(uploader, employee, allow_self=True)
 
     normalized_type = document_type.strip().upper()
     allowed_non_payslip_types = {"APPOINTMENT", "TAX", "OTHER"}
@@ -914,6 +927,8 @@ async def upload_employee_payslip(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=error_response("EMPLOYEE_NOT_FOUND", "Employee not found"),
         )
+    # S-01c: payslips only for direct reports (never the manager's own payroll documents); before the file is stored.
+    _ensure_manager_scope(uploader, employee, allow_self=False)
 
     normalized_period: str | None = None
     if period is not None and period.strip():
@@ -1197,7 +1212,7 @@ async def update_project_catalog_status(
 @router.get("/{employee_id}/projects")
 async def list_employee_projects(
     employee_id: int,
-    _: Employee = Depends(require_roles(Role.ADMIN, Role.MANAGER)),
+    current_user: Employee = Depends(require_roles(Role.ADMIN, Role.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
     employee = (await db.execute(select(Employee).where(Employee.id == employee_id))).scalar_one_or_none()
@@ -1206,6 +1221,7 @@ async def list_employee_projects(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=error_response("EMPLOYEE_NOT_FOUND", "Employee not found"),
         )
+    _ensure_can_manage_projects_of(current_user, employee)  # S-01e: project assignments are protected HR data
 
     project_rows = (
         await db.execute(
@@ -1326,7 +1342,7 @@ async def remove_employee_project(
 async def update_employee_job_title(
     employee_id: int,
     payload: EmployeeJobTitleUpdate,
-    _: Employee = Depends(require_roles(Role.ADMIN, Role.MANAGER)),
+    current_user: Employee = Depends(require_roles(Role.ADMIN, Role.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
     employee = (await db.execute(select(Employee).where(Employee.id == employee_id))).scalar_one_or_none()
@@ -1335,6 +1351,7 @@ async def update_employee_job_title(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=error_response("EMPLOYEE_NOT_FOUND", "Employee not found"),
         )
+    _ensure_manager_scope(current_user, employee, allow_self=False)  # S-01d: no editing own or other teams' titles
 
     effective_date = payload.effective_date or date.today()
     current_job = (

@@ -14,6 +14,32 @@ from app.services.auth import get_current_user
 router = APIRouter()
 
 
+# --- Manager ticket scope (production hardening S-01a) ---------------------------------------------------------
+# Admins: every ticket. Managers: tickets raised by or assigned to themselves, or raised by their direct reports
+# (employees.manager_id) - the approved AI matrix scope, now enforced in the business API. Employees keep the existing
+# owner/assignee rules.
+
+
+def _manager_ticket_filter(manager_id: int):
+    reports = select(Employee.id).where(Employee.manager_id == manager_id)
+    return or_(Ticket.employee_id == manager_id, Ticket.assignee_id == manager_id, Ticket.employee_id.in_(reports))
+
+
+def _ticket_not_found() -> HTTPException:
+    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_response("TICKET_NOT_FOUND", "Ticket not found"))
+
+
+async def _ensure_manager_ticket_scope(current_user: Employee, ticket: Ticket, db: AsyncSession, not_found: HTTPException) -> None:
+    """Out-of-scope tickets look exactly like unknown ones (ticket ids are not public)."""
+    if current_user.role != Role.MANAGER:
+        return
+    if current_user.id in (ticket.employee_id, ticket.assignee_id):
+        return
+    owner_manager_id = (await db.execute(select(Employee.manager_id).where(Employee.id == ticket.employee_id))).scalar_one_or_none()
+    if owner_manager_id != current_user.id:
+        raise not_found
+
+
 def _ticket_payload(ticket: Ticket, tasks: list[OnboardingTask] | None = None):
     payload = {
         "id": ticket.id,
@@ -50,6 +76,10 @@ async def list_tickets(
         ownership_filter = or_(Ticket.employee_id == current_user.id, Ticket.assignee_id == current_user.id)
         query = query.where(ownership_filter)
         count_query = count_query.where(ownership_filter)
+    elif current_user.role == Role.MANAGER and not mine:
+        # S-01a: managers see their team's tickets only (items, count and pagination share the filter).
+        query = query.where(_manager_ticket_filter(current_user.id))
+        count_query = count_query.where(_manager_ticket_filter(current_user.id))
     elif mine:
         ownership_filter = or_(Ticket.employee_id == current_user.id, Ticket.assignee_id == current_user.id)
         query = query.where(ownership_filter)
@@ -130,10 +160,17 @@ async def assign_ticket(
     ticket = (await db.execute(select(Ticket).where(Ticket.id == ticket_id))).scalar_one_or_none()
     if ticket is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_response("TICKET_NOT_FOUND", "Ticket not found"))
+    await _ensure_manager_ticket_scope(current_user, ticket, db, _ticket_not_found())
 
     assignee = (await db.execute(select(Employee).where(Employee.id == payload.assignee_id))).scalar_one_or_none()
     if assignee is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_response("ASSIGNEE_NOT_FOUND", "Assignee not found"))
+    # S-01a: managers assign only to themselves or their direct reports (employee existence is public via the directory).
+    if current_user.role == Role.MANAGER and assignee.id != current_user.id and assignee.manager_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_response("FORBIDDEN", "You can only assign tickets to yourself or your direct reports"),
+        )
 
     ticket.assignee_id = payload.assignee_id
     if ticket.status == TicketStatus.OPEN:
@@ -156,6 +193,7 @@ async def update_ticket_status(
 
     if current_user.role not in {Role.ADMIN, Role.MANAGER} and ticket.assignee_id != current_user.id and ticket.employee_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error_response("FORBIDDEN", "Not allowed to update this ticket"))
+    await _ensure_manager_ticket_scope(current_user, ticket, db, _ticket_not_found())
 
     try:
         next_status = TicketStatus(payload.status.upper())
@@ -186,6 +224,7 @@ async def create_onboarding_task(
     ticket = (await db.execute(select(Ticket).where(Ticket.id == ticket_id))).scalar_one_or_none()
     if ticket is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_response("TICKET_NOT_FOUND", "Ticket not found"))
+    await _ensure_manager_ticket_scope(current_user, ticket, db, _ticket_not_found())
     if ticket.category != TicketCategory.ONBOARDING:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -216,6 +255,11 @@ async def complete_onboarding_task(
 
     if current_user.role not in {Role.ADMIN, Role.MANAGER} and ticket.assignee_id != current_user.id and ticket.employee_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error_response("FORBIDDEN", "Not allowed to complete this task"))
+    # Same answer as an unknown task id, so task ids of other teams' tickets cannot be probed.
+    await _ensure_manager_ticket_scope(
+        current_user, ticket, db,
+        HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_response("TASK_NOT_FOUND", "Onboarding task not found")),
+    )
 
     task.is_completed = True
     await db.commit()

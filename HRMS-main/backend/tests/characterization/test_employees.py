@@ -122,6 +122,73 @@ async def test_employee_cannot_remove_assignments(client, auth):
     assert PROJECT_ID in await _assigned_project_ids(client, auth, EMPLOYEE.id)
 
 
+# --- Other manager-targeted employee routes (production hardening S-01, Phase 2) --------------------------------
+# Old behaviour (until 2026-10-12): any manager could upload documents or payslips into ANY employee's records, change
+# ANY employee's job title (including admins' and their own) and read ANY employee's project assignments.
+# Invariant now: managers act only for direct reports (self allowed only for document upload and project listing).
+
+
+def _upload(title: str = "Signed contract") -> dict:
+    return {"data": {"title": title, "document_type": "OTHER"}, "files": {"file": ("note.txt", b"hello", "text/plain")}}
+
+
+async def _document_titles(client, auth, user_key: str) -> list[str]:
+    return [item["title"] for item in data(await client.get("/api/v1/employees/me/documents", headers=await auth(user_key)))]
+
+
+@pytest.mark.parametrize("route", ["documents", "documents/payslip"])
+async def test_manager_cannot_upload_into_other_teams_records(client, auth, route):
+    response = await client.post(f"/api/v1/employees/{OUTSIDER.id}/{route}", headers=await auth("manager"), **_upload("Cross-team upload"))
+    assert response.status_code == 403 and error_code(response) == "FORBIDDEN"
+    assert "Cross-team upload" not in await _document_titles(client, auth, "outsider")  # nothing stored
+
+
+@pytest.mark.parametrize("route", ["documents", "documents/payslip"])
+async def test_manager_uploads_for_direct_report(client, auth, route):
+    response = await client.post(f"/api/v1/employees/{EMPLOYEE.id}/{route}", headers=await auth("manager"), **_upload("Report upload"))
+    assert response.status_code == 200
+    assert "Report upload" in await _document_titles(client, auth, "employee")
+
+
+async def test_manager_cannot_upload_own_payslip_but_can_upload_own_document(client, auth):
+    headers = await auth("manager")
+    payslip = await client.post(f"/api/v1/employees/{MANAGER.id}/documents/payslip", headers=headers, **_upload("Own payslip"))
+    assert payslip.status_code == 403
+    document = await client.post(f"/api/v1/employees/{MANAGER.id}/documents", headers=headers, **_upload("Own document"))
+    assert document.status_code == 200
+
+
+@pytest.mark.parametrize("route", ["documents", "documents/payslip"])
+async def test_admin_uploads_for_anyone(client, auth, route):
+    response = await client.post(f"/api/v1/employees/{OUTSIDER.id}/{route}", headers=await auth("admin"), **_upload("Admin upload"))
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize("target", [OUTSIDER, MANAGER, ADMIN], ids=["other-team", "self", "admin"])
+async def test_manager_cannot_change_job_title_outside_direct_reports(client, auth, target):
+    response = await client.put(f"/api/v1/employees/{target.id}/job-title", json={"designation": "Chief Everything"},
+                                headers=await auth("manager"))
+    assert response.status_code == 403 and error_code(response) == "FORBIDDEN"
+    detail = data(await client.get(f"/api/v1/employees/{target.id}", headers=await auth("admin")))
+    assert detail["job_title"] != "Chief Everything"
+
+
+async def test_manager_changes_direct_reports_job_title_and_admin_anyones(client, auth):
+    report = await client.put(f"/api/v1/employees/{EMPLOYEE.id}/job-title", json={"designation": "Senior Engineer"},
+                              headers=await auth("manager"))
+    assert report.status_code == 200
+    admin = await client.put(f"/api/v1/employees/{OUTSIDER.id}/job-title", json={"designation": "Analyst"}, headers=await auth("admin"))
+    assert admin.status_code == 200
+
+
+async def test_manager_reads_project_assignments_only_within_scope(client, auth):
+    headers = await auth("manager")
+    assert (await client.get(f"/api/v1/employees/{OUTSIDER.id}/projects", headers=headers)).status_code == 403
+    assert (await client.get(f"/api/v1/employees/{EMPLOYEE.id}/projects", headers=headers)).status_code == 200
+    assert (await client.get(f"/api/v1/employees/{MANAGER.id}/projects", headers=headers)).status_code == 200
+    assert (await client.get(f"/api/v1/employees/{OUTSIDER.id}/projects", headers=await auth("admin"))).status_code == 200
+
+
 async def test_removing_assignment_of_unknown_employee_is_not_found(client, auth):
     response = await client.delete(f"/api/v1/employees/9999/projects/{PROJECT_ID}", headers=await auth("admin"))
     assert response.status_code == 404
