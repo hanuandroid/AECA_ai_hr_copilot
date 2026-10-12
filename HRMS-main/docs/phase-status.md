@@ -790,3 +790,18 @@ Status: NOT_STARTED
 
 Phase: 14 — Final Documentation
 Status: NOT_STARTED
+
+---
+
+Production hardening programme (separate track; see docs/production-hardening/)
+- Phase 0 — Verified baseline: COMPLETE (baseline.md, 2026-10-11).
+- Phase 1 — Critical security remediation: COMPLETE (2026-10-12; security-remediation.md). Full backend 1744 passed,
+  frontend 86 passed, tsc 0 errors, next build PASS. Phase 2 not started.
+  Approved remediations of R1 (B-01), R4 (B-05) and R9 (B-03) change characterization tests that pinned the old
+  insecure behaviour; each changed test documents the old behaviour and the new invariant. Inactive users are now
+  rejected by get_current_user (403 USER_INACTIVE), so AI API tests expect USER_INACTIVE instead of AI_USER_INACTIVE.
+  Access tokens require type "access" (one-time re-login). Two environment-sensitive tests (dev DB / .env existence)
+  now assert their intent (dev DB unchanged by the run; .env not tracked, git-ignored, docker-ignored).
+  Follow-ups (approved 2026-10-12): pending-leave queue scoped to decidable requests; project removal scoped like
+  assignment; out-of-scope leave decisions return 404 identical to unknown ids. Inactive AI denials keep their audit
+  identity via a server-side request.state marker (audit test unchanged). No test deleted; no assertion weakened.
