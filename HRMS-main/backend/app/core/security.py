@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from jose import JWTError, jwt
+import jwt
 from passlib.context import CryptContext
 
 from app.core.config import settings
@@ -32,7 +32,10 @@ def create_refresh_token(subject: str) -> str:
 
 
 def decode_token(token: str) -> dict:
+    """Verify signature (configured algorithm only: others and alg=none are rejected) and expiry.
+    `exp` is required: every token this app issues carries one (PyJWT migration, production hardening B-24).
+    The token `type` is checked by the caller (services/auth.get_current_user)."""
     try:
-        return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
-    except JWTError as exc:
+        return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm], options={"require": ["exp"]})
+    except jwt.PyJWTError as exc:
         raise ValueError("Invalid token") from exc

@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from jose import jwt
+import jwt
 
 from app.core.config import settings
 from app.services.ai.authorization import capabilities_for

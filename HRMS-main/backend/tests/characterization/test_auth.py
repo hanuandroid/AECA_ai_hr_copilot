@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from jose import jwt
+import jwt
 
 from app.core.config import settings
 from tests.support.data import ADMIN, EMPLOYEE, INACTIVE, MANAGER, PASSWORD, USERS
@@ -214,6 +214,27 @@ async def test_token_signed_with_another_algorithm_rejected(client, algorithm):
     response = await client.get("/api/v1/employees/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
     assert error_code(response) == "INVALID_TOKEN"
+
+
+async def test_token_without_expiry_is_rejected(client):
+    """PyJWT migration (B-24, Phase 2): `exp` is required. Before, python-jose verified exp only when present, so a
+    correctly signed token without exp never expired. Every token the app issues carries exp, so clients are unaffected."""
+    token = jwt.encode({"sub": str(EMPLOYEE.id), "role": "EMPLOYEE", "type": "access"}, settings.jwt_secret_key,
+                       algorithm=settings.jwt_algorithm)
+    response = await client.get("/api/v1/employees/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401
+    assert error_code(response) == "INVALID_TOKEN"
+
+
+async def test_issued_tokens_decode_with_hs256_only(client):
+    """Issued access tokens are HS256 with sub/role/type/exp; decoding with any other algorithm list fails."""
+    response = await client.post("/api/v1/auth/login", json={"email": EMPLOYEE.email, "password": PASSWORD})
+    token = data(response)["access_token"]
+    assert jwt.get_unverified_header(token)["alg"] == "HS256"
+    claims = jwt.decode(token, settings.jwt_secret_key, algorithms=["HS256"])
+    assert {"sub", "role", "type", "exp"} <= set(claims)
+    with pytest.raises(jwt.InvalidAlgorithmError):
+        jwt.decode(token, settings.jwt_secret_key, algorithms=["HS512"])
 
 
 async def test_unsigned_token_rejected(client):

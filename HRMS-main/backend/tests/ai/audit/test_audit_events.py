@@ -241,7 +241,7 @@ async def test_inactive_users_refresh_token_is_not_attributed(client, db):
     so no identity is bound (the account is never 'authenticated')."""
     from datetime import UTC, datetime, timedelta
 
-    from jose import jwt
+    import jwt
 
     from app.core.config import settings
 
