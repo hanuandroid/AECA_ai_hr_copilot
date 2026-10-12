@@ -8,7 +8,7 @@ from app.models.leave_request import LeaveRequest
 from tests.ai.actions.conftest import ScriptedActionLLM, proposal
 from tests.support.data import EMPLOYEE_PENDING_LEAVE_ID, MANAGER
 from tests.support.db import business_snapshot
-from tests.support.http import data
+from tests.support.http import data, error_code
 
 URL, CONFIRM = "/api/v1/chat/actions", "/api/v1/chat/actions/confirm"
 
@@ -57,7 +57,8 @@ async def test_inactive_and_unauthenticated_rejected(client, auth, override_acti
     override_actions(llm)
     body = {"question": "apply leave"} if url == URL else {"confirmation_id": "x" * 43}
     inactive = await client.post(url, json=body, headers=await auth("inactive"))
-    assert inactive.status_code == 403 and inactive.json()["error"]["code"] == "AI_USER_INACTIVE"
+    # Production hardening B-03: get_current_user now rejects inactive users before the AI layer (was AI_USER_INACTIVE).
+    assert inactive.status_code == 403 and error_code(inactive) == "USER_INACTIVE"
     assert (await client.post(url, json=body)).status_code == 401
     assert llm.calls == []
 

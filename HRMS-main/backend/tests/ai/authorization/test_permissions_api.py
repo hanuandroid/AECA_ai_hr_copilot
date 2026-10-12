@@ -28,14 +28,14 @@ async def test_active_users_get_their_role_capabilities(client, auth, user_key, 
 
 
 async def test_inactive_user_rejected(client, auth):
-    """R9: existing login still works for INACTIVE users, but the AI boundary rejects them."""
+    """Production hardening B-03 (approved): INACTIVE users are rejected by get_current_user for every endpoint,
+    AI included, with 403 USER_INACTIVE. (Before: login worked (R9) and only the AI boundary rejected them with
+    AI_USER_INACTIVE.) The token used here models one issued before deactivation."""
     response = await client.get(URL, headers=await auth("inactive"))
     assert response.status_code == 403
     body = response.json()
     assert body == {
-        "success": False,
-        "data": None,
-        "error": {"code": "AI_USER_INACTIVE", "message": "Your account is not active, so the AI assistant is unavailable."},
+        "detail": {"success": False, "data": None, "error": {"code": "USER_INACTIVE", "message": "This account is not active"}},
     }
 
 
@@ -56,7 +56,8 @@ async def test_frontend_claims_are_ignored(client, auth):
 
 async def test_forged_role_claim_in_token_is_ignored(client):
     forged = jwt.encode(
-        {"sub": str(EMPLOYEE.id), "role": "ADMIN", "exp": datetime.now(UTC) + timedelta(minutes=5)},
+        # type=access (B-04) so the token is otherwise valid and only the forged role claim is under test
+        {"sub": str(EMPLOYEE.id), "role": "ADMIN", "type": "access", "exp": datetime.now(UTC) + timedelta(minutes=5)},
         settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm,
     )

@@ -6,7 +6,7 @@ from app.main import app
 from app.services.ai.sql.service import get_sql_agent_service
 from tests.ai.sql.conftest import MANAGER_DIRECT_REPORTS, ORG_EMPLOYEES, ScriptedSQLLLM, db_snapshot
 from tests.support.data import EMPLOYEE_SENSITIVE
-from tests.support.http import data
+from tests.support.http import data, error_code
 
 URL = "/api/v1/chat/sql"
 
@@ -37,7 +37,7 @@ async def test_inactive_user_rejected_without_llm(client, auth, override_sql):
     spy = override_sql(llm)
     response = await client.post(URL, json={"question": "How many employees?"}, headers=await auth("inactive"))
     assert response.status_code == 403
-    assert response.json()["error"]["code"] == "AI_USER_INACTIVE"
+    assert error_code(response) == "USER_INACTIVE"  # B-03: rejected by get_current_user (was AI_USER_INACTIVE)
     assert (llm.calls, spy.calls) == ([], 0)
 
 

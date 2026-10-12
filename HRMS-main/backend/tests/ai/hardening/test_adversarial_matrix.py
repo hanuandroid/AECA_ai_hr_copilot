@@ -132,7 +132,7 @@ async def test_inactive_user_is_rejected_everywhere(client, auth, install_real, 
     install_real(script())
     kwargs = {"json": body} if body else {}
     response = await getattr(client, method)(path, headers=await auth("inactive"), **kwargs)
-    assert response.status_code == 403 and error_code(response) == "AI_USER_INACTIVE"
+    assert response.status_code == 403 and error_code(response) == "USER_INACTIVE"  # B-03: get_current_user
 
 
 # --- SQL ------------------------------------------------------------------------------------------------------
@@ -352,4 +352,4 @@ async def test_inactive_status_change_mid_conversation(client, auth, install_rea
     await db.commit()
     response = await client.post(CHAT, json={"message": "Does that apply to managers?", "conversation_id": conversation},
                                  headers=headers)
-    assert response.status_code == 403 and error_code(response) == "AI_USER_INACTIVE"
+    assert response.status_code == 403 and error_code(response) == "USER_INACTIVE"  # B-03: existing token now rejected

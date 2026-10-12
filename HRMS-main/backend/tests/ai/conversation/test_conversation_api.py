@@ -81,8 +81,9 @@ async def test_overlong_conversation_id_is_rejected_by_validation(client, auth, 
 async def test_inactive_user_cannot_chat_or_read(client, auth, install_real):
     install_real(script())
     headers = await auth("inactive")
-    assert error_code(await post(client, headers, "What is the WFH policy?")) == "AI_USER_INACTIVE"
-    assert error_code(await client.get(LIST, headers=headers)) == "AI_USER_INACTIVE"
+    # B-03: rejected by get_current_user before the AI layer (was AI_USER_INACTIVE).
+    assert error_code(await post(client, headers, "What is the WFH policy?")) == "USER_INACTIVE"
+    assert error_code(await client.get(LIST, headers=headers)) == "USER_INACTIVE"
 
 
 @pytest.mark.parametrize("method,path", [("post", URL), ("get", LIST), ("get", f"{LIST}/{uuid.uuid4()}"),

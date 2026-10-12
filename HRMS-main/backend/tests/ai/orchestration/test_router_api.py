@@ -40,7 +40,7 @@ async def test_rejects_an_invalid_token(client, install_real):
 async def test_inactive_user_is_rejected_before_any_llm_call(client, auth, install_real):
     llm = install_real(full_llm())
     response = await ask(client, await auth("inactive"))
-    assert response.status_code == 403 and error_code(response) == "AI_USER_INACTIVE"
+    assert response.status_code == 403 and error_code(response) == "USER_INACTIVE"  # B-03: get_current_user
     assert llm.calls == []
 
 

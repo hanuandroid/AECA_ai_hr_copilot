@@ -11,7 +11,8 @@ import re
 
 from app.core.config import settings
 from app.services.ai.audit import recorder, store
-from app.services.ai.audit.events import AuditEventType, AuditStatus
+from app.services.ai.audit.events import AuditEventType, AuditStatus, ReasonCode
+from app.services.auth import INACTIVE_REJECTION_STATE_KEY, InactiveUserRejection
 
 AUDITED_PREFIXES = ("/api/v1/chat", "/api/v1/ai")
 _SAFE_SEGMENT = re.compile(r"^[a-z_-]{1,40}$")
@@ -25,6 +26,19 @@ def endpoint_template(scope: dict) -> str:
     # Unmatched path: keep only known-safe segments (ids, uuids and junk become {id}).
     segments = [segment if _SAFE_SEGMENT.match(segment) else "{id}" for segment in scope.get("path", "").split("/")]
     return "/".join(segments)[:120]
+
+
+def _record_inactive_rejection(scope: dict, http_status: int) -> None:
+    """get_current_user rejects INACTIVE users before the AI layer runs. It leaves a typed marker on the server-side
+    request state (scope["state"]), set only after the token was validated and the employee loaded from the DB, so the
+    denial is still attributed to that account. Client headers, bodies and query strings can never set it."""
+    rejection = (scope.get("state") or {}).get(INACTIVE_REJECTION_STATE_KEY)
+    if type(rejection) is not InactiveUserRejection:
+        return
+    recorder.bind_user(rejection.employee_id, rejection.role)
+    recorder.record(AuditEventType.AUTHORIZATION_DENIED, AuditStatus.DENIED, capability="AI_ACCESS",
+                    reason_code=ReasonCode.INACTIVE_USER)
+    recorder.record(AuditEventType.AI_ERROR, AuditStatus.DENIED, error_code="USER_INACTIVE", http_status=http_status)
 
 
 def _status_for(http_status: int) -> AuditStatus:
@@ -61,6 +75,7 @@ class AIAuditMiddleware:
             await self.app(scope, receive, send_with_request_id)
         finally:
             http_status = response_status["code"]
+            _record_inactive_rejection(scope, http_status)
             recorder.record(AuditEventType.AI_HTTP_REQUEST, _status_for(http_status), duration_ms=timer.ms,
                             endpoint=endpoint_template(scope), method=scope.get("method"), http_status=http_status,
                             actor_role=audit_scope.actor_role)

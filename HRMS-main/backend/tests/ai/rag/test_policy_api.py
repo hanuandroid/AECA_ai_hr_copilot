@@ -5,7 +5,7 @@ import pytest
 from app.main import app
 from app.services.ai.rag.service import INSUFFICIENT_EVIDENCE, get_policy_rag_service
 from tests.ai.rag.conftest import answering_llm
-from tests.support.http import data
+from tests.support.http import data, error_code
 
 URL = "/api/v1/chat/policy"
 SICK = "Employees are entitled to 10 days of sick leave per year."
@@ -33,7 +33,7 @@ async def test_inactive_user_rejected_before_rag(client, auth, ingested, overrid
     llm_factory = override_rag(answering_llm(SICK))
     response = await client.post(URL, json={"question": "How many sick leaves can I take?"}, headers=await auth("inactive"))
     assert response.status_code == 403
-    assert response.json()["error"]["code"] == "AI_USER_INACTIVE"
+    assert error_code(response) == "USER_INACTIVE"  # B-03: rejected by get_current_user (was AI_USER_INACTIVE)
     assert llm_factory.calls == 0
 
 

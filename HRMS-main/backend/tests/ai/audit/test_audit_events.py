@@ -200,6 +200,75 @@ async def test_inactive_user_denial_is_recorded_with_server_identity(client, aut
     assert rows[-1].status == "DENIED"
 
 
+# Production hardening Phase 1 (approved option a): INACTIVE users are now rejected by get_current_user before the AI
+# layer; the identity above comes from a server-side marker set after token validation + DB lookup. The tests below
+# prove that nothing else can bind an identity and that anonymous denials stay anonymous.
+
+SPOOF_HEADERS = {"X-Employee-Id": str(1), "X-User-Id": str(1), "X-Role": "ADMIN", "X-Forwarded-User": "admin@hrms-test.dev"}
+
+
+def _assert_anonymous_denial(rows, status_code):
+    assert types(rows) == ["AI_HTTP_REQUEST"]
+    assert {row.employee_id for row in rows} == {None}
+    assert rows[0].status == "DENIED" and meta(rows[0])["http_status"] == status_code
+
+
+async def test_anonymous_denial_has_no_identity(client, db):
+    response = await chat(client, {}, "What is the WFH policy?")
+    assert response.status_code == 401
+    _assert_anonymous_denial(await audit_rows(db, request_id=response.headers["x-request-id"]), 401)
+
+
+@pytest.mark.parametrize("token", ["not-a-jwt", "a.b.c", ""], ids=["garbage", "three-parts", "empty"])
+async def test_malformed_token_denial_has_no_identity(client, db, token):
+    response = await chat(client, {"Authorization": f"Bearer {token}"}, "What is the WFH policy?")
+    assert response.status_code == 401
+    _assert_anonymous_denial(await audit_rows(db, request_id=response.headers["x-request-id"]), 401)
+
+
+async def test_spoofed_identity_headers_and_body_are_ignored(client, db):
+    response = await client.post(CHAT, json={"message": "What is the WFH policy?"}, headers=SPOOF_HEADERS)
+    assert response.status_code == 401
+    _assert_anonymous_denial(await audit_rows(db, request_id=response.headers["x-request-id"]), 401)
+    response = await client.post(CHAT, json={"message": "Hi", "employee_id": 1, "role": "ADMIN"}, headers=SPOOF_HEADERS)
+    assert response.status_code in (401, 422)
+    rows = await audit_rows(db, request_id=response.headers["x-request-id"])
+    assert {row.employee_id for row in rows} == {None} and "AUTHORIZATION_DENIED" not in types(rows)
+
+
+async def test_inactive_users_refresh_token_is_not_attributed(client, db):
+    """A signature-valid but non-access token for the INACTIVE user is rejected as INVALID_TOKEN before any user lookup,
+    so no identity is bound (the account is never 'authenticated')."""
+    from datetime import UTC, datetime, timedelta
+
+    from jose import jwt
+
+    from app.core.config import settings
+
+    refresh = jwt.encode({"sub": str(INACTIVE.id), "type": "refresh", "exp": datetime.now(UTC) + timedelta(minutes=5)},
+                         settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    response = await chat(client, {"Authorization": f"Bearer {refresh}"}, "What is the WFH policy?")
+    assert response.status_code == 401
+    _assert_anonymous_denial(await audit_rows(db, request_id=response.headers["x-request-id"]), 401)
+
+
+async def test_inactive_denial_cannot_be_reattributed_by_spoofed_headers(client, auth, install_real, db):
+    install_real(script())
+    response = await client.post(CHAT, json={"message": "What is the WFH policy?"}, headers=await auth("inactive") | SPOOF_HEADERS)
+    rows = await audit_rows(db, request_id=response.headers["x-request-id"])
+    assert response.status_code == 403
+    assert {row.employee_id for row in rows} == {INACTIVE.id}  # the validated account, never the header claim
+
+
+async def test_active_user_request_has_no_inactive_denial(client, auth, install_real, db):
+    install_real(script())
+    response = await chat(client, await auth("employee"), "What is the WFH policy?")
+    rows = await audit_rows(db, request_id=response.headers["x-request-id"])
+    assert response.status_code == 200
+    assert all(meta(row).get("reason_code") != "INACTIVE_USER" for row in rows)
+    assert {row.employee_id for row in rows} == {EMPLOYEE.id}
+
+
 async def test_capability_denial_is_recorded(client, auth, install_real, db):
     install_real(script(action=action_proposal("EMPLOYEE_DEACTIVATE", target_employee_id=4)))
     response = await chat(client, await auth("employee"), "Deactivate this employee.")

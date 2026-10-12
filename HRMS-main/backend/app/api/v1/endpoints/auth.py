@@ -7,6 +7,7 @@ from app.core.response import error_response, success_response
 from app.core.security import create_access_token, create_refresh_token, verify_password
 from app.db.session import get_db
 from app.models.employee import Employee
+from app.models.enums import EmployeeStatus
 from app.schemas.auth import LoginRequest
 
 router = APIRouter()
@@ -17,7 +18,8 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Employee).where(Employee.email == payload.email))
     user = result.scalar_one_or_none()
 
-    if user is None or not verify_password(payload.password, user.hashed_password):
+    # Inactive accounts get the same generic error as bad credentials (no account-status disclosure).
+    if user is None or not verify_password(payload.password, user.hashed_password) or user.status != EmployeeStatus.ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=error_response("INVALID_CREDENTIALS", "Invalid email or password"),
@@ -36,7 +38,7 @@ async def token(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
     result = await db.execute(select(Employee).where(Employee.email == form_data.username))
     user = result.scalar_one_or_none()
 
-    if user is None or not verify_password(form_data.password, user.hashed_password):
+    if user is None or not verify_password(form_data.password, user.hashed_password) or user.status != EmployeeStatus.ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=error_response("INVALID_CREDENTIALS", "Invalid email or password"),

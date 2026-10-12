@@ -72,7 +72,7 @@ async def test_metrics_are_admin_only(client, auth, install_real, user):
 async def test_audit_api_requires_an_active_authenticated_user(client, auth, path):
     assert (await client.get(path)).status_code == 401
     inactive = await client.get(path, headers=await auth("inactive"))
-    assert inactive.status_code == 403 and error_code(inactive) == "AI_USER_INACTIVE"
+    assert inactive.status_code == 403 and error_code(inactive) == "USER_INACTIVE"  # B-03: rejected by get_current_user
 
 
 async def test_role_headers_and_query_cannot_widen_access(client, auth, install_real):
