@@ -1,0 +1,38 @@
+# Production-shaped Compose file (production hardening Phase 2). The development workflow keeps using
+# docker-compose.yml unchanged. Single API worker by design (SQLite + in-process AI rate limits).
+#
+#   docker compose -f docker-compose.prod.yml build
+#   docker compose -f docker-compose.prod.yml run --rm api alembic -c alembic.ini upgrade head
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Requires: API_ENV_FILE (filled copy of backend/production.env.example, kept out of git) and a TLS reverse proxy in
+# front of the published ports. Ports bind to 127.0.0.1 by default so nothing is exposed without the proxy.
+name: hrms-prod
+
+services:
+  api:
+    build:
+      context: ./backend
+      target: production
+    image: hrms-api:production
+    env_file:
+      - ${API_ENV_FILE:-./backend/.env.production}
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: sqlite+aiosqlite:///./storage/hrms.db
+    volumes:
+      - api_storage:/app/storage
+    tmpfs:
+      - /tmp
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-8000}:8000"
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+volumes:
+  api_storage:

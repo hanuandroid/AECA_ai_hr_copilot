@@ -1,4 +1,9 @@
 storage/
 .env
+.env.*
+!.env.example
 .venv/
 __pycache__/
+.pytest_cache/
+tests/
+evals/results/

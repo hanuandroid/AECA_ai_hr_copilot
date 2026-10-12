@@ -43,6 +43,7 @@ os.environ["POLICY_UPLOAD_DIR"] = str(POLICY_DIR)
 os.environ["PROFILE_PHOTO_UPLOAD_DIR"] = str(TEST_ROOT / "profile-photos")
 os.environ["EMPLOYEE_DOCUMENT_UPLOAD_DIR"] = str(TEST_ROOT / "employee-documents")
 os.environ["JWT_SECRET_KEY"] = "test-only-secret-not-for-production"
+os.environ["ALLOWED_HOSTS"] = "test,localhost,127.0.0.1"  # httpx test client host (TrustedHostMiddleware, B-25)
 os.environ["AI_LLM_PROVIDER"] = "fake"
 os.environ["AI_EMBEDDING_PROVIDER"] = "fake"
 os.environ.pop("ANTHROPIC_API_KEY", None)

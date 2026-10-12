@@ -36,6 +36,10 @@ def test_a_safe_production_configuration_passes():
     ({"ai_audit_fingerprint_key": None}, "AI_AUDIT_FINGERPRINT_KEY"),
     ({"ai_audit_fingerprint_key": "too-short"}, "AI_AUDIT_FINGERPRINT_KEY"),
     ({"ai_audit_fingerprint_key": STRONG}, "AI_AUDIT_FINGERPRINT_KEY"),  # same value as the JWT secret
+    ({"allowed_hosts": "*"}, "ALLOWED_HOSTS"),  # B-25
+    ({"allowed_hosts": "*.example.com"}, "ALLOWED_HOSTS"),
+    ({"allowed_hosts": ""}, "ALLOWED_HOSTS"),
+    ({"cors_allow_origins": "*"}, "CORS_ALLOW_ORIGINS"),
 ])
 def test_unsafe_production_settings_stop_startup(overrides, problem):
     config = prod(**overrides)
@@ -51,6 +55,19 @@ def test_ai_disabled_does_not_need_a_key():
 @pytest.mark.parametrize("environment", ["dev", "test", "staging"])
 def test_non_production_environments_keep_their_defaults(environment):
     assert_production_ready(Settings(_env_file=None, environment=environment, jwt_secret_key="change_me", ai_llm_provider="fake"))
+
+
+@pytest.mark.parametrize("variable", ["LANGSMITH_TRACING", "LANGCHAIN_TRACING_V2", "LANGSMITH_API_KEY", "LANGCHAIN_API_KEY"])
+def test_external_tracing_is_refused_unless_explicitly_allowed(variable):
+    """B-16: langsmith is installed transitively (LangGraph -> langchain-core); these variables would export traces."""
+    environ = {variable: "lsv2_pt_secret-looking-value-123"}
+    assert any("External tracing" in problem for problem in production_problems(prod(), environ))
+    assert not any("External tracing" in problem for problem in production_problems(prod(allow_external_tracing=True), environ))
+    assert "secret-looking-value" not in " ".join(production_problems(prod(), environ))  # names only, never values
+
+
+def test_no_tracing_variables_means_no_tracing_problem():
+    assert production_problems(prod(), {}) == []
 
 
 def test_audit_fingerprint_is_keyed_independently_of_the_jwt_secret(monkeypatch):

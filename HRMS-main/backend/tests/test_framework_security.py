@@ -66,6 +66,40 @@ async def test_normal_token_form_still_works(client):
     assert response.status_code == 200 and response.json()["token_type"] == "bearer"
 
 
+# --- B-25: Host-header validation (production hardening Phase 2, C6) -------------------------------------------
+# Verified before the fix on the running dev stack: GET /api/v1/chat/permissions/ with "Host: evil.example" answered
+# 307 Location: http://evil.example/api/v1/chat/permissions (FastAPI's trailing-slash redirect builds the URL from Host).
+
+
+async def test_spoofed_host_cannot_produce_a_redirect_to_an_attacker_domain(client):
+    response = await client.get("/api/v1/chat/permissions/", headers={"Host": "evil.example"}, follow_redirects=False)
+    assert response.status_code == 400
+    assert "location" not in response.headers
+    assert "evil.example" not in response.text
+
+
+async def test_allowed_host_redirects_to_itself(client):
+    response = await client.get("/api/v1/chat/permissions/", follow_redirects=False)
+    assert response.status_code in (307, 308)
+    assert response.headers["location"].startswith("http://test/")
+
+
+@pytest.mark.parametrize("host", ["evil.example", "localhost.evil.example", "127.0.0.1.nip.io"])
+async def test_unknown_hosts_are_rejected_on_any_route(client, host):
+    response = await client.get("/health", headers={"Host": host})
+    assert response.status_code == 400
+
+
+async def test_internal_action_client_host_is_accepted():
+    """The AI action client calls the app in-process with Host 'hrms.internal'; it must never be blocked."""
+    import httpx
+
+    from app.services.ai.actions.client import INTERNAL_BASE_URL
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=INTERNAL_BASE_URL) as internal:
+        assert (await internal.get("/health")).status_code == 200
+
+
 async def test_lifespan_still_runs_startup_checks(monkeypatch):
     """The app's lifespan (not on_startup, removed in Starlette 1.x) still runs on the upgraded stack, and still enforces
     the production configuration checks."""

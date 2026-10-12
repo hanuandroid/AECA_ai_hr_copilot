@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
+    # Comma-separated. Hosts the API answers to (TrustedHostMiddleware, production hardening B-25) and the browser
+    # origins allowed by CORS. Production must set real values; wildcards are refused by production_checks.
+    allowed_hosts: str = "localhost,127.0.0.1"
+    cors_allow_origins: str = "http://localhost:3000"
+    # LangSmith/LangChain tracing would send prompts and HR data to an external service; production refuses it unless
+    # this is explicitly set after a data-processing approval (B-16).
+    allow_external_tracing: bool = False
     policy_upload_dir: str = "/app/storage/hr-policies"
     profile_photo_upload_dir: str = "/app/storage/profile-photos"
     employee_document_upload_dir: str = "/app/storage/employee-documents"
@@ -56,6 +63,10 @@ class Settings(BaseSettings):
     ai_rag_min_score: float = 0.35
     ai_policy_chunk_size: int = 800
     ai_policy_chunk_overlap: int = 120
+
+
+def split_csv(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 settings = Settings()
