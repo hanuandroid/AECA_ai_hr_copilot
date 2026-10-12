@@ -16,6 +16,22 @@ from app.services.auth import get_current_user
 router = APIRouter()
 
 
+async def _ensure_can_decide_leave(current_user: Employee, leave: LeaveRequest, db: AsyncSession) -> None:
+    """Approve/reject scope (production hardening B-05): nobody decides their own leave; managers decide only
+    for their direct reports (employees.manager_id); admins decide for anyone else. Out-of-scope requests get the same
+    404 as unknown ids, so request ids cannot be probed for existence."""
+    if leave.employee_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_response("FORBIDDEN", "You cannot approve or reject your own leave request"),
+        )
+    if current_user.role == Role.ADMIN:
+        return
+    owner_manager_id = (await db.execute(select(Employee.manager_id).where(Employee.id == leave.employee_id))).scalar_one_or_none()
+    if owner_manager_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_response("LEAVE_NOT_FOUND", "Leave request not found"))
+
+
 DEFAULT_LEAVE_TOTALS: dict[LeaveType, float] = {
     LeaveType.CASUAL: 12.0,
     LeaveType.SICK: 10.0,
@@ -244,10 +260,15 @@ async def pending_leave_requests(
             detail=error_response("FORBIDDEN", "Only manager/admin can view pending leave approvals"),
         )
 
-    count_q = select(func.count(LeaveRequest.id)).where(LeaveRequest.status == LeaveRequestStatus.PENDING)
+    # Production hardening B-05: the approval queue (and its leave reasons) contains only requests the caller may decide.
+    # The same filter drives the count and pagination, so totals reveal nothing about out-of-scope requests.
+    visible = [LeaveRequest.status == LeaveRequestStatus.PENDING, LeaveRequest.employee_id != current_user.id]
+    if current_user.role != Role.ADMIN:
+        visible.append(LeaveRequest.employee_id.in_(select(Employee.id).where(Employee.manager_id == current_user.id)))
+    count_q = select(func.count(LeaveRequest.id)).where(*visible)
     total = (await db.execute(count_q)).scalar_one()
     result = await db.execute(
-        select(LeaveRequest).where(LeaveRequest.status == LeaveRequestStatus.PENDING).order_by(LeaveRequest.id.desc()).limit(limit).offset(offset)
+        select(LeaveRequest).where(*visible).order_by(LeaveRequest.id.desc()).limit(limit).offset(offset)
     )
     requests = result.scalars().all()
 
@@ -289,6 +310,7 @@ async def approve_leave_request(
     leave = result.scalar_one_or_none()
     if leave is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_response("LEAVE_NOT_FOUND", "Leave request not found"))
+    await _ensure_can_decide_leave(current_user, leave, db)
     if leave.status != LeaveRequestStatus.PENDING:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -343,6 +365,7 @@ async def reject_leave_request(
     leave = result.scalar_one_or_none()
     if leave is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_response("LEAVE_NOT_FOUND", "Leave request not found"))
+    await _ensure_can_decide_leave(current_user, leave, db)
     if leave.status != LeaveRequestStatus.PENDING:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -38,14 +38,94 @@ async def test_manager_assigns_team_employee_to_project(client, auth):
     assert [(p["project_name"], p["role_on_project"]) for p in data(listing)] == [(PROJECT_NAME, "AI Engineer")]
 
 
-async def test_manager_can_assign_employee_outside_team(client, auth):
-    """CURRENT BEHAVIOUR (R4): no team check. The AI layer must be stricter (D7)."""
+async def test_manager_cannot_assign_employee_outside_team(client, auth):
+    """Production hardening B-05 (approved remediation of R4).
+
+    Old behaviour (pinned here until 2026-10-11): no team check, so any manager could assign any employee.
+    Invariant now: managers assign only themselves or their direct reports; nothing is written on denial.
+    """
+    headers = await auth("manager")
     response = await client.post(
         f"/api/v1/employees/{OUTSIDER.id}/projects",
         json={"project_id": PROJECT_ID, "role_on_project": "Reviewer"},
+        headers=headers,
+    )
+    assert response.status_code == 403
+    assert error_code(response) == "FORBIDDEN"
+    listing = await client.get(f"/api/v1/employees/{OUTSIDER.id}/projects", headers=await auth("admin"))
+    assert data(listing) == []
+
+
+async def test_manager_can_assign_themself(client, auth):
+    response = await client.post(
+        f"/api/v1/employees/{MANAGER.id}/projects",
+        json={"project_id": PROJECT_ID, "role_on_project": "Lead"},
         headers=await auth("manager"),
     )
     assert response.status_code == 200
+
+
+async def test_admin_can_assign_any_employee(client, auth):
+    response = await client.post(
+        f"/api/v1/employees/{OUTSIDER.id}/projects",
+        json={"project_id": PROJECT_ID, "role_on_project": "Reviewer"},
+        headers=await auth("admin"),
+    )
+    assert response.status_code == 200
+
+
+# --- DELETE /employees/{id}/projects/{project_id} (production hardening B-05, approved follow-up) ---------------
+# Old behaviour (until 2026-10-12): any manager could remove any employee's project assignment.
+# Invariant now: same scope as assignment - managers only for themselves or direct reports; admins anyone.
+
+
+async def _assign(client, auth, employee_id: int) -> None:
+    response = await client.post(f"/api/v1/employees/{employee_id}/projects", json={"project_id": PROJECT_ID},
+                                 headers=await auth("admin"))
+    assert response.status_code == 200
+
+
+async def _assigned_project_ids(client, auth, employee_id: int) -> list[int]:
+    listing = await client.get(f"/api/v1/employees/{employee_id}/projects", headers=await auth("admin"))
+    return [item["project_id"] for item in data(listing)]
+
+
+async def test_manager_cannot_remove_assignment_outside_team(client, auth):
+    await _assign(client, auth, OUTSIDER.id)
+    headers = await auth("manager")
+    response = await client.delete(f"/api/v1/employees/{OUTSIDER.id}/projects/{PROJECT_ID}", headers=headers)
+    assert response.status_code == 403
+    assert error_code(response) == "FORBIDDEN"
+    assert PROJECT_ID in await _assigned_project_ids(client, auth, OUTSIDER.id)  # nothing removed
+    # Same answer when no such assignment exists: out-of-scope assignments cannot be probed.
+    missing = await client.delete(f"/api/v1/employees/{OUTSIDER.id}/projects/987654", headers=headers)
+    assert missing.status_code == 403 and missing.json() == response.json()
+
+
+async def test_manager_removes_direct_reports_assignment(client, auth):
+    await _assign(client, auth, EMPLOYEE.id)
+    response = await client.delete(f"/api/v1/employees/{EMPLOYEE.id}/projects/{PROJECT_ID}", headers=await auth("manager"))
+    assert response.status_code == 200
+    assert PROJECT_ID not in await _assigned_project_ids(client, auth, EMPLOYEE.id)
+
+
+async def test_admin_removes_any_assignment(client, auth):
+    await _assign(client, auth, OUTSIDER.id)
+    response = await client.delete(f"/api/v1/employees/{OUTSIDER.id}/projects/{PROJECT_ID}", headers=await auth("admin"))
+    assert response.status_code == 200
+
+
+async def test_employee_cannot_remove_assignments(client, auth):
+    await _assign(client, auth, EMPLOYEE.id)
+    response = await client.delete(f"/api/v1/employees/{EMPLOYEE.id}/projects/{PROJECT_ID}", headers=await auth("employee"))
+    assert response.status_code == 403
+    assert PROJECT_ID in await _assigned_project_ids(client, auth, EMPLOYEE.id)
+
+
+async def test_removing_assignment_of_unknown_employee_is_not_found(client, auth):
+    response = await client.delete(f"/api/v1/employees/9999/projects/{PROJECT_ID}", headers=await auth("admin"))
+    assert response.status_code == 404
+    assert error_code(response) == "ASSIGNMENT_NOT_FOUND"
 
 
 async def test_reassigning_updates_role_instead_of_duplicating(client, auth):
@@ -158,28 +238,95 @@ async def test_finance_profile_returns_only_own_data(client, auth):
     assert data(response)["employee_id"] == EMPLOYEE.id
 
 
-async def test_r1_employee_detail_exposes_sensitive_fields_to_any_user(client, auth):
-    """SECURITY FINDING R1 - documents CURRENT (insecure) behaviour; do not "fix" this test.
+# --- GET /employees/{id}: field-level visibility (production hardening B-01, approved remediation of R1) ----------
+# Old behaviour (pinned here until 2026-10-11): every field, including salary, bank, PAN, DOB and PF/ESI identifiers,
+# was returned to ANY authenticated user, so sequential ids exposed the whole organisation.
+# Invariant now: financial/government-ID fields -> the employee themself and ADMIN only; phone/address/blood type ->
+# additionally the employee's direct manager. Restricted fields are returned as null (response shape unchanged).
 
-    GET /api/v1/employees/{id} returns salary, bank, PAN, DOB and PF data of ANY employee to
-    ANY authenticated user (here: OUTSIDER reading EMPLOYEE).
+PERSONAL_KEYS = {"phone", "address", "blood_type"}
+PERSONAL_VALUES = {"phone": "+1-555-0100", "address": "1 Test Street", "blood_type": "O+"}
 
-    TODO(R1): role-gate these fields in employees.py::get_employee (decision D4, separate approved
-    change). When fixed, update this test to assert the fields are absent for non-privileged callers.
-    The AI layer never calls this route: see app/services/ai/guards.py and tests/ai/test_guards.py.
-    """
-    response = await client.get(f"/api/v1/employees/{EMPLOYEE.id}", headers=await auth("outsider"))
+
+@pytest.fixture
+async def employee_with_personal_fields(db):
+    from sqlalchemy import update
+
+    from app.models.employee import Employee
+
+    await db.execute(update(Employee).where(Employee.id == EMPLOYEE.id).values(**PERSONAL_VALUES))
+    await db.commit()
+
+
+async def _detail(client, auth, viewer: str, employee_id: int = EMPLOYEE.id) -> dict:
+    response = await client.get(f"/api/v1/employees/{employee_id}", headers=await auth(viewer))
     assert response.status_code == 200
-    detail = data(response)
+    return data(response)
+
+
+@pytest.mark.parametrize("viewer", ["employee", "admin"], ids=["self", "admin"])
+async def test_self_and_admin_see_all_restricted_fields(client, auth, employee_with_personal_fields, viewer):
+    detail = await _detail(client, auth, viewer)
+    for key, value in EMPLOYEE_SENSITIVE.items():
+        assert detail[key] == value, key
+    for key, value in PERSONAL_VALUES.items():
+        assert detail[key] == value, key
+
+
+async def test_direct_manager_sees_personal_but_not_financial_fields(client, auth, employee_with_personal_fields):
+    detail = await _detail(client, auth, "manager")  # MANAGER is EMPLOYEE's direct manager
+    for key, value in PERSONAL_VALUES.items():
+        assert detail[key] == value, key
     assert SENSITIVE_KEYS <= set(detail)
-    assert detail["current_salary_usd"] == EMPLOYEE_SENSITIVE["current_salary_usd"]
-    assert detail["bank_account_number"] == EMPLOYEE_SENSITIVE["bank_account_number"]
-    assert detail["bank_ifsc"] == EMPLOYEE_SENSITIVE["bank_ifsc"]
-    assert detail["pan_number"] == EMPLOYEE_SENSITIVE["pan_number"]
-    assert detail["date_of_birth"] == EMPLOYEE_SENSITIVE["date_of_birth"]
-    assert detail["pf_uan"] == EMPLOYEE_SENSITIVE["pf_uan"]
-    # hashed_password is NOT part of the response.
-    assert "hashed_password" not in detail
+    assert all(detail[key] is None for key in SENSITIVE_KEYS)
+
+
+async def test_peer_sees_neither_financial_nor_personal_fields(client, auth, employee_with_personal_fields):
+    detail = await _detail(client, auth, "outsider")  # same role, not the manager
+    assert all(detail[key] is None for key in SENSITIVE_KEYS | PERSONAL_KEYS)
+    assert (detail["id"], detail["name"], detail["email"]) == (EMPLOYEE.id, "Employee Test", EMPLOYEE.email)  # directory info kept
+
+
+async def test_manager_of_someone_else_sees_no_restricted_fields(client, auth):
+    detail = await _detail(client, auth, "manager", OUTSIDER.id)  # OUTSIDER has no manager
+    assert all(detail[key] is None for key in SENSITIVE_KEYS | PERSONAL_KEYS)
+
+
+async def test_enumerating_ids_does_not_disclose_sensitive_values(client, auth, employee_with_personal_fields):
+    headers = await auth("outsider")
+    seen = 0
+    for employee_id in range(1, 8):  # every seeded id plus unknown ones
+        response = await client.get(f"/api/v1/employees/{employee_id}", headers=headers)
+        if employee_id == OUTSIDER.id or not response.json().get("success"):
+            continue  # own record, or EMPLOYEE_NOT_FOUND for unknown ids
+        seen += 1
+        for value in [*EMPLOYEE_SENSITIVE.values(), *PERSONAL_VALUES.values()]:
+            assert str(value) not in response.text
+    assert seen >= 4  # the enumeration really covered the other employees
+
+
+async def test_system_payslip_is_dob_password_protected(client, auth):
+    """pypdf upgrade guard (production hardening B-22): system payslips are generated with reportlab and encrypted with
+    pypdf using the employee's DOB (DD-MM-YY). Verifies the encryption round trip on the upgraded pypdf."""
+    from datetime import date, timedelta
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    headers = await auth("employee")
+    previous_month = date.today().replace(day=1) - timedelta(days=1)  # same period rule as employees.py
+    payslip_id = f"system-payslip-{EMPLOYEE.id}-{previous_month.year}-{previous_month.month:02d}"
+    response = await client.get(f"/api/v1/employees/me/documents/{payslip_id}/download", headers=headers)
+    assert response.status_code == 200
+    assert response.content.startswith(b"%PDF")
+
+    reader = PdfReader(BytesIO(response.content))
+    assert reader.is_encrypted
+    assert not reader.decrypt("00-00-00")  # wrong password
+    reader = PdfReader(BytesIO(response.content))
+    password = date.fromisoformat(EMPLOYEE_SENSITIVE["date_of_birth"]).strftime("%d-%m-%y")  # seed: pan_dob = DOB
+    assert reader.decrypt(password)
+    assert len(reader.pages) >= 1
 
 
 async def test_r1_exposure_does_not_extend_to_password_hash(client, auth):

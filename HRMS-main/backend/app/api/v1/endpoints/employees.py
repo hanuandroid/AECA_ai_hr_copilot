@@ -64,6 +64,34 @@ def _default_pan(employee_id: int) -> str:
     )
 
 
+# Field-level visibility for GET /employees/{employee_id} (production hardening B-01).
+# Financial and government-identifier fields: the employee themself and ADMIN only.
+DETAIL_FINANCIAL_FIELDS = (
+    "date_of_birth", "current_salary_usd", "bank_name", "bank_account_number", "bank_account_name", "bank_branch",
+    "bank_ifsc", "pan_number", "pan_name", "pan_dob", "pf_uan", "esi_no",
+)
+# Personal contact/health fields: additionally visible to the employee's direct manager.
+DETAIL_PERSONAL_FIELDS = ("phone", "address", "blood_type")
+
+
+def _hidden_detail_fields(viewer: Employee, employee: Employee) -> tuple[str, ...]:
+    if viewer.id == employee.id or viewer.role == Role.ADMIN:
+        return ()
+    if employee.manager_id is not None and employee.manager_id == viewer.id:
+        return DETAIL_FINANCIAL_FIELDS
+    return DETAIL_FINANCIAL_FIELDS + DETAIL_PERSONAL_FIELDS
+
+
+def _ensure_can_manage_projects_of(current_user: Employee, employee: Employee) -> None:
+    """Project assign/remove scope (production hardening B-05): managers only for themselves or their direct reports
+    (employees.manager_id); admins for anyone. Employee existence is already public via the directory."""
+    if current_user.role != Role.ADMIN and employee.id != current_user.id and employee.manager_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_response("FORBIDDEN", "You can only manage projects for yourself or your direct reports"),
+        )
+
+
 def _employee_directory_payload(e: Employee):
     return {
         "id": e.id,
@@ -1205,7 +1233,7 @@ async def list_employee_projects(
 async def assign_employee_project(
     employee_id: int,
     payload: EmployeeProjectAssign,
-    _: Employee = Depends(require_roles(Role.ADMIN, Role.MANAGER)),
+    current_user: Employee = Depends(require_roles(Role.ADMIN, Role.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
     employee = (await db.execute(select(Employee).where(Employee.id == employee_id))).scalar_one_or_none()
@@ -1214,6 +1242,7 @@ async def assign_employee_project(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=error_response("EMPLOYEE_NOT_FOUND", "Employee not found"),
         )
+    _ensure_can_manage_projects_of(current_user, employee)
 
     project = (await db.execute(select(Project).where(Project.id == payload.project_id))).scalar_one_or_none()
     if project is None:
@@ -1263,9 +1292,17 @@ async def assign_employee_project(
 async def remove_employee_project(
     employee_id: int,
     project_id: int,
-    _: Employee = Depends(require_roles(Role.ADMIN, Role.MANAGER)),
+    current_user: Employee = Depends(require_roles(Role.ADMIN, Role.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
+    employee = (await db.execute(select(Employee).where(Employee.id == employee_id))).scalar_one_or_none()
+    if employee is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=error_response("ASSIGNMENT_NOT_FOUND", "Employee project assignment not found"),
+        )
+    # Scope before the assignment lookup: nothing about an out-of-scope employee's assignments is revealed.
+    _ensure_can_manage_projects_of(current_user, employee)
     row = (
         await db.execute(
             select(EmployeeProject).where(
@@ -1521,7 +1558,7 @@ async def update_employee(
 
 
 @router.get("/{employee_id}")
-async def get_employee(employee_id: int, _: Employee = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def get_employee(employee_id: int, current_user: Employee = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Employee).where(Employee.id == employee_id))
     employee = result.scalar_one_or_none()
     if employee is None:
@@ -1557,8 +1594,7 @@ async def get_employee(employee_id: int, _: Employee = Depends(get_current_user)
         )
     ).scalar_one_or_none()
 
-    return success_response(
-        {
+    payload = {
             "id": employee.id,
             "name": employee.name,
             "email": employee.email,
@@ -1595,5 +1631,7 @@ async def get_employee(employee_id: int, _: Employee = Depends(get_current_user)
                 }
                 for employee_project, project in project_rows
             ],
-        }
-    )
+    }
+    for field in _hidden_detail_fields(current_user, employee):
+        payload[field] = None
+    return success_response(payload)

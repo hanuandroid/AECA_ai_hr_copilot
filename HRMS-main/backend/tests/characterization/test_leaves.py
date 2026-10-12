@@ -14,6 +14,7 @@ from tests.support.data import (
     MANAGER,
     OUTSIDER,
     OUTSIDER_PENDING_LEAVE_ID,
+    USERS,
     future,
 )
 from tests.support.http import data, error_code
@@ -115,11 +116,22 @@ async def test_leave_reason_too_short_is_422(client, auth):
     assert response.status_code == 422
 
 
-async def test_inactive_user_can_still_create_leave(client, auth):
-    """CURRENT BEHAVIOUR (R9): INACTIVE employees are not blocked by the existing API."""
+async def test_inactive_user_cannot_create_leave(client, auth, db):
+    """Production hardening B-03 (approved remediation of R9).
+
+    Old behaviour (pinned here until 2026-10-11): an INACTIVE employee's token could still create leave requests.
+    Invariant now: get_current_user rejects the (pre-deactivation) token with 403 USER_INACTIVE and nothing is written.
+    """
+    from sqlalchemy import func
+
+    from app.models.leave_request import LeaveRequest
+
+    count = select(func.count(LeaveRequest.id)).where(LeaveRequest.employee_id == INACTIVE.id)
+    before = (await db.execute(count)).scalar_one()
     response = await client.post("/api/v1/leaves/requests", json=leave_payload(), headers=await auth("inactive"))
-    assert response.status_code == 200
-    assert data(response)["employee_id"] == INACTIVE.id
+    assert response.status_code == 403
+    assert error_code(response) == "USER_INACTIVE"
+    assert (await db.execute(count)).scalar_one() == before
 
 
 # --- GET /leaves/requests/pending -----------------------------------------
@@ -131,12 +143,62 @@ async def test_employee_cannot_list_pending_approvals(client, auth):
     assert error_code(response) == "FORBIDDEN"
 
 
-async def test_manager_sees_all_pending_leaves_not_only_team(client, auth):
-    """CURRENT BEHAVIOUR (R4): no team scoping - the outsider's pending leave is visible to MANAGER."""
-    response = await client.get("/api/v1/leaves/requests/pending", headers=await auth("manager"))
+PENDING = "/api/v1/leaves/requests/pending"
+OUTSIDER_REASON = "Medical appointment"  # seeded reason of the outsider's pending request
+
+
+async def test_manager_sees_only_direct_reports_pending_leaves(client, auth):
+    """Production hardening B-05 (approved follow-up, remediation of R4).
+
+    Old behaviour (pinned here until 2026-10-12): every manager saw ALL pending requests, including other teams'
+    leave reasons. Invariant now: the approval queue holds only requests the caller may decide - direct reports
+    for managers; everyone but themselves for admins - and counts/pagination reveal nothing else.
+    """
+    response = await client.get(PENDING, params={"limit": 100}, headers=await auth("manager"))
     assert response.status_code == 200
-    ids = {item["id"] for item in data(response)["items"]}
+    body = data(response)
+    ids = {item["id"] for item in body["items"]}
+    assert EMPLOYEE_PENDING_LEAVE_ID in ids and OUTSIDER_PENDING_LEAVE_ID not in ids
+    assert {item["employee_id"] for item in body["items"]} <= {EMPLOYEE.id, INACTIVE.id}  # MANAGER's direct reports
+    assert body["meta"]["total"] == len(body["items"])
+    assert OUTSIDER_REASON not in response.text
+
+
+async def test_manager_pagination_does_not_reveal_out_of_scope_requests(client, auth):
+    headers = await auth("manager")
+    total = data(await client.get(PENDING, params={"limit": 100}, headers=headers))["meta"]["total"]
+    seen = []
+    for offset in range(0, total + 3):
+        page = data(await client.get(PENDING, params={"limit": 1, "offset": offset}, headers=headers))
+        assert page["meta"]["total"] == total
+        seen += [item["id"] for item in page["items"]]
+    assert OUTSIDER_PENDING_LEAVE_ID not in seen and len(seen) == total
+
+
+async def test_admin_sees_other_employees_pending_leaves_but_not_own(client, auth, db):
+    from app.models.enums import LeaveRequestStatus
+    from app.models.leave_request import LeaveRequest
+
+    own = LeaveRequest(employee_id=ADMIN.id, leave_type=LeaveType.CASUAL, start_date=future(45), end_date=future(45),
+                       reason="Admin personal", status=LeaveRequestStatus.PENDING)
+    db.add(own)
+    await db.commit()
+    body = data(await client.get(PENDING, params={"limit": 100}, headers=await auth("admin")))
+    ids = {item["id"] for item in body["items"]}
     assert {EMPLOYEE_PENDING_LEAVE_ID, OUTSIDER_PENDING_LEAVE_ID} <= ids
+    assert own.id not in ids  # admins cannot decide their own leave, so it is not in their queue
+
+
+async def test_manager_does_not_see_own_pending_leave(client, auth, db):
+    from app.models.enums import LeaveRequestStatus
+    from app.models.leave_request import LeaveRequest
+
+    own = LeaveRequest(employee_id=MANAGER.id, leave_type=LeaveType.CASUAL, start_date=future(46), end_date=future(46),
+                       reason="Manager personal", status=LeaveRequestStatus.PENDING)
+    db.add(own)
+    await db.commit()
+    body = data(await client.get(PENDING, params={"limit": 100}, headers=await auth("manager")))
+    assert own.id not in {item["id"] for item in body["items"]}
 
 
 # --- POST /leaves/requests/{id}/approve | reject --------------------------
@@ -171,16 +233,52 @@ async def test_manager_approves_team_leave_and_balance_is_reduced(client, auth, 
     assert await _remaining(db, EMPLOYEE.id, LeaveType.CASUAL) == before - 2
 
 
-async def test_manager_can_approve_leave_outside_team(client, auth):
-    """CURRENT BEHAVIOUR (R4): the existing API does not check the manager relationship.
+# Production hardening B-05 (approved remediation of R4). Old behaviour (pinned here until 2026-10-11): any manager
+# could approve or reject any employee's leave, including their own. Invariant now: nobody decides their own leave;
+# managers decide only for direct reports (employees.manager_id); admins decide for anyone else. Denials change nothing.
 
-    The AI layer must be stricter (D7): approve_leave will pre-check team membership.
-    """
+
+@pytest.mark.parametrize("action", ["approve", "reject"])
+async def test_manager_cannot_decide_leave_outside_team(client, auth, db, action):
+    headers = await auth("manager")
+    before = await _remaining(db, OUTSIDER.id, LeaveType.CASUAL)
+    response = await client.post(f"/api/v1/leaves/requests/{OUTSIDER_PENDING_LEAVE_ID}/{action}", headers=headers)
+    unknown = await client.post(f"/api/v1/leaves/requests/999999/{action}", headers=headers)
+    # Indistinguishable from an unknown id: request ids cannot be probed for existence.
+    assert response.status_code == unknown.status_code == 404
+    assert response.json() == unknown.json()
+    assert error_code(response) == "LEAVE_NOT_FOUND"
+    db.expire_all()
+    assert await _remaining(db, OUTSIDER.id, LeaveType.CASUAL) == before
+    pending = await client.get("/api/v1/leaves/requests/pending", params={"limit": 100}, headers=await auth("admin"))
+    assert OUTSIDER_PENDING_LEAVE_ID in {item["id"] for item in data(pending)["items"]}  # still pending
+
+
+@pytest.mark.parametrize("action", ["approve", "reject"])
+async def test_admin_can_decide_leave_for_another_employee(client, auth, action):
     response = await client.post(
-        f"/api/v1/leaves/requests/{OUTSIDER_PENDING_LEAVE_ID}/approve", headers=await auth("manager")
+        f"/api/v1/leaves/requests/{OUTSIDER_PENDING_LEAVE_ID}/{action}", headers=await auth("admin")
     )
     assert response.status_code == 200
-    assert data(response)["status"] == "APPROVED"
+    assert data(response)["approver_id"] == ADMIN.id
+
+
+@pytest.mark.parametrize("decider", ["manager", "admin"])
+@pytest.mark.parametrize("action", ["approve", "reject"])
+async def test_nobody_decides_their_own_leave(client, auth, db, decider, action):
+    from app.models.enums import LeaveRequestStatus
+    from app.models.leave_request import LeaveRequest
+
+    # A PENDING request of the decider's own (admin leave created via the API is auto-approved, so seed it directly).
+    own = LeaveRequest(employee_id=USERS[decider].id, leave_type=LeaveType.CASUAL, start_date=future(40),
+                       end_date=future(40), reason="Personal", status=LeaveRequestStatus.PENDING)
+    db.add(own)
+    await db.commit()
+    response = await client.post(f"/api/v1/leaves/requests/{own.id}/{action}", headers=await auth(decider))
+    assert response.status_code == 403
+    assert error_code(response) == "FORBIDDEN"
+    await db.refresh(own)
+    assert own.status == LeaveRequestStatus.PENDING and own.approver_id is None
 
 
 async def test_admin_rejects_leave_without_changing_balance(client, auth, db):
