@@ -72,7 +72,7 @@ async def upload_policy_document(
     if len(raw) == 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty")
     if len(raw) > 2 * 1024 * 1024:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File too large (max 2 MB)")
+        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="File too large (max 2 MB)")
 
     if extension in {".txt", ".md"}:
         try:

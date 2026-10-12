@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import settings
+from app.core.http_limits import RangeHeaderLimitMiddleware
 from app.core.logging import configure_logging
 from app.core.production_checks import assert_production_ready
 from app.services.ai.audit.middleware import AIAuditMiddleware
@@ -30,6 +31,7 @@ app.add_middleware(
     expose_headers=["X-Request-Id", "X-Conversation-Id"],
 )
 app.add_middleware(AIAuditMiddleware)  # Phase 8: request_id + audit scope for /api/v1/chat* and /api/v1/ai* only
+app.add_middleware(RangeHeaderLimitMiddleware)  # Production hardening B-26: ignore abusive multi-range requests
 app.include_router(api_router, prefix="/api/v1")
 # AI errors only (raised by /api/v1/chat/* AI code); existing endpoints are unaffected.
 def _ai_error_handler(_request, exc: AIError):

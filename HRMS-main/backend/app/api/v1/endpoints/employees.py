@@ -614,7 +614,7 @@ async def upload_my_profile_picture(
     if len(raw) == 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty")
     if len(raw) > 2 * 1024 * 1024:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File too large (max 2 MB)")
+        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="File too large (max 2 MB)")
 
     upload_dir = Path(settings.profile_photo_upload_dir)
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -757,7 +757,7 @@ async def upload_my_document(
     if len(raw) == 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty")
     if len(raw) > 5 * 1024 * 1024:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File too large (max 5 MB)")
+        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="File too large (max 5 MB)")
     if extension in {".txt", ".md"}:
         try:
             raw.decode("utf-8")
@@ -874,7 +874,7 @@ async def upload_employee_document(
     if len(raw) == 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty")
     if len(raw) > 5 * 1024 * 1024:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File too large (max 5 MB)")
+        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="File too large (max 5 MB)")
     if extension in {".txt", ".md"}:
         try:
             raw.decode("utf-8")
@@ -956,7 +956,7 @@ async def upload_employee_payslip(
     if len(raw) == 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty")
     if len(raw) > 5 * 1024 * 1024:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File too large (max 5 MB)")
+        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="File too large (max 5 MB)")
     if extension in {".txt", ".md"}:
         try:
             raw.decode("utf-8")

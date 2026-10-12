@@ -117,7 +117,7 @@ class AIRoutingError(AIError):
 class AIMaxIterationsError(AIError):
     code = "AI_MAX_ITERATIONS"
     message = "The assistant stopped because this request needed too many steps. Please ask one thing at a time."
-    http_status = status.HTTP_422_UNPROCESSABLE_ENTITY
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 # --- Audit ------------------------------------------------------------------------------------
@@ -164,7 +164,7 @@ class SQLNotAllowedError(AISQLError):
 class SQLParseError(AISQLError):
     code = "SQL_PARSE_ERROR"
     message = "The assistant could not build a valid query for that question. Please rephrase it."
-    http_status = status.HTTP_422_UNPROCESSABLE_ENTITY
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 class SQLMutationRejectedError(AISQLError):
@@ -190,7 +190,7 @@ class SQLScopeViolationError(AISQLError):
 class SQLQueryTooComplexError(AISQLError):
     code = "SQL_QUERY_TOO_COMPLEX"
     message = "That question needs a query that is too complex. Please ask something more specific."
-    http_status = status.HTTP_422_UNPROCESSABLE_ENTITY
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 class SQLExecutionError(AISQLError):
