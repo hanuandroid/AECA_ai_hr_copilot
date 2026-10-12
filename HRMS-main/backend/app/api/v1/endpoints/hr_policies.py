@@ -38,7 +38,6 @@ async def list_policies(
                     "category": row.category,
                     "content": row.content,  # Legacy seeded rows may still use this.
                     "original_filename": row.original_filename,
-                    "file_path": row.file_path,
                     "mime_type": row.mime_type,
                     "size_bytes": row.size_bytes,
                     "uploaded_by": row.uploaded_by,
@@ -114,7 +113,6 @@ async def upload_policy_document(
             "category": policy.category,
             "content": policy.content,
             "original_filename": policy.original_filename,
-            "file_path": policy.file_path,
             "mime_type": policy.mime_type,
             "size_bytes": policy.size_bytes,
             "uploaded_by": policy.uploaded_by,

@@ -92,3 +92,14 @@ async def test_response_exposes_no_internal_fields(client, auth, ingested, overr
 async def test_session_stubs_still_return_501(client, auth):
     response = await client.post("/api/v1/chat/sessions", json={"title": "My chat"}, headers=await auth("employee"))
     assert response.status_code == 501
+
+
+# Production hardening B-18 review (Phase 2): the legacy 501 stubs are kept for contract compatibility (PRD and
+# architecture docs reference them; no client calls them). Since Phase 1 they reject inactive users via
+# get_current_user like every other endpoint; removal needs product approval.
+async def test_session_stubs_reject_unauthenticated_and_inactive_users(client, auth):
+    stubs = [("/api/v1/chat/sessions", {"title": "My chat"}), ("/api/v1/chat/sessions/abc/messages", {"role": "user", "content": "hi"})]
+    for path, body in stubs:
+        assert (await client.post(path, json=body)).status_code == 401
+        inactive = await client.post(path, json=body, headers=await auth("inactive"))
+        assert inactive.status_code == 403 and error_code(inactive) == "USER_INACTIVE"
