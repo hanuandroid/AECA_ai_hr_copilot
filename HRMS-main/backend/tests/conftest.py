@@ -14,6 +14,7 @@ import hashlib
 import os
 import shutil
 import tempfile
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 
@@ -64,7 +65,8 @@ from app.main import app  # noqa: E402
 from app.core.security import create_access_token  # noqa: E402
 from tests.support.data import INACTIVE, PASSWORD, USERS, seed_test_data  # noqa: E402
 
-_token_cache: dict[str, str] = {}
+TOKEN_CACHE_SECONDS = 600  # well below the 15-minute access-token lifetime
+_token_cache: dict[str, tuple[str, float]] = {}
 
 
 def run_migrations() -> None:
@@ -132,15 +134,20 @@ def login(client: httpx.AsyncClient) -> Callable[[str], Awaitable[str]]:
     protected endpoint must now reject."""
 
     async def _login(user_key: str) -> str:
-        if user_key not in _token_cache:
-            user = USERS[user_key]
-            if user is INACTIVE:
-                _token_cache[user_key] = create_access_token(subject=str(user.id), role=user.role.value)
-                return _token_cache[user_key]
+        # Tokens expire after 15 minutes (wall clock). A long run - or a host sleep/resume that moves the Docker VM
+        # clock forward mid-run - must not hand out an expired token, so cached tokens are refreshed after 10 minutes.
+        cached = _token_cache.get(user_key)
+        if cached is not None and time.time() - cached[1] < TOKEN_CACHE_SECONDS:
+            return cached[0]
+        user = USERS[user_key]
+        if user is INACTIVE:
+            token = create_access_token(subject=str(user.id), role=user.role.value)
+        else:
             response = await client.post("/api/v1/auth/login", json={"email": user.email, "password": PASSWORD})
             assert response.status_code == 200, response.text
-            _token_cache[user_key] = response.json()["data"]["access_token"]
-        return _token_cache[user_key]
+            token = response.json()["data"]["access_token"]
+        _token_cache[user_key] = (token, time.time())
+        return token
 
     return _login
 
