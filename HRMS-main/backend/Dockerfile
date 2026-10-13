@@ -24,8 +24,10 @@ RUN groupadd --system --gid 10001 app \
 COPY . .
 
 # FORWARDED_ALLOW_IPS: set to the reverse proxy's address in deployment (uvicorn reads it for --proxy-headers).
+# PYTHONPATH: operator scripts (scripts/*.py: ingest, backup, retention) import `app` (dev compose sets the same).
 ENV ENVIRONMENT=production \
-    FORWARDED_ALLOW_IPS=127.0.0.1
+    FORWARDED_ALLOW_IPS=127.0.0.1 \
+    PYTHONPATH=/app
 
 USER app
 EXPOSE 8000
