@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     ai_max_concurrent_llm_calls: int = 4  # process-wide
     ai_llm_queue_timeout_seconds: float = 15.0  # wait for a free model-call slot before AI_BUSY
     auth_login_rate_limit_per_minute: int = 10  # per client IP + normalized account identifier; 0 disables
+    # Retention (production hardening B-14). PROVISIONAL planning defaults pending business/security/legal approval.
+    ai_conversation_retention_days: int = 90  # by last activity (updated_at)
+    ai_pending_action_retention_days: int = 30  # after terminal state or expiry; EXECUTING/UNKNOWN are never purged
+    ai_audit_retention_days: int = 365  # reported only: audit events are append-only and are never deleted by tooling
     ai_audit_enabled: bool = True
     # HMAC key for audit text fingerprints (B-13): must differ from JWT_SECRET_KEY; required in production.
     # Rotating it breaks correlation between fingerprints made before and after the rotation (by design).

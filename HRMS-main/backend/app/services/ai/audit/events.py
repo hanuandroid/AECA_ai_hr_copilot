@@ -38,6 +38,8 @@ class AuditEventType(str, enum.Enum):
     ACTION_EXECUTED = "ACTION_EXECUTED"
     ACTION_OUTCOME_UNKNOWN = "ACTION_OUTCOME_UNKNOWN"  # execution deadline exceeded; may or may not have applied
 
+    RETENTION_PURGE = "RETENTION_PURGE"  # operator-run retention cleanup of AI-owned tables (counts only)
+
     AUTHORIZATION_ALLOWED = "AUTHORIZATION_ALLOWED"
     AUTHORIZATION_DENIED = "AUTHORIZATION_DENIED"
 
