@@ -90,6 +90,30 @@ class AIBackendUnavailableError(AIError):
     http_status = status.HTTP_502_BAD_GATEWAY
 
 
+class AIRateLimitedError(AIError):
+    """Per-user AI request rate exceeded (production hardening B-09). Raised before any model call."""
+
+    code = "AI_RATE_LIMITED"
+    message = "You're sending requests too quickly. Please wait a minute and try again."
+    http_status = status.HTTP_429_TOO_MANY_REQUESTS
+
+
+class AIBudgetExceededError(AIError):
+    """Per-user daily token (or configured cost) budget reached (B-09). Raised before any model call."""
+
+    code = "AI_BUDGET_EXCEEDED"
+    message = "You've reached today's AI usage limit. Please try again tomorrow."
+    http_status = status.HTTP_429_TOO_MANY_REQUESTS
+
+
+class AIBusyError(AIError):
+    """All model-call slots stayed busy for the queue timeout (B-09 concurrency bound)."""
+
+    code = "AI_BUSY"
+    message = "The Copilot is busy right now. Please try again shortly."
+    http_status = status.HTTP_503_SERVICE_UNAVAILABLE
+
+
 class AIActionOutcomeUnknownError(AIError):
     """The business call did not finish within the execution deadline: it may or may not have been applied.
     Never retried automatically (business APIs have no idempotency keys)."""

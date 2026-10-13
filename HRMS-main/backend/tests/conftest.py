@@ -44,6 +44,10 @@ os.environ["PROFILE_PHOTO_UPLOAD_DIR"] = str(TEST_ROOT / "profile-photos")
 os.environ["EMPLOYEE_DOCUMENT_UPLOAD_DIR"] = str(TEST_ROOT / "employee-documents")
 os.environ["JWT_SECRET_KEY"] = "test-only-secret-not-for-production"
 os.environ["ALLOWED_HOSTS"] = "test,localhost,127.0.0.1"  # httpx test client host (TrustedHostMiddleware, B-25)
+# The general suite exercises far more requests per minute than real users; dedicated tests (tests/ai/test_limits.py)
+# set strict values via monkeypatch. Limiter state is reset before every test (fresh_db).
+os.environ["AI_RATE_LIMIT_PER_MINUTE"] = "100000"
+os.environ["AUTH_LOGIN_RATE_LIMIT_PER_MINUTE"] = "100000"
 os.environ["AI_LLM_PROVIDER"] = "fake"
 os.environ["AI_EMBEDDING_PROVIDER"] = "fake"
 os.environ.pop("ANTHROPIC_API_KEY", None)
@@ -91,7 +95,13 @@ async def reset_database(template: Path) -> None:
 
 @pytest.fixture(autouse=True)
 async def fresh_db(template_db: Path) -> AsyncIterator[None]:
+    from app.core.rate_limit import login_limiter
+    from app.services.ai.limits import ai_request_limiter, llm_slots
+
     await reset_database(template_db)
+    login_limiter.reset()
+    ai_request_limiter.reset()
+    llm_slots.reset()
     yield
     await engine.dispose()
 

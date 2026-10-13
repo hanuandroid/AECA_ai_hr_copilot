@@ -5,7 +5,8 @@ never read or log secret values; they only report which setting is unsafe.
 """
 
 import os
-from collections.abc import Mapping
+import sys
+from collections.abc import Mapping, Sequence
 
 from app.core.config import Settings, split_csv
 
@@ -17,10 +18,27 @@ EXTERNAL_TRACING_VARIABLES = ("LANGSMITH_TRACING", "LANGCHAIN_TRACING_V2", "LANG
                               "LANGCHAIN_API_KEY")
 
 
-def production_problems(config: Settings, environ: Mapping[str, str] | None = None) -> list[str]:
+def configured_workers(environ: Mapping[str, str], argv: Sequence[str]) -> int:
+    """Worker count from uvicorn's --workers flag or WEB_CONCURRENCY (uvicorn's default for --workers)."""
+    counts = [1]
+    for index, arg in enumerate(argv):
+        value = arg.split("=", 1)[1] if arg.startswith("--workers=") else (argv[index + 1] if arg == "--workers" and index + 1 < len(argv) else None)
+        if value is not None and value.strip().isdigit():
+            counts.append(int(value))
+    if environ.get("WEB_CONCURRENCY", "").strip().isdigit():
+        counts.append(int(environ["WEB_CONCURRENCY"]))
+    return max(counts)
+
+
+def production_problems(config: Settings, environ: Mapping[str, str] | None = None, argv: Sequence[str] | None = None) -> list[str]:
     """Unsafe settings for a production deployment (empty list = OK)."""
     environ = os.environ if environ is None else environ
+    argv = sys.argv if argv is None else argv
     problems: list[str] = []
+    workers = configured_workers(environ, argv)
+    if workers > 1:
+        problems.append(f"In-memory AI rate limits and budgets require a single worker ({workers} configured); run one worker "
+                        "per instance and one instance, or introduce shared rate-limit state first")
     hosts = split_csv(config.allowed_hosts)
     if not hosts or any("*" in host for host in hosts):
         problems.append("ALLOWED_HOSTS must list the exact public host names (no wildcards)")

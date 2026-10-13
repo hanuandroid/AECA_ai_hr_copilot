@@ -47,6 +47,14 @@ class Settings(BaseSettings):
     # Deadline for executing a confirmed action via the business API; on expiry the outcome is UNKNOWN (never retried).
     ai_action_execution_timeout_seconds: float = 10.0
     ai_conversation_max_messages: int = 200
+    # Abuse and cost controls (production hardening B-09). Provisional defaults, not approved business quotas.
+    # In-memory enforcement: valid only for a single-worker, single-instance deployment (see production_checks).
+    ai_rate_limit_per_minute: int = 20  # per authenticated user, across all model-calling AI endpoints; 0 disables
+    ai_daily_token_budget: int = 200_000  # per user per UTC day, from recorded provider usage; 0 disables
+    ai_daily_cost_cap_usd: float | None = None  # per user per UTC day; disabled until pricing/budget policy is set
+    ai_max_concurrent_llm_calls: int = 4  # process-wide
+    ai_llm_queue_timeout_seconds: float = 15.0  # wait for a free model-call slot before AI_BUSY
+    auth_login_rate_limit_per_minute: int = 10  # per client IP + normalized account identifier; 0 disables
     ai_audit_enabled: bool = True
     # HMAC key for audit text fingerprints (B-13): must differ from JWT_SECRET_KEY; required in production.
     # Rotating it breaks correlation between fingerprints made before and after the rotation (by design).

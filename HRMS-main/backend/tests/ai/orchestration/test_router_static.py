@@ -80,8 +80,13 @@ def test_graph_node_names_are_literals():
 def test_unified_endpoint_uses_trusted_context_and_the_copilot_service():
     route = next(route for route in app.routes if getattr(route, "path", None) == "/api/v1/chat")
     assert route.methods == {"POST"}
-    direct = {dependency.call for dependency in route.dependant.dependencies}
-    assert get_ai_user_context in direct
+    # Phase 2 (B-09): the trusted context now arrives through enforce_ai_limits, which itself depends directly on
+    # get_ai_user_context (rate limit + budget run after authentication and INACTIVE rejection).
+    from app.services.ai.limits import enforce_ai_limits
+
+    direct = {dependency.call: dependency for dependency in route.dependant.dependencies}
+    assert enforce_ai_limits in direct
+    assert get_ai_user_context in {dependency.call for dependency in direct[enforce_ai_limits].dependencies}
     # Phase 7: the copilot service is reached through the conversation layer (get_conversational_copilot).
     pending, calls = list(route.dependant.dependencies), set()
     while pending:

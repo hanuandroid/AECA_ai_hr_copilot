@@ -14,6 +14,10 @@ const MESSAGES: Record<string, string> = {
   AI_EMBEDDING_FAILED: "The Copilot couldn't process that question right now. Please try again.",
   AI_RETRIEVAL_FAILED: "The Copilot couldn't search the HR policies right now. Please try again.",
   AI_BACKEND_UNAVAILABLE: "The HR system couldn't complete this right now. Please try again later.",
+  // usage limits (server-side; production hardening B-09)
+  AI_RATE_LIMITED: "You're sending requests too quickly. Please wait a minute and try again.",
+  AI_BUDGET_EXCEEDED: "You've reached today's Copilot usage limit. Please try again tomorrow.",
+  AI_BUSY: "The Copilot is busy right now. Please try again shortly.",
   // understanding / routing
   AI_INVALID_REQUEST: "Please enter a question (up to 1000 characters).",
   AI_CLASSIFICATION_FAILED: "I couldn't understand that request. Please rephrase it.",

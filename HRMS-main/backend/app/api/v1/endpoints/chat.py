@@ -19,6 +19,7 @@ from app.services.ai.conversation.models import ConversationDetail, Conversation
 from app.services.ai.conversation.service import ConversationService
 from app.services.ai.audit.recorder import record_error
 from app.services.ai.errors import AIError, ai_error_response
+from app.services.ai.limits import enforce_ai_limits
 from app.services.ai.rag.service import PolicyRagService, get_policy_rag_service
 from app.services.ai.sql.service import SQLAgentService, get_sql_agent_service
 from app.services.auth import get_current_user, oauth2_scheme
@@ -29,7 +30,7 @@ router = APIRouter()
 @router.post("")
 async def ask_copilot(
     payload: CopilotRequest,
-    ctx: AIUserContext = Depends(get_ai_user_context),
+    ctx: AIUserContext = Depends(enforce_ai_limits),  # B-09: rate limit + daily budget, before any model call
     service: ConversationalCopilot = Depends(get_conversational_copilot),
 ):
     """Unified copilot. Order: JWT auth -> AI user context (INACTIVE rejected) -> message validation ->
@@ -88,7 +89,7 @@ async def archive_conversation(
 @router.post("/actions")
 async def propose_action(
     payload: ActionRequest,
-    ctx: AIUserContext = Depends(get_ai_user_context),
+    ctx: AIUserContext = Depends(enforce_ai_limits),  # B-09: rate limit + daily budget, before any model call
     service: ActionAgentService = Depends(get_action_agent_service),
 ):
     """Propose an HR action. Never mutates: returns clarification_required or confirmation_required."""
@@ -99,7 +100,7 @@ async def propose_action(
 @router.post("/actions/confirm")
 async def confirm_action(
     payload: ActionConfirmRequest,
-    ctx: AIUserContext = Depends(get_ai_user_context),
+    ctx: AIUserContext = Depends(enforce_ai_limits),  # B-09: rate limit + daily budget, before any model call
     service: ActionAgentService = Depends(get_action_agent_service),
     access_token: str = Depends(oauth2_scheme),
 ):
@@ -111,7 +112,7 @@ async def confirm_action(
 @router.post("/policy")
 async def ask_policy(
     payload: PolicyQuestionRequest,
-    ctx: AIUserContext = Depends(get_ai_user_context),
+    ctx: AIUserContext = Depends(enforce_ai_limits),  # B-09: rate limit + daily budget, before any model call
     service: PolicyRagService = Depends(get_policy_rag_service),
 ):
     """Policy RAG. Order: JWT auth -> AI user context (INACTIVE rejected) -> POLICY_READ ->
@@ -123,7 +124,7 @@ async def ask_policy(
 @router.post("/sql")
 async def ask_sql(
     payload: SQLQuestionRequest,
-    ctx: AIUserContext = Depends(get_ai_user_context),
+    ctx: AIUserContext = Depends(enforce_ai_limits),  # B-09: rate limit + daily budget, before any model call
     service: SQLAgentService = Depends(get_sql_agent_service),
 ):
     """Read-only HR data questions. Order: JWT auth -> AI user context (INACTIVE rejected) ->

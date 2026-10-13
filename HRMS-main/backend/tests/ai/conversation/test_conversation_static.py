@@ -77,8 +77,14 @@ def test_every_lookup_is_owner_scoped():
 
 @pytest.mark.parametrize("path", ["/api/v1/chat", "/api/v1/chat/conversations", "/api/v1/chat/conversations/{conversation_id}"])
 def test_conversation_routes_use_the_trusted_ai_context(path):
+    """The context comes from get_ai_user_context directly, or (production hardening B-09, Phase 2) through
+    enforce_ai_limits, whose own direct dependency is get_ai_user_context. No other context source is accepted."""
+    from app.services.ai.limits import enforce_ai_limits
+
     for route in [r for r in app.routes if getattr(r, "path", None) == path]:
-        assert get_ai_user_context in {d.call for d in route.dependant.dependencies}, (path, route.methods)
+        direct = {d.call: d for d in route.dependant.dependencies}
+        via_limits = enforce_ai_limits in direct and get_ai_user_context in {d.call for d in direct[enforce_ai_limits].dependencies}
+        assert get_ai_user_context in direct or via_limits, (path, route.methods)
 
 
 def test_conversation_context_is_untrusted_input_never_node_writable():
