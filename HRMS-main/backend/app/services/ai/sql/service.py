@@ -30,7 +30,7 @@ from app.services.ai.llm.base import LLMProvider
 from app.services.ai.providers import get_llm_provider
 from app.services.ai.redaction import redact
 from app.services.ai.sql.executor import ReadOnlySQLExecutor, sqlite_path_from_url
-from app.services.ai.sql.formatter import format_answer, redact_rows
+from app.services.ai.sql.formatter import deterministic_summary, format_answer, redact_rows
 from app.services.ai.sql.generator import SQLGenerator
 from app.services.ai.sql.models import SQLAnswer, SQLRunRecord
 from app.services.ai.sql.parser import DIALECT, parse_select
@@ -50,12 +50,15 @@ class SQLAgentService:
         max_rows: int,
         max_joins: int,
         today: Callable[[], date] = date.today,
+        result_formatting: str | None = None,
     ):
         self._llm_factory = llm_factory
         self._executor_factory = executor_factory
         self._max_rows = max_rows
         self._max_joins = max_joins
         self._today = today
+        # B-15: "deterministic" (default) never sends result rows to the provider; "llm" only after approval.
+        self._result_formatting = result_formatting or settings.ai_sql_result_formatting
         self.last_record: SQLRunRecord | None = None  # for tests/observability hooks
 
     async def answer(self, ctx: AIUserContext, question: object) -> SQLAnswer:
@@ -108,7 +111,10 @@ class SQLAgentService:
             columns, rows = redact_rows(result.columns, result.rows)
             record.row_count = len(rows)
 
-            answer, used_llm = await format_answer(llm, cleaned, columns, rows, result.truncated)
+            if self._result_formatting == "llm":
+                answer, used_llm = await format_answer(llm, cleaned, columns, rows, result.truncated)
+            else:  # deterministic wording: the result rows never leave the backend
+                answer, used_llm = deterministic_summary(rows, result.truncated), False
             record.llm_calls += int(used_llm)
             record.outcome = "ok"
             return SQLAnswer(

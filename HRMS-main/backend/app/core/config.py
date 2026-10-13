@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -40,6 +42,10 @@ class Settings(BaseSettings):
     ai_embedding_provider: str = "fastembed"  # fastembed | fake
     ai_embedding_model: str = "BAAI/bge-small-en-v1.5"
     ai_embedding_cache_dir: str | None = None  # fastembed model cache (e.g. /app/storage/models)
+    # How SQL-agent answers are worded (production hardening B-15). "deterministic" (default) never sends result rows
+    # to the model provider. "llm" sends redacted rows to the provider for wording: enable only after the
+    # data-processing policy, provider retention settings and contractual approvals are confirmed.
+    ai_sql_result_formatting: Literal["deterministic", "llm"] = "deterministic"
     ai_sql_max_rows: int = 100
     ai_sql_max_joins: int = 4
     ai_sql_timeout_seconds: float = 3.0

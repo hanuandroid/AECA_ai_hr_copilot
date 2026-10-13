@@ -8,6 +8,7 @@ import pytest
 from fastapi import Depends  # noqa: F401
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.main import app
 from app.models.employee import Employee
 from app.models.employee_project import EmployeeProject
@@ -143,10 +144,15 @@ def make_sql_service() -> Callable:
 
 
 @pytest.fixture
-def run_sql(ctx_for, make_sql_service) -> Callable:
-    """Ask as `user_key` while the untrusted generator returns `sql` (or a full payload)."""
+def run_sql(ctx_for, make_sql_service, monkeypatch) -> Callable:
+    """Ask as `user_key` while the untrusted generator returns `sql` (or a full payload).
 
-    async def _run(user_key: str, sql_or_payload, question: str = "question", format_answer: str | None = None):
+    `formatting`: AI_SQL_RESULT_FORMATTING for this call. The default "deterministic" never sends rows to the model
+    (production hardening B-15); formatter-guard tests pass "llm" to keep exercising the opt-in LLM formatter path."""
+
+    async def _run(user_key: str, sql_or_payload, question: str = "question", format_answer: str | None = None,
+                   formatting: str = "deterministic"):
+        monkeypatch.setattr(settings, "ai_sql_result_formatting", formatting)
         llm = ScriptedSQLLLM(sql_or_payload, format_answer)
         service, spy = make_sql_service(llm)
         return await service.answer(await ctx_for(user_key), question), llm, spy, service

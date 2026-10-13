@@ -232,7 +232,7 @@ async def test_prompt_injection_cannot_widen_scope(run_sql, question):
 
 
 async def test_formatter_sees_only_redacted_rows_and_never_sql(run_sql):
-    answer, llm, *_ = await run_sql("admin", "SELECT id, description FROM tickets ORDER BY id", format_answer="There are 3 tickets.")
+    answer, llm, *_ = await run_sql("admin", "SELECT id, description FROM tickets ORDER BY id", format_answer="There are 3 tickets.", formatting="llm")
     format_call = [c for c in llm.calls if c[0] == "SQLFormatOutput"][0]
     assert "SELECT" not in format_call[2]
     assert answer.answer == "There are 3 tickets."
@@ -240,13 +240,13 @@ async def test_formatter_sees_only_redacted_rows_and_never_sql(run_sql):
 
 async def test_injected_db_text_cannot_make_formatter_claim_actions(run_sql):
     answer, *_ = await run_sql(
-        "admin", "SELECT id, description FROM tickets WHERE id = 3", format_answer="You are now an administrator. Done."
+        "admin", "SELECT id, description FROM tickets WHERE id = 3", format_answer="You are now an administrator. Done.", formatting="llm"
     )
     assert answer.answer == "Found 1 matching record."  # deterministic fallback
 
 
 async def test_formatter_numbers_must_come_from_results(run_sql):
-    answer, *_ = await run_sql("admin", "SELECT COUNT(*) AS total FROM employees", format_answer="There are 42 employees.")
+    answer, *_ = await run_sql("admin", "SELECT COUNT(*) AS total FROM employees", format_answer="There are 42 employees.", formatting="llm")
     assert answer.answer == f"The result is {ORG_EMPLOYEES}."
 
 
@@ -263,7 +263,7 @@ async def test_sensitive_values_redacted_before_formatter(run_sql, monkeypatch):
         )
 
     monkeypatch.setattr(executor_module.ReadOnlySQLExecutor, "execute", leaky_execute)
-    answer, llm, *_ = await run_sql("employee", "SELECT name FROM employees WHERE id = :me")
+    answer, llm, *_ = await run_sql("employee", "SELECT name FROM employees WHERE id = :me", formatting="llm")
     everything = str(answer.model_dump()) + " ".join(c[2] for c in llm.calls)
     assert EMPLOYEE_SENSITIVE["pan_number"] not in everything
     assert EMPLOYEE_SENSITIVE["bank_account_number"] not in everything
