@@ -1,4 +1,4 @@
-"""SQLite online backup, verification and restore (production hardening Phase 2, B-17).
+"""SQLite online backup, verification and restore (production hardening Phase 2, approval item 6: backups).
 
 A backup is a directory ``hrms-backup-<UTC timestamp>/`` containing:
 - ``hrms.db``: a consistent copy made with SQLite's online backup API (safe while the API is running), checked with

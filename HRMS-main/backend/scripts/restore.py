@@ -1,4 +1,4 @@
-"""Verify a backup and restore it into an EXPLICIT, empty destination directory (production hardening B-17).
+"""Verify a backup and restore it into an EXPLICIT, empty destination directory (production hardening Phase 2: backups).
 
 Usage (from backend/, PYTHONPATH=.):
   python scripts/restore.py --backup /backups/hrms-backup-20261013T020000Z --destination /restore/drill-1

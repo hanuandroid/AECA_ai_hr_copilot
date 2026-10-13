@@ -138,3 +138,5 @@ Changed tests record the old behaviour and the new invariant. **No test deleted,
 | Diff reviewed; no secrets or unrelated files | **Yes** |
 
 Phase 2 not started (separate approval required).
+
+**Update 2026-10-13:** Phase 2 has since been completed locally. Several items deferred in §7 are now resolved: B-23, B-24, B-06, B-07, B-08, B-09 to B-16 and B-18. See [phase-2-report.md](phase-2-report.md). This Phase 1 record is otherwise unchanged.

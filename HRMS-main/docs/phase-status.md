@@ -796,7 +796,7 @@ Status: NOT_STARTED
 Production hardening programme (separate track; see docs/production-hardening/)
 - Phase 0 — Verified baseline: COMPLETE (baseline.md, 2026-10-11).
 - Phase 1 — Critical security remediation: COMPLETE (2026-10-12; security-remediation.md). Full backend 1744 passed,
-  frontend 86 passed, tsc 0 errors, next build PASS. Phase 2 not started.
+  frontend 86 passed, tsc 0 errors, next build PASS.
   Approved remediations of R1 (B-01), R4 (B-05) and R9 (B-03) change characterization tests that pinned the old
   insecure behaviour; each changed test documents the old behaviour and the new invariant. Inactive users are now
   rejected by get_current_user (403 USER_INACTIVE), so AI API tests expect USER_INACTIVE instead of AI_USER_INACTIVE.
@@ -805,3 +805,13 @@ Production hardening programme (separate track; see docs/production-hardening/)
   Follow-ups (approved 2026-10-12): pending-leave queue scoped to decidable requests; project removal scoped like
   assignment; out-of-scope leave decisions return 404 identical to unknown ids. Inactive AI denials keep their audit
   identity via a server-side request.state marker (audit test unchanged). No test deleted; no assertion weakened.
+- Phase 2 — Deployment, abuse controls, data lifecycle, CI: COMPLETE locally (2026-10-13; phase-2-report.md).
+  Full backend 1846 passed (Python 3.11), frontend 86 passed (also in node:24.21.0), tsc 0 errors, build PASS.
+  Production Dockerfile targets + docker-compose.prod.yml (1 worker, non-root, read-only), trusted hosts (B-25),
+  range limit (B-26), FastAPI 0.133.1/Starlette 1.3.1, PyJWT 2.15.1, AI rate limits/budgets/concurrency + login
+  throttling, deterministic SQL wording by default, retention (dry run by default; audit events never deleted),
+  backup/restore tooling with a restore drill, CI workflow + advisory gate (local only; not pushed, never run on
+  GitHub; dependency-audit job fails until the PROPOSED advisory exceptions are approved or deps upgraded).
+  Test change: four SQL formatter-guard tests now request formatting="llm" explicitly because the default became
+  "deterministic"; assertions unchanged. No test deleted; no assertion weakened.
+  Release status: NOT YET PRODUCTION READY. Phase 3 not started (separate approval required).

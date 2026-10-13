@@ -1,4 +1,4 @@
-# Retention, backup and recovery (Phase 2: B-11, B-14, B-17)
+# Retention, backup and recovery (Phase 2: B-11, B-14 and approval item 6)
 
 Status: **tooling implemented and drilled on a copy of the dev database. Not yet operated in production.** Every period below is a **provisional planning default**. Business, security and legal owners have not approved it.
 

@@ -1,0 +1,4 @@
+# gitleaks allowlist: exact finding fingerprints only (no path or rule wildcards). Each entry needs a reason.
+# Reviewed 2026-10-13 (production hardening Phase 2): synthetic JWT-shaped test fixture used to prove redaction;
+# decodes to {"alg":"HS256"}.{"sub":"3"} with a fake signature; never a real credential.
+c685e8b8cf11a6fe1f5037817fb7cc76eb979776:HRMS-main/backend/tests/ai/conversation/test_conversation_service.py:generic-api-key:159

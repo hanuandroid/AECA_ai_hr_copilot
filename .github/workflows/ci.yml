@@ -1,0 +1,144 @@
+# CI for the NovaWorks PeopleOps AI HR Copilot (production hardening Phase 2, B-20).
+# Not yet run on GitHub: created and checked locally only. Branch protection is NOT configured.
+# Open item: pin third-party actions and images to commit SHAs / digests before relying on this for releases.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "24.21.0"
+
+jobs:
+  backend:
+    name: backend (Python 3.11)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: HRMS-main/backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the secrets test inspects git-tracked files
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: HRMS-main/backend/requirements*.txt
+      - run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
+      - name: Security regressions (auth, authorization, SQL guardrails, actions, audit, hardening)
+        run: >
+          python -m pytest -q -p no:cacheprovider
+          tests/characterization tests/ai/authorization tests/ai/sql tests/ai/actions tests/ai/audit
+          tests/ai/hardening tests/ai/test_limits.py tests/ai/test_guards.py tests/test_framework_security.py
+      - name: Remaining test suite
+        run: >
+          python -m pytest -q -p no:cacheprovider
+          --ignore=tests/characterization --ignore=tests/ai/authorization --ignore=tests/ai/sql
+          --ignore=tests/ai/actions --ignore=tests/ai/audit --ignore=tests/ai/hardening
+          --ignore=tests/ai/test_limits.py --ignore=tests/ai/test_guards.py --ignore=tests/test_framework_security.py
+      - name: Offline evaluations (fake providers, throwaway DB; no API key)
+        env:
+          ANTHROPIC_API_KEY: ""
+        run: python -m evals.run_evals --results-dir "$RUNNER_TEMP/eval-results"
+      - name: Advisory gate unit tests
+        working-directory: .
+        run: python -m pytest -q -p no:cacheprovider .github/scripts
+
+  frontend:
+    name: frontend (Node 24)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: HRMS-main/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: HRMS-main/frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npx tsc --noEmit
+      - run: npm run build
+
+  dependency-audit:
+    name: dependency advisories
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: python -m pip install --disable-pip-version-check pip-audit==2.9.0
+      - name: Collect advisories (the gate below decides pass/fail)
+        run: |
+          set +e
+          out="$RUNNER_TEMP/audit"; mkdir -p "$out"
+          (cd HRMS-main/backend && pip-audit -r requirements.txt -f json -o "$out/pip-runtime.json" --progress-spinner off)
+          (cd HRMS-main/backend && pip-audit -r requirements-dev.txt -f json -o "$out/pip-dev.json" --progress-spinner off)
+          (cd HRMS-main/frontend && npm audit --json > "$out/npm-all.json")
+          (cd HRMS-main/frontend && npm audit --omit=dev --json > "$out/npm-runtime.json")
+          for f in pip-runtime pip-dev npm-all npm-runtime; do
+            python -c "import json,sys; json.load(open(sys.argv[1]))" "$out/$f.json" || { echo "::error::audit output $f is missing or invalid"; exit 1; }
+          done
+      - name: Advisory gate (fail critical; fail high/unknown without an approved exception)
+        run: >
+          python .github/scripts/advisory_gate.py --exceptions .github/security/advisory-exceptions.json
+          --npm-all "$RUNNER_TEMP/audit/npm-all.json" --npm-runtime "$RUNNER_TEMP/audit/npm-runtime.json"
+          --pip-runtime "$RUNNER_TEMP/audit/pip-runtime.json" --pip-dev "$RUNNER_TEMP/audit/pip-dev.json"
+
+  docker:
+    name: production image builds
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API production image
+        run: docker build --target production -t hrms-api:ci HRMS-main/backend
+      - name: Build web production image
+        run: >
+          docker build --target production -t hrms-web:ci
+          --build-arg NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 HRMS-main/frontend
+      - name: API image refuses an unsafe production configuration
+        run: |
+          set +e
+          docker run --rm -e JWT_SECRET_KEY=change_me hrms-api:ci > startup.log 2>&1
+          code=$?
+          if [ "$code" -eq 0 ]; then echo "::error::production image started with an unsafe configuration"; exit 1; fi
+          grep -q "RuntimeError: Unsafe production configuration: JWT_SECRET_KEY" startup.log || { echo "::error::expected the production-config refusal"; tail -5 startup.log; exit 1; }
+      - name: Images run as non-root
+        run: |
+          test "$(docker run --rm --entrypoint id hrms-api:ci -u)" != "0"
+          test "$(docker run --rm --entrypoint id hrms-web:ci -u)" != "0"
+
+  secret-scan:
+    name: secret scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks (full history, redacted output)
+        run: >
+          docker run --rm -v "$PWD:/repo" -w /repo zricethezav/gitleaks:v8.18.4
+          detect --source /repo --redact --no-banner --verbose --exit-code 1

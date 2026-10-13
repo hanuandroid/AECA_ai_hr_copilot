@@ -1,4 +1,4 @@
-"""Create a verified backup of the database, uploads and non-secret configuration (production hardening B-17).
+"""Create a verified backup of the database, uploads and non-secret configuration (production hardening Phase 2: backups).
 
 Usage (from backend/, PYTHONPATH=.):
   python scripts/backup.py --destination /backups                           create and verify one backup
