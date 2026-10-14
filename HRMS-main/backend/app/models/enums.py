@@ -65,3 +65,12 @@ class ProjectStatus(str, enum.Enum):
     COMPLETED = "COMPLETED"
     ON_HOLD = "ON_HOLD"
     PLANNED = "PLANNED"
+
+
+class PolicyStatus(str, enum.Enum):
+    """Organisation-wide HR policy lifecycle (ADMIN-only publication, approved 2026-10-14)."""
+
+    SUBMITTED = "SUBMITTED"  # uploaded by a manager, awaiting ADMIN review; never listed publicly or indexed
+    PUBLISHED = "PUBLISHED"  # the active version: listed to everyone and indexed for Policy RAG
+    REJECTED = "REJECTED"  # declined by an ADMIN
+    ARCHIVED = "ARCHIVED"  # superseded by a newer published version of the same title

@@ -8,7 +8,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { downloadHRPolicyDocument, fetchHRPolicies, fetchProfile, HRPolicy, uploadHRPolicyDocument } from "@/lib/api";
+import { downloadHRPolicyDocument, fetchHRPolicies, fetchProfile, HRPolicy, reviewHRPolicy, uploadHRPolicyDocument } from "@/lib/api";
 import { formatDateDDMMYY } from "@/lib/date";
 
 export default function HRPoliciesPage() {
@@ -22,6 +22,7 @@ export default function HRPoliciesPage() {
   const [uploading, setUploading] = useState(false);
   const [downloadingPolicyId, setDownloadingPolicyId] = useState<number | null>(null);
   const [viewingPolicyId, setViewingPolicyId] = useState<number | null>(null);
+  const [reviewingPolicyId, setReviewingPolicyId] = useState<number | null>(null);
   const [searchText, setSearchText] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [error, setError] = useState("");
@@ -93,10 +94,36 @@ export default function HRPoliciesPage() {
       setTitle("");
       setCategory("GENERAL");
       setFile(null);
-      setMessage("Policy file saved to storage and metadata saved in DB.");
+      setMessage(
+        result.body.data.status === "PUBLISHED"
+          ? "Policy published. Run the policy re-index so the Copilot uses it."
+          : "Policy submitted for admin review. It is not visible to employees or used by the Copilot until published."
+      );
       await loadData();
     } finally {
       setUploading(false);
+    }
+  };
+
+  const onReview = async (policy: HRPolicy, decision: "publish" | "reject") => {
+    if (!token) return;
+    setReviewingPolicyId(policy.id);
+    setError("");
+    setMessage("");
+    try {
+      const result = await reviewHRPolicy(token, policy.id, decision);
+      if (!result.ok || !("success" in result.body) || !result.body.success) {
+        setError(decision === "publish" ? "Failed to publish policy." : "Failed to reject policy.");
+        return;
+      }
+      setMessage(
+        decision === "publish"
+          ? "Policy published. Run the policy re-index so the Copilot uses it."
+          : "Policy submission rejected."
+      );
+      await loadData();
+    } finally {
+      setReviewingPolicyId(null);
     }
   };
 
@@ -228,6 +255,11 @@ export default function HRPoliciesPage() {
                     <span className="truncate text-sm text-muted-foreground">{file?.name || "No file chosen"}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">Allowed: .txt, .md, .pdf (max 2 MB).</p>
+                  {role === "MANAGER" ? (
+                    <p className="text-xs text-muted-foreground">
+                      Manager uploads are submitted for admin review before they are published.
+                    </p>
+                  ) : null}
                   <Button type="submit" disabled={uploading || loading || !file}>
                     {uploading ? "Uploading..." : "Upload Policy"}
                   </Button>
@@ -281,6 +313,22 @@ export default function HRPoliciesPage() {
                         Uploaded: {formatDateDDMMYY(item.created_at || undefined)}
                       </span>
                     </div>
+                    {item.status && item.status !== "PUBLISHED" ? (
+                      <p className="mt-1 text-xs font-medium text-amber-700">
+                        {item.status === "SUBMITTED" ? "Awaiting admin review" : item.status === "REJECTED" ? "Rejected" : "Archived"}
+                        {item.version ? ` · version ${item.version}` : ""}
+                      </p>
+                    ) : null}
+                    {role === "ADMIN" && item.status === "SUBMITTED" ? (
+                      <div className="mt-2 flex items-center gap-2">
+                        <Button type="button" onClick={() => onReview(item, "publish")} disabled={reviewingPolicyId === item.id}>
+                          Publish
+                        </Button>
+                        <Button type="button" variant="outline" onClick={() => onReview(item, "reject")} disabled={reviewingPolicyId === item.id}>
+                          Reject
+                        </Button>
+                      </div>
+                    ) : null}
                     <div className="mt-3 flex items-center gap-2 text-xs font-normal">
                       <button
                         type="button"

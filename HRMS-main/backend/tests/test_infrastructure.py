@@ -15,7 +15,7 @@ from tests.conftest import (
     reset_database,
 )
 
-EXPECTED_HEAD = "0020_ai_audit_events"  # Phase 3: 0017 policy_chunks; Phase 5: 0018 ai_pending_actions; Phase 7: 0019 conversations; Phase 8: 0020 audit (AI-owned)
+EXPECTED_HEAD = "0021_hr_policy_publication"  # Phase 3: 0017 policy_chunks; Phase 5: 0018 ai_pending_actions; Phase 7: 0019 conversations; Phase 8: 0020 audit (AI-owned); closure 2026-10-14: 0021 policy publication (business)
 EXPECTED_TABLES = {
     "announcements", "attendance_logs", "departments", "employee_documents", "employee_projects",
     "employee_skills", "employees", "holidays", "hr_policies", "job_history", "leave_balances",

@@ -107,6 +107,7 @@ DENIED_TABLES: dict[str, str] = {
     "holidays": "not part of the SQL agent scope",
     "onboarding_tasks": "not part of the SQL agent scope",
     "hr_policies": "served by Policy RAG, internal file metadata",
+    "hr_policy_events": "policy publication audit trail (admin API only; includes unpublished drafts)",
     "policy_chunks": "AI-owned index",
     "ai_pending_actions": "AI-owned action confirmations",
     "ai_conversations": "AI-owned private chat history (owner-only)",

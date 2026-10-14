@@ -91,6 +91,8 @@ async def test_table_valued_functions_rejected(ctx_for):
     [
         "SELECT id FROM attendance_logs",
         "SELECT title FROM hr_policies",
+        "SELECT title FROM hr_policies WHERE status = 'SUBMITTED'",  # unpublished drafts never reachable via SQL
+        "SELECT action, policy_id FROM hr_policy_events",
         "SELECT id FROM employee_documents",
         "SELECT name FROM sqlite_master",
         "SELECT id FROM main.employees",

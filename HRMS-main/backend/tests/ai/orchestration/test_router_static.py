@@ -107,8 +107,9 @@ def test_no_migration_was_added_for_orchestration():
     # which is owned by services/ai/conversation (the orchestration package imports no models; see above).
     versions = sorted(path.name for path in (BACKEND / "alembic" / "versions").glob("*.py"))
     # Phase 8 adds the audit store (0020), owned by services/ai/audit; still none for the router itself.
+    # 0021 (2026-10-14) is the business policy-publication workflow (hr_policies status + hr_policy_events), not AI.
     assert [name for name in versions if name > "0018_"] == ["0018_ai_pending_actions.py", "0019_ai_conversations.py",
-                                                             "0020_ai_audit_events.py"]
+                                                             "0020_ai_audit_events.py", "0021_hr_policy_publication.py"]
 
 
 def test_no_api_key_in_orchestration_sources():

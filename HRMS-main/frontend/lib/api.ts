@@ -148,6 +148,11 @@ export type HRPolicy = {
   size_bytes?: number | null;
   uploaded_by?: number | null;
   checksum?: string | null;
+  // Publication workflow: only PUBLISHED policies are public and feed Copilot answers; ADMINs publish.
+  status?: "SUBMITTED" | "PUBLISHED" | "REJECTED" | "ARCHIVED";
+  version?: number;
+  reviewed_by?: number | null;
+  reviewed_at?: string | null;
   created_at?: string | null;
 };
 
@@ -1370,6 +1375,18 @@ export async function uploadHRPolicyDocument(
       Authorization: `Bearer ${token}`,
     },
     body: form,
+  });
+  return { ok: response.ok, status: response.status, body: await response.json() };
+}
+
+export async function reviewHRPolicy(
+  token: string,
+  policyId: number,
+  decision: "publish" | "reject"
+): Promise<ApiResult<ApiEnvelope<HRPolicy> | { detail?: unknown }>> {
+  const response = await fetch(`${API_BASE}/api/v1/hr-policies/${policyId}/${decision}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
   });
   return { ok: response.ok, status: response.status, body: await response.json() };
 }

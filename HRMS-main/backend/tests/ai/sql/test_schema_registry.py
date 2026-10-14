@@ -53,7 +53,8 @@ def test_every_forbidden_employee_and_payroll_column_is_sensitive():
 
 
 def test_sensitive_tables_are_denied():
-    for table in ("employee_documents", "hr_policies", "policy_chunks", "poll_responses", "attendance_logs"):
+    for table in ("employee_documents", "hr_policies", "hr_policy_events", "policy_chunks", "poll_responses",
+                  "attendance_logs"):
         assert table in DENIED_TABLES
     assert TABLES["payroll_records"].kind == TableKind.PAYROLL
 

@@ -9,6 +9,7 @@ from app.models.employee_document import EmployeeDocument
 from app.models.employee_project import EmployeeProject
 from app.models.employee_skill import EmployeeSkill
 from app.models.hr_policy import HRPolicy
+from app.models.hr_policy_event import HRPolicyEvent
 from app.models.holiday import Holiday
 from app.models.job_history import JobHistory
 from app.models.leave_balance import LeaveBalance

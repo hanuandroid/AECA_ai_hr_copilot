@@ -14,6 +14,8 @@ from typing import Protocol
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.enums import PolicyStatus
+from app.models.hr_policy import HRPolicy
 from app.models.policy_chunk import PolicyChunk
 from app.services.ai.embeddings import cosine_similarity
 from app.services.ai.rag.models import PolicyChunkData
@@ -75,10 +77,14 @@ class SQLitePolicyVectorStore:
         return result.rowcount or 0
 
     async def all_chunks(self) -> list[StoredChunk]:
+        """Retrievable chunks: only those of policies that are PUBLISHED right now. Status is checked at read time, so
+        a policy archived, rejected or never published is not served even before the next ingestion run."""
         rows = (
             await self._db.execute(
                 select(PolicyChunk)
-                .where(PolicyChunk.embedding_model == self.embedding_model)
+                .join(HRPolicy, HRPolicy.id == PolicyChunk.policy_id)
+                .where(PolicyChunk.embedding_model == self.embedding_model,
+                       HRPolicy.status == PolicyStatus.PUBLISHED.value)
                 .order_by(PolicyChunk.policy_id.asc(), PolicyChunk.chunk_index.asc())
             )
         ).scalars().all()
