@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-14 · **Release status: NOT YET PRODUCTION READY**
 
-> ⚠ **The local commits are not on GitHub.** A fresh `git clone` of `origin` gives `c685e8b` ("Phase 10 complete") and none of the production-hardening work. Transfer the local commits first (§11).
+> ⚠ **Check what is on GitHub before relying on a clone.** On 2026-10-14 `origin/main` was pushed up to `c3d6928` (all hardening work through the Phase 3 offline workstreams). The handoff commits made after that (this file, `CLAUDE.md` status, version pins) stay **local until pushed or bundled** (§11). A fresh clone has only what is on GitHub.
 
 ## 1. Project and architecture
 
@@ -29,7 +29,7 @@ Where to read more:
 
 | Stage | Record | Key commits |
 |---|---|---|
-| Phases 0–10 (assignment build) | `docs/phase-status.md`, `docs/phase-10-final-report.md` | `c685e8b` (on origin) |
+| Phases 0–10 (assignment build) | `docs/phase-status.md`, `docs/phase-10-final-report.md` | `c685e8b` |
 | Pre-hardening fixes | `docs/production-hardening/baseline.md` | `ebca752`, `06f6fb9`, `cf9233a` |
 | Hardening Phase 0: baseline | `baseline.md` | `cf9233a` |
 | Hardening Phase 1: critical security remediation | `security-remediation.md` | `ab3d1d0`, `3df00f5`, `ff7a448`, `e493031`, `79c26d4` |
@@ -165,7 +165,7 @@ Production configuration, smoke checks, backups and the verification checklist a
 
 ## 11. Git state and transferring the work
 
-The state when this file was written: branch `main` tracking `origin/main` (remote head `c685e8b`). After the handoff commits, `main` is **30 local commits ahead** and none are pushed (`git status -sb` shows the current count).
+State when this file was written: branch `main` tracking `origin/main`. GitHub `main` is at `c3d6928` (pushed 2026-10-14, 12:14 IST, from this repository; not by Claude Code). The handoff commits after it are **local only** (4 commits ahead of `c3d6928`). Run `git status -sb` and `git log --oneline origin/main..main` for the current state.
 
 **Option A (needs approval to push):** `git push origin main`, then clone or pull on the other computer.
 
@@ -183,7 +183,7 @@ git merge --ff-only bundle/main
 
 Bundle limitations:
 - It carries commits only. It does **not** carry ignored or untracked files: `.env`, `storage/` (local DB, uploads, model cache), `writing-block*.md`, the assignment brief and the phase prompt files.
-- The other clone must already contain `origin/main` (`c685e8b`). A bundle doesn't change GitHub.
+- The other clone must already contain the current `origin/main` (`c3d6928` or later). A bundle doesn't change GitHub.
 
 **Files to copy manually if wanted (never commit them):**
 - `backend/.env`: recreate from the example instead of copying secrets where possible.

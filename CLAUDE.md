@@ -12,7 +12,7 @@ Assignment Phases 0–10 are complete. A separate **production-hardening program
 `HRMS-main/docs/production-hardening/`; resume from `HRMS-main/docs/development-handoff.md`). Release status:
 **NOT YET PRODUCTION READY**.
 
-- **Done (local commits, not pushed):** hardening Phases 0–2, the approved Phase 2 closure, and the approved
+- **Done (on `origin/main` through `c3d6928`; later handoff commits may be local):** hardening Phases 0–2, the approved Phase 2 closure, and the approved
   Phase 3 *offline* workstreams 3.3 / 3.6 / 3.8 / 3.9.
 - **Verified (Python 3.11.17 container, Node 24):** backend 1966 tests, frontend 90 tests, TypeScript 0 errors,
   Next.js build PASS, offline evaluation 139/139. Live-model evaluation: NOT_RUN (no approved key/budget).
