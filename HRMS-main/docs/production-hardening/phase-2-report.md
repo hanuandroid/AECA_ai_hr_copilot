@@ -128,7 +128,7 @@ Summary:
 
 | Run | Command | Result |
 |---|---|---|
-| Full backend, Python 3.11.17 (`hrms-main-api` image, repo mounted) | `scratchpad/pytest311.sh` → `python -m pytest -q` | **1846 passed**, 0 failed (160 s) |
+| Full backend, Python 3.11.17 (`hrms-main-api` image, repo mounted) | Throwaway Python 3.11 container with the repository mounted and dev requirements installed, then `python -m pytest -q` (exact command: `development-handoff.md` §6) | **1846 passed**, 0 failed (160 s) |
 | Backend CI emulation, clean `python:3.11`, no `.env` | ci.yml backend steps | 1221 + 625 = **1846 passed**; evals **139/139** |
 | Frontend | `npm test` / `npx tsc --noEmit` / `npm run build` (host Node 24, and `node:24.21.0-alpine`) | 86 passed / 0 errors / PASS |
 | New Phase 2 test files | `tests/ai/test_limits.py`, `tests/ai/test_retention.py`, `tests/test_backup_restore.py`, `tests/test_framework_security.py`, `tests/ai/orchestration/test_provider_payloads.py`, `tests/characterization/test_hr_policies.py`, `.github/scripts/test_advisory_gate.py` | all pass |
