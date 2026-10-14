@@ -3,39 +3,18 @@
   "exceptions": [
     {
       "ecosystem": "npm",
-      "package": "postcss",
-      "scope": "runtime",
-      "advisories": ["GHSA-6g55-p6wh-862q", "GHSA-r28c-9q8g-f849"],
-      "status": "PROPOSED",
-      "owner": "",
-      "approved_by": "",
-      "expires": "2027-01-11",
-      "rationale": "postcss is a nested dependency of next@15.5.27; the patched postcss requires next@16 (major upgrade, separate decision). The advisories need attacker-controlled CSS or source maps to be processed by postcss.",
-      "compensating_controls": "CSS is compiled only at build time from repository sources (no user-supplied CSS or source maps); the production web image runs next start on a read-only filesystem as a non-root user; upgrade to next@16 tracked as a separate approved workstream."
-    },
-    {
-      "ecosystem": "npm",
       "package": "braces",
       "scope": "build",
-      "advisories": ["GHSA-vfj7-8cjw-p6xm"],
+      "advisories": [
+        "GHSA-vfj7-8cjw-p6xm"
+      ],
       "status": "PROPOSED",
       "owner": "",
       "approved_by": "",
       "expires": "2027-01-11",
       "rationale": "Build-time only: pulled in by tailwindcss@3 (chokidar/micromatch). The fix requires tailwindcss@4 (major upgrade, separate decision). Not present in the production image's runtime dependencies.",
       "compensating_controls": "Glob patterns come from the repository's own Tailwind configuration, not from users; the build runs in CI and in a throwaway Docker build stage."
-    },
-    {
-      "ecosystem": "pip",
-      "package": "pytest",
-      "scope": "build",
-      "advisories": ["PYSEC-2026-1845", "CVE-2025-71176", "GHSA-6w46-j5rx-g56g"],
-      "status": "PROPOSED",
-      "owner": "",
-      "approved_by": "",
-      "expires": "2027-01-11",
-      "rationale": "Test-time only (requirements-dev.txt); not installed in the production API image. The fix is pytest 9.0.3, a major upgrade that must be checked against pytest-asyncio.",
-      "compensating_controls": "The issue needs another local user on the same UNIX host (/tmp/pytest-of-<user>); CI runs on single-tenant ephemeral runners and local tests run in throwaway containers."
     }
-  ]
+  ],
+  "_resolved": "2026-10-14: postcss (nested in next) resolved by a narrow npm override to the project postcss 8.5.28; pytest resolved by upgrading to 9.0.3. Their draft exceptions were removed as no longer applicable."
 }
