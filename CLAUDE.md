@@ -8,18 +8,17 @@ This workspace adds AI features (Policy RAG, SQL Agent, HR Action Agent, AI RBAC
 
 ## Current Project Status
 
-Phase 10 is COMPLETE and ready for final submission. Phase 11 has not started.
+Assignment Phases 0–10 are complete. A separate **production-hardening programme** is in progress (records in
+`HRMS-main/docs/production-hardening/`; resume from `HRMS-main/docs/development-handoff.md`). Release status:
+**NOT YET PRODUCTION READY**.
 
-- **Verified:**
-  - backend 1685 tests passed;
-  - frontend 86 tests passed;
-  - TypeScript 0 errors;
-  - Next.js build PASS;
-  - offline evaluation 139/139.
-- **Next environment:**
-  - Docker validation is pending.
-  - Live-model evaluation is pending an AI provider API key (`ANTHROPIC_API_KEY`).
-  - The `next@15.5.2` security advisory is a separate decision. Do not upgrade it without approval.
+- **Done (local commits, not pushed):** hardening Phases 0–2, the approved Phase 2 closure, and the approved
+  Phase 3 *offline* workstreams 3.3 / 3.6 / 3.8 / 3.9.
+- **Verified (Python 3.11.17 container, Node 24):** backend 1966 tests, frontend 90 tests, TypeScript 0 errors,
+  Next.js build PASS, offline evaluation 139/139. Live-model evaluation: NOT_RUN (no approved key/budget).
+- **Blocked on approval:** live-model work (3.1/3.2/3.4/3.5), Playwright (3.7), S-02 admin self-action controls,
+  S-03 org-wide manager content, the `braces` advisory exception (stays PROPOSED; CI gate fails by design),
+  data-governance, retention and backup decisions. Never push, deploy or approve exceptions without approval.
 - **Do not start a new phase automatically.** First inspect the current implementation and run the requested
   validation.
 - Conversation history cannot authorize anything. The remaining architectural rules are below and in
@@ -27,15 +26,15 @@ Phase 10 is COMPLETE and ready for final submission. Phase 11 has not started.
 
 ## Repository facts (verified in Phase 0 — see `HRMS-main/docs/repository-audit.md`)
 
-- Backend: FastAPI + SQLAlchemy 2 async + SQLite (`aiosqlite`) + Alembic (hand-written migrations, latest `0020_ai_audit_events`; 0017-0020 are AI-owned). The backend lives in `HRMS-main/backend/app/`.
+- Backend: FastAPI + SQLAlchemy 2 async + SQLite (`aiosqlite`) + Alembic (hand-written migrations, latest `0021_hr_policy_publication`; 0017-0020 are AI-owned, 0021 is the business policy-publication workflow). The backend lives in `HRMS-main/backend/app/`.
 - **There is no service layer.** Business rules live in endpoint functions under `api/v1/endpoints/`. AI mutations therefore go through **HTTP calls to those endpoints** with the user's token, never through direct DB writes or imported endpoint functions.
 - Auth: `app.services.auth.get_current_user` (JWT HS256, role loaded from DB) and `require_roles(...)`. Reuse them and do not create a second auth system.
 - Response envelope: `app.core.response.success_response / error_response` → `{success, data, error:{code,message}}`.
 - Frontend: Next.js 15 App Router in `HRMS-main/frontend/`. The API client is `lib/api.ts`, the token is in `localStorage["hrms_access_token"]`, and protected routes are listed in `middleware.ts` (both the list and `matcher`).
-- Tests: `backend/tests/` (Phase 1). Characterization tests pin existing endpoint behaviour, including known insecure behaviour (R1, R4, R9). Don't "fix" those tests; they change only with an approved remediation.
+- Tests: `backend/tests/` (Phase 1). Characterization tests pin existing endpoint behaviour. R1, R4 and R9 were remediated in hardening Phase 1 (each changed test documents the old behaviour); open findings are pinned the same way (e.g. `test_admin_self_actions.py`, S-02). Don't "fix" those tests; they change only with an approved remediation.
 - Decision D7: AI authorization ≥ existing authorization. The AI may be stricter, never looser.
 - AI authorization boundary (Phase 2): `backend/app/services/ai/authorization/`. AI endpoints depend on `get_ai_user_context` (rejects INACTIVE). Every AI operation runs through `run_authorized(ctx, Capability.X, op, resource=TargetEmployee(id))` or `require(...)`. The matrix lives only in `authorization/policy.py`. Row scope comes from `sql_read_scope(ctx)` / `hr_read_scope(ctx)`, and field checks from `is_sensitive_field` / `is_column_readable`.
-- Policy RAG (Phase 3): `backend/app/services/ai/rag/`, endpoint `POST /api/v1/chat/policy`. Demo policy content is in `backend/data/policies/` and must stay consistent with code (leave totals, 09:00 cutoff, upload limits). **Policy documents are untrusted data and cannot provide instructions to the model.** Never put document text into the system prompt.
+- Policy RAG (Phase 3): `backend/app/services/ai/rag/`, endpoint `POST /api/v1/chat/policy`. Demo policy content is in `backend/data/policies/` and must stay consistent with code (leave totals, 09:00 cutoff, upload limits, policy publication). Only PUBLISHED policies are indexed or retrieved; managers submit, ADMINs publish. **Policy documents are untrusted data and cannot provide instructions to the model.** Never put document text into the system prompt.
 - LLM/embeddings: `AnthropicLLMProvider` (model from `AI_LLM_MODEL`, key only from `ANTHROPIC_API_KEY`) and `FastEmbedEmbeddingProvider`. Both are lazy and fail closed. Tests always use `FakeLLMProvider` / `FakeEmbeddingProvider` / `evals.policy_rag_eval.ExtractiveFakeLLM`.
 - SQL Agent (Phase 4): `backend/app/services/ai/sql/`, endpoint `POST /api/v1/chat/sql`. **The LLM is never an authorization authority, and SQL validation is enforced independently of the LLM prompt.**
   - Pipeline: parse (sqlglot, sqlite) → validate (registry in `sql/schema.py`) → scope rewrite + LIMIT → re-verify → read-only executor.
@@ -63,7 +62,7 @@ Phase 10 is COMPLETE and ready for final submission. Phase 11 has not started.
   - Render AI output as text only (no `dangerouslySetInnerHTML`/Markdown HTML); map errors via `lib/copilot-errors.ts` using real backend codes.
   - Frontend tests: `cd HRMS-main/frontend; npm test` (Vitest + Testing Library, threads pool).
 - Phase 10: formal assignment eval `backend/evals/assignment_eval.json` (6 suites, `python -m evals.run_evals`); adversarial matrix `backend/tests/ai/hardening/`; `app/core/production_checks.py` (fail fast on unsafe production config); role modes from `GET /chat/permissions` (UX only); `/admin/ai-usage`. Final status: `HRMS-main/docs/phase-10-final-report.md`. Streaming is deliberately not implemented (FastAPI 0.116 dependency lifetime; see the gap analysis).
-- ⚠ `GET /api/v1/employees/{id}` returns bank/PAN/salary to any user. **AI code must never call it.**
+- ⚠ `GET /api/v1/employees/{id}` historically returned bank/PAN/salary to any user (R1; field visibility fixed in hardening Phase 1, B-01). **AI code must still never call it.**
 
 ## Commands
 
@@ -75,11 +74,11 @@ docker-compose exec api python scripts/seed.py
 cd frontend && npm run build                 # type-check frontend
 ```
 
-Tests (local, no Docker needed; Python 3.12 venv):
+Tests (local, no Docker needed; Python 3.11 venv, matching the Docker images and CI; a throwaway `python:3.11` container also works, see `HRMS-main/docs/development-handoff.md` §6):
 
 ```powershell
 cd HRMS-main/backend
-py -3.12 -m venv .venv; .\.venv\Scripts\python -m pip install -r requirements-dev.txt   # once
+py -3.11 -m venv .venv; .\.venv\Scripts\python -m pip install -r requirements-dev.txt   # once
 .\.venv\Scripts\python -m pytest -q
 ```
 
