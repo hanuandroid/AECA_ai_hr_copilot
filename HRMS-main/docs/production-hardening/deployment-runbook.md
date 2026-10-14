@@ -86,7 +86,7 @@ Scheduling, encryption, off-host copies and access control are **open decisions*
 | Stale or unknown AI actions | `python scripts/stale_actions_report.py` | Read-only. Exit code 3 means items need human review in the HR system. |
 | Retention dry run | `python scripts/retention_purge.py` | Prints counts only. |
 | Retention apply | `python scripts/retention_purge.py --apply --operator-employee-id <active admin id>` | **Only after the retention periods are approved.** Audited. Never deletes audit events. |
-| Policy index | `python scripts/ingest_policies.py` | Needs AI enabled. With AI disabled it exits with an error (traceback); this is known and cosmetic. |
+| Policy index | `python scripts/ingest_policies.py` | Run after an ADMIN publishes a policy (the publish response says `index_refresh_required`). Until then a newly published policy is not retrievable; archived or rejected ones already are not. Needs AI enabled. With AI disabled it exits with an error (traceback); this is known and cosmetic. |
 
 ## 7. Monitoring signals
 
@@ -95,3 +95,35 @@ These are available today but **not wired to any alerting** (open decision):
 - `GET /api/v1/ai/audit/metrics` (admin);
 - structured logs, for example `ai.audit.write_failed`, `ai.audit.fallback`, `ai.retention.run` and rate-limit denials;
 - the stale-actions report's exit code.
+
+## 8. Deployment verification checklist (none of this has been done yet)
+
+**Browser flows** (production images, behind the real proxy). For each role (ADMIN, MANAGER, EMPLOYEE, INACTIVE):
+- [ ] login, logout and forced re-login on an expired token;
+- [ ] leave apply, approve and reject, including an out-of-team refusal;
+- [ ] ticket create, assign and status change;
+- [ ] document and payslip upload and download;
+- [ ] policy upload: manager submission stays hidden from employees; ADMIN publish and reject; re-index; the Copilot cites only published policies;
+- [ ] Copilot: policy question with citations, SQL question, action proposal with confirm and cancel; `AI_UNAVAILABLE` when AI is disabled;
+- [ ] AI audit and usage pages are ADMIN-only;
+- [ ] AI output that contains HTML renders as plain text.
+
+**Real reverse proxy:**
+- [ ] TLS and HSTS are set.
+- [ ] `X-Forwarded-For` gives the real client IP, and `FORWARDED_ALLOW_IPS` is set to the proxy only.
+- [ ] Login throttling counts per real client IP.
+- [ ] Unknown Host gets a 400 from the API, and the proxy's default server also rejects it.
+- [ ] CORS works from the web origin only.
+- [ ] Upload limits are aligned between proxy and API.
+- [ ] Range requests through the proxy behave as tested.
+- [ ] Health endpoints are not public.
+- [ ] Deploys drop no requests (graceful shutdown).
+
+**Backup and restore under load:**
+- [ ] Back up during concurrent writes. Check integrity, checksums, duration and the effect on API latency.
+- [ ] Check for skew between the DB and the upload copy. The DB is copied first, then the uploads, so a file can exist in one but not the other.
+
+**Cross-host restore:**
+- [ ] Copy a backup off-host, verify it, and restore it on a clean host with the same configured paths.
+- [ ] Run `alembic current`, the health check, logins, document downloads and the stale-actions report.
+- [ ] Time the full process, including transfer and decryption, against the 4-hour recovery target.

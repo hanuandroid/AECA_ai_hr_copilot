@@ -815,3 +815,16 @@ Production hardening programme (separate track; see docs/production-hardening/)
   Test change: four SQL formatter-guard tests now request formatting="llm" explicitly because the default became
   "deterministic"; assertions unchanged. No test deleted; no assertion weakened.
   Release status: NOT YET PRODUCTION READY. Phase 3 not started (separate approval required).
+- Phase 2 closure (approved 2026-10-14): pytest 9.0.3 + pytest-asyncio 1.3.0 (PYSEC-2026-1845 fixed); narrow npm
+  override of Next's nested postcss to 8.5.28 (runtime npm advisories 0; CSS output byte-identical; pinned by
+  frontend/tests/dependency-pins.test.ts); braces (build-time, no patched release) stays a PROPOSED exception, so the
+  CI advisory gate still fails until a human owner approves it. ADMIN-only publication of organisation-wide HR
+  policies (migration 0021: status/version + append-only hr_policy_events; drafts never listed to others, never
+  indexed or retrieved). Route-by-route authorization matrix (authorization-matrix.md); admin self-actions pinned by
+  tests/characterization/test_admin_self_actions.py (S-02 open: an ADMIN can demote themselves leaving zero admins).
+  Test changes: pinned migration head 0020 -> 0021 in three tests (new migration, documented in each test).
+- Phase 3 (offline workstreams only, approved 2026-10-14): 3.3 real-embedding retrieval calibration (rag-calibration.md;
+  proposal only, AI_RAG_MIN_SCORE unchanged), 3.6 offline red-team corpus (40 attacks x benign/hostile model),
+  3.8 monitoring-alerts.md, 3.9 release-readiness.md. Live-model evaluation, live calibration and workstreams 3.1,
+  3.2, 3.4, 3.5 and 3.7 are NOT started (blocked on approvals / API key).
+  Release status: NOT YET PRODUCTION READY.
