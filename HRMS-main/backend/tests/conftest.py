@@ -52,7 +52,10 @@ os.environ["AUTH_LOGIN_RATE_LIMIT_PER_MINUTE"] = "100000"
 os.environ["AI_LLM_PROVIDER"] = "fake"
 os.environ["AI_EMBEDDING_PROVIDER"] = "fake"
 os.environ.pop("ANTHROPIC_API_KEY", None)
-os.environ.pop("OPENAI_API_KEY", None)
+# Set (not just removed) so a developer's backend/.env or shell cannot leak a real OpenAI key or model into the
+# tests: environment variables take precedence over the .env file and over None passed to Settings(...).
+for _name in ("OPENAI_API_KEY", "AI_OPENAI_MODEL", "AI_OPENAI_FAST_MODEL", "AI_OPENAI_REASONING_EFFORT"):
+    os.environ[_name] = ""
 
 # App imports must come after the environment is configured.
 import httpx  # noqa: E402

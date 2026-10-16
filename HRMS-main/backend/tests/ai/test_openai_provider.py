@@ -215,7 +215,8 @@ async def test_success_logs_contain_no_prompt_completion_or_key():
 
 
 def test_openai_settings_default_to_unset(monkeypatch):
-    for name in ("OPENAI_API_KEY", "AI_OPENAI_MODEL", "AI_OPENAI_FAST_MODEL", "AI_LLM_PROVIDER"):
+    for name in ("OPENAI_API_KEY", "AI_OPENAI_MODEL", "AI_OPENAI_FAST_MODEL", "AI_OPENAI_REASONING_EFFORT",
+                 "AI_LLM_PROVIDER"):
         monkeypatch.delenv(name, raising=False)
     config = Settings(_env_file=None)
     assert config.ai_llm_provider == "anthropic"  # default provider unchanged
