@@ -25,6 +25,9 @@ import {
 } from "@/lib/api";
 import { formatDateDDMMYY } from "@/lib/date";
 
+const DIRECTORY_NOT_AVAILABLE =
+  "The employee directory is available to managers and admins. Your own details are on My Profile.";
+
 const roleClassMap: Record<string, string> = {
   ADMIN: "bg-red-100 text-red-700",
   MANAGER: "bg-amber-100 text-amber-700",
@@ -134,6 +137,13 @@ function EmployeesPageContent() {
       const role = profileResult.body.data.role;
       setName(profileResult.body.data.name);
       setViewerRole(role);
+      // RBAC Decision 1: no employee directory for EMPLOYEE (the API returns 403). Route guards come in step 9.
+      if (role !== "ADMIN" && role !== "MANAGER") {
+        setEmployees([]);
+        setTotal(0);
+        setError(DIRECTORY_NOT_AVAILABLE);
+        return;
+      }
       const employeeResult = await fetchEmployees(token, {
         location: loc || undefined,
         department_id: deptId ? Number(deptId) : undefined,
@@ -143,6 +153,10 @@ function EmployeesPageContent() {
       });
       if (employeeResult.status === 401) {
         clearAuthAndRedirect();
+        return;
+      }
+      if (employeeResult.status === 403) {
+        setError(DIRECTORY_NOT_AVAILABLE);
         return;
       }
       if (!employeeResult.ok || !("success" in employeeResult.body) || !employeeResult.body.success) {

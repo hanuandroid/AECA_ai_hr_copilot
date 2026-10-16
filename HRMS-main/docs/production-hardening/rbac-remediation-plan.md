@@ -43,7 +43,7 @@
 |---|---|---|
 | 0 | This plan | **done** |
 | 1 | **Route-permission regression suite**: every API route (77 method+path pairs) × anonymous, employee, manager, admin with an explicit expected outcome class, plus a completeness test that fails on unclassified routes. It encodes **current** behaviour; later steps edit the expectations. | **done** |
-| 2 | Directory scope (decision 1): list, detail, profile pictures, limited org chart; identical 404 for out-of-scope ids | pending |
+| 2 | Directory scope (decision 1): list, detail, profile pictures, limited org chart; identical 404 for out-of-scope ids | **done** |
 | 3 | Manager skill search (decisions 1 and 6): new restricted endpoint and SQL-agent capability, organisation-wide, approved fields only | pending |
 | 4 | Admin self-actions and self-service password change (decision 2, X-1) | pending |
 | 5 | Ticket status (decision 4): API, AI parity, UI | pending |

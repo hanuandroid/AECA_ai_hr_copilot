@@ -16,6 +16,9 @@ export function Topbar({ name, title = "Employee Directory" }: { name: string; t
   const [searchOpen, setSearchOpen] = useState(false);
   const [results, setResults] = useState<Employee[]>([]);
   const [profilePictureUrl, setProfilePictureUrl] = useState("");
+  // RBAC Decision 1: the employee directory (and therefore this search) is for MANAGER and ADMIN only. UX only:
+  // the backend returns 403 to EMPLOYEE regardless. The role comes from the server profile, never local storage.
+  const [canSearchDirectory, setCanSearchDirectory] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLDivElement | null>(null);
   const initials = name
@@ -41,7 +44,7 @@ export function Topbar({ name, title = "Employee Directory" }: { name: string; t
 
   useEffect(() => {
     const token = localStorage.getItem("hrms_access_token");
-    if (!token || query.trim().length < 2) {
+    if (!token || !canSearchDirectory || query.trim().length < 2) {
       setResults([]);
       setSearchOpen(false);
       return;
@@ -60,7 +63,7 @@ export function Topbar({ name, title = "Employee Directory" }: { name: string; t
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, canSearchDirectory]);
 
   useEffect(() => {
     const loadProfilePicture = async () => {
@@ -74,6 +77,8 @@ export function Topbar({ name, title = "Employee Directory" }: { name: string; t
         setProfilePictureUrl("");
         return;
       }
+      const role = profileResult.body.data.role;
+      setCanSearchDirectory(role === "ADMIN" || role === "MANAGER");
       if (!profileResult.body.data.has_profile_photo) {
         setProfilePictureUrl("");
         return;
@@ -118,6 +123,7 @@ export function Topbar({ name, title = "Employee Directory" }: { name: string; t
         </div>
 
         <div className="flex items-center gap-3 self-end md:self-auto">
+          {canSearchDirectory ? (
           <div className="relative w-[18rem]" ref={searchRef}>
             <div className="flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2">
               <Search className="h-4 w-4 text-indigo-100/80" />
@@ -153,6 +159,7 @@ export function Topbar({ name, title = "Employee Directory" }: { name: string; t
               </div>
             ) : null}
           </div>
+          ) : null}
           <NotificationBell />
           <div className="relative" ref={menuRef}>
             <button

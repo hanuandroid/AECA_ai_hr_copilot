@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.response import success_response
 from app.db.session import get_db
 from app.models.employee import Employee
+from app.models.enums import EmployeeStatus
 from app.services.auth import get_current_user
 
 router = APIRouter()
@@ -34,18 +35,27 @@ async def org_tree(
     db: AsyncSession = Depends(get_db),
 ):
     _ = current_user
-    rows = (await db.execute(select(Employee).order_by(Employee.id.asc()))).scalars().all()
+    # Decision 1: the limited chart shows ACTIVE employees only, with id, name, role and manager reference. One query,
+    # only the four columns (no full rows or sensitive fields are loaded). An employee whose manager is not visible
+    # (inactive) becomes a root with manager_id null, so no hidden employee is referenced.
+    rows = (await db.execute(
+        select(Employee.id, Employee.name, Employee.role, Employee.manager_id)
+        .where(Employee.status == EmployeeStatus.ACTIVE)
+        .order_by(Employee.id.asc())
+    )).all()
+    visible_ids = {row.id for row in rows}
 
     nodes: dict[int, dict] = {}
     children_map: dict[int | None, list[int]] = defaultdict(list)
     for row in rows:
+        manager_id = row.manager_id if row.manager_id in visible_ids else None
         nodes[row.id] = {
             "id": row.id,
             "name": row.name,
             "role": row.role.value,
-            "manager_id": row.manager_id,
+            "manager_id": manager_id,
         }
-        children_map[row.manager_id].append(row.id)
+        children_map[manager_id].append(row.id)
 
     tree = _build_tree(nodes, children_map, None)
     return success_response({"items": tree})

@@ -291,11 +291,22 @@ async def test_deactivation_guards(client, auth, employee_id, status, code):
 # --- Directory & sensitive data --------------------------------------------
 
 
-async def test_directory_is_visible_to_employees_without_sensitive_fields(client, auth):
+# Old behaviour (until 2026-10-16, RBAC Decision 1): GET /employees returned every active employee to every role.
+# Invariant now: EMPLOYEE 403; MANAGER self + direct reports; ADMIN everyone (tests/rbac/test_directory_scope.py).
+
+
+async def test_directory_is_not_available_to_employees(client, auth):
     response = await client.get("/api/v1/employees", params={"limit": 100}, headers=await auth("employee"))
+    assert response.status_code == 403
+    assert error_code(response) == "FORBIDDEN"
+
+
+@pytest.mark.parametrize("user_key,expected", [("manager", {2, 3}), ("admin", {1, 2, 3, 4})])
+async def test_directory_scope_without_sensitive_fields(client, auth, user_key, expected):
+    response = await client.get("/api/v1/employees", params={"limit": 100}, headers=await auth(user_key))
     assert response.status_code == 200
     items = data(response)["items"]
-    assert {item["id"] for item in items} == {1, 2, 3, 4}  # INACTIVE excluded
+    assert {item["id"] for item in items} == expected  # INACTIVE excluded; manager: self + direct reports
     for item in items:
         assert set(item) == {"id", "name", "email", "department_id", "role", "status", "joining_date"}
 
@@ -348,28 +359,32 @@ async def test_direct_manager_sees_personal_but_not_financial_fields(client, aut
     assert all(detail[key] is None for key in SENSITIVE_KEYS)
 
 
-async def test_peer_sees_neither_financial_nor_personal_fields(client, auth, employee_with_personal_fields):
-    detail = await _detail(client, auth, "outsider")  # same role, not the manager
-    assert all(detail[key] is None for key in SENSITIVE_KEYS | PERSONAL_KEYS)
-    assert (detail["id"], detail["name"], detail["email"]) == (EMPLOYEE.id, "Employee Test", EMPLOYEE.email)  # directory info kept
+# RBAC Decision 1 (2026-10-16): a peer and a non-managing manager previously received the directory fields with the
+# restricted fields nulled; they now get the same 404 EMPLOYEE_NOT_FOUND as an unknown id (the record is out of scope).
 
 
-async def test_manager_of_someone_else_sees_no_restricted_fields(client, auth):
-    detail = await _detail(client, auth, "manager", OUTSIDER.id)  # OUTSIDER has no manager
-    assert all(detail[key] is None for key in SENSITIVE_KEYS | PERSONAL_KEYS)
+async def test_peer_gets_not_found_for_another_employee(client, auth, employee_with_personal_fields):
+    response = await client.get(f"/api/v1/employees/{EMPLOYEE.id}", headers=await auth("outsider"))
+    assert response.status_code == 404 and error_code(response) == "EMPLOYEE_NOT_FOUND"
+    assert "Employee Test" not in response.text
 
 
-async def test_enumerating_ids_does_not_disclose_sensitive_values(client, auth, employee_with_personal_fields):
+async def test_manager_of_someone_else_gets_not_found(client, auth):
+    response = await client.get(f"/api/v1/employees/{OUTSIDER.id}", headers=await auth("manager"))  # not a report
+    assert response.status_code == 404 and error_code(response) == "EMPLOYEE_NOT_FOUND"
+
+
+async def test_enumerating_ids_discloses_nothing(client, auth, employee_with_personal_fields):
     headers = await auth("outsider")
-    seen = 0
-    for employee_id in range(1, 8):  # every seeded id plus unknown ones
-        response = await client.get(f"/api/v1/employees/{employee_id}", headers=headers)
-        if employee_id == OUTSIDER.id or not response.json().get("success"):
-            continue  # own record, or EMPLOYEE_NOT_FOUND for unknown ids
-        seen += 1
-        for value in [*EMPLOYEE_SENSITIVE.values(), *PERSONAL_VALUES.values()]:
+    responses = {employee_id: await client.get(f"/api/v1/employees/{employee_id}", headers=headers)
+                 for employee_id in range(1, 8)}  # every seeded id plus unknown ones
+    assert responses[OUTSIDER.id].status_code == 200  # own record
+    others = [response for employee_id, response in responses.items() if employee_id != OUTSIDER.id]
+    assert len({(r.status_code, r.text) for r in others}) == 1  # existing and unknown ids are indistinguishable
+    assert others[0].status_code == 404
+    for response in others:
+        for value in [*EMPLOYEE_SENSITIVE.values(), *PERSONAL_VALUES.values(), "Employee Test", "Manager Test"]:
             assert str(value) not in response.text
-    assert seen >= 4  # the enumeration really covered the other employees
 
 
 async def test_system_payslip_is_dob_password_protected(client, auth):

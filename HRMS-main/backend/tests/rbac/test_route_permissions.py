@@ -94,9 +94,10 @@ CASES: list[Case] = [
     Case("GET", "/api/v1/health", "/api/v1/health", (OK, OK, OK, OK)),
     # --- employees: directory and self ---------------------------------------------------------------------------
     Case("GET", f"{E}/departments", f"{E}/departments", (AUTH, OK, OK, OK)),
-    Case("GET", E, E, (AUTH, OK, OK, OK), note="A-01: decision 1 changes EMPLOYEE to deny, MANAGER to self+reports"),
-    Case("GET", f"{E}/{{employee_id}}", f"{E}/{OTHER}", (AUTH, OK, OK, OK),
-         note="A-01/A-02: decision 1 hides another employee from EMPLOYEE and from a non-managing MANAGER"),
+    Case("GET", E, E, (AUTH, DENY, OK, OK),
+         note="Decision 1 (step 2): EMPLOYEE denied (was ok); MANAGER sees self + direct reports only"),
+    Case("GET", f"{E}/{{employee_id}}", f"{E}/{OTHER}", (AUTH, HIDDEN, HIDDEN, OK),
+         note="Decision 1 (step 2): another employee is hidden from EMPLOYEE and from a non-managing MANAGER (was ok)"),
     Case("GET", f"{E}/me", f"{E}/me", (AUTH, OK, OK, OK)),
     Case("PUT", f"{E}/me", f"{E}/me", (AUTH, OK, OK, OK), json={"phone": "9876543210"}),
     Case("POST", f"{E}/me/profile-picture", f"{E}/me/profile-picture", (AUTH, OK, OK, OK),

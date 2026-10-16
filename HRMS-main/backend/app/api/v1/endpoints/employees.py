@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
-from sqlalchemy import desc, func, or_, select
+from sqlalchemy import desc, func, or_, select, true
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -80,6 +80,20 @@ def _hidden_detail_fields(viewer: Employee, employee: Employee) -> tuple[str, ..
     if employee.manager_id is not None and employee.manager_id == viewer.id:
         return DETAIL_FINANCIAL_FIELDS
     return DETAIL_FINANCIAL_FIELDS + DETAIL_PERSONAL_FIELDS
+
+
+# Directory scope (RBAC remediation step 2, approved Decision 1): which employees a caller may see in the general
+# employee list and detail endpoints. ADMIN: everyone. MANAGER: self and direct reports (employees.manager_id).
+# EMPLOYEE: own record only (and no list at all). Applied as a query condition so out-of-scope rows are never loaded.
+EMPLOYEE_NOT_FOUND_DETAIL = error_response("EMPLOYEE_NOT_FOUND", "Employee not found")
+
+
+def _directory_visibility(viewer: Employee):
+    if viewer.role == Role.ADMIN:
+        return true()
+    if viewer.role == Role.MANAGER:
+        return or_(Employee.id == viewer.id, Employee.manager_id == viewer.id)
+    return Employee.id == viewer.id
 
 
 def _ensure_manager_scope(current_user: Employee, employee: Employee, *, allow_self: bool) -> None:
@@ -490,11 +504,18 @@ async def list_employees(
     department_id: int | None = None,
     location: str | None = None,
     q: str | None = None,
-    _: Employee = Depends(get_current_user),
+    current_user: Employee = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Employee).where(Employee.status == EmployeeStatus.ACTIVE)
-    count_query = select(func.count(Employee.id)).where(Employee.status == EmployeeStatus.ACTIVE)
+    # Decision 1: no employee directory for EMPLOYEE; MANAGER sees self + direct reports; ADMIN everyone.
+    if current_user.role not in {Role.ADMIN, Role.MANAGER}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_response("FORBIDDEN", "You do not have access to the employee directory"),
+        )
+    visible = _directory_visibility(current_user)
+    query = select(Employee).where(Employee.status == EmployeeStatus.ACTIVE, visible)
+    count_query = select(func.count(Employee.id)).where(Employee.status == EmployeeStatus.ACTIVE, visible)
 
     if department_id is not None:
         query = query.where(Employee.department_id == department_id)
@@ -672,7 +693,11 @@ async def get_employee_profile_picture(
     _: Employee = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    employee = (await db.execute(select(Employee).where(Employee.id == employee_id))).scalar_one_or_none()
+    # Decision 1: photos follow organisation-chart visibility (active employees only); an inactive or unknown id
+    # gets the same 404, so a forged id cannot fetch a photo the chart does not show.
+    employee = (await db.execute(
+        select(Employee).where(Employee.id == employee_id, Employee.status == EmployeeStatus.ACTIVE)
+    )).scalar_one_or_none()
     if employee is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
     if not employee.profile_photo_path:
@@ -1576,10 +1601,14 @@ async def update_employee(
 
 @router.get("/{employee_id}")
 async def get_employee(employee_id: int, current_user: Employee = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Employee).where(Employee.id == employee_id))
+    # Decision 1: out-of-scope ids are indistinguishable from unknown ones (404 EMPLOYEE_NOT_FOUND).
+    # (Before 2026-10-16 an unknown id returned HTTP 200 with an EMPLOYEE_NOT_FOUND error body.)
+    result = await db.execute(
+        select(Employee).where(Employee.id == employee_id, _directory_visibility(current_user))
+    )
     employee = result.scalar_one_or_none()
     if employee is None:
-        return {"success": False, "data": None, "error": {"code": "EMPLOYEE_NOT_FOUND", "message": "Employee not found"}}
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=EMPLOYEE_NOT_FOUND_DETAIL)
 
     department = None
     if employee.department_id is not None:
