@@ -20,6 +20,12 @@ import {
   updateEmployee,
 } from "@/lib/api";
 
+// RBAC step 4: fields an admin cannot change on their own record (the backend refuses them with 403).
+const SELF_PROTECTED_FIELDS: (keyof EmployeeUpdatePayload)[] = [
+  "role", "password", "current_salary_usd", "bank_name", "bank_account_number", "bank_account_name", "bank_branch",
+  "bank_ifsc", "pan_number", "pan_name", "pan_dob",
+];
+
 function NewEmployeePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -30,6 +36,10 @@ function NewEmployeePageContent() {
   const [token, setToken] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [name, setName] = useState("User");
+  // RBAC step 4 (Decision 2): on their own record an admin cannot change role, salary, bank or PAN, or reset the
+  // password here (the backend refuses with 403). UX mirrors that; the backend remains the enforcement point.
+  const [viewerId, setViewerId] = useState<number | null>(null);
+  const isSelfEdit = isEditMode && viewerId !== null && editingEmployeeId === viewerId;
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [createStep, setCreateStep] = useState<1 | 2>(1);
   const [initializingForm, setInitializingForm] = useState(false);
@@ -123,6 +133,7 @@ function NewEmployeePageContent() {
         return;
       }
       setName(profileResult.body.data.name);
+      setViewerId(profileResult.body.data.id);
       if (profileResult.body.data.role !== "ADMIN") {
         router.push("/employees");
         return;
@@ -287,7 +298,10 @@ function NewEmployeePageContent() {
         | Awaited<ReturnType<typeof createEmployee>>
         | Awaited<ReturnType<typeof updateEmployee>>;
       if (isEditMode && editingEmployeeId) {
-        if (createForm.password.trim()) {
+        if (isSelfEdit) {
+          // Not editable on one's own record (backend 403): these fields are shown read-only and not sent.
+          for (const key of SELF_PROTECTED_FIELDS) delete commonPayload[key];
+        } else if (createForm.password.trim()) {
           commonPayload.password = createForm.password.trim();
         }
         result = await updateEmployee(token, editingEmployeeId, commonPayload);
@@ -367,7 +381,14 @@ function NewEmployeePageContent() {
                     <label className="space-y-1">
                       <span className="text-xs text-slate-500">Temporary Password</span>
                       <Input
-                        placeholder={isEditMode ? "Leave blank to keep current password" : "Minimum 8 characters"}
+                        disabled={isSelfEdit}
+                        placeholder={
+                          isSelfEdit
+                            ? "Use the self-service password change for your own account"
+                            : isEditMode
+                              ? "Leave blank to keep current password"
+                              : "Minimum 8 characters"
+                        }
                         type="password"
                         value={createForm.password}
                         onChange={(e) => updateCreateField("password", e.target.value)}
@@ -418,7 +439,7 @@ function NewEmployeePageContent() {
                     </label>
                     <label className="space-y-1">
                       <span className="text-xs text-slate-500">Role</span>
-                      <select className="h-10 w-full rounded-md border border-border bg-white px-3 py-2 text-sm" value={createForm.role} onChange={(e) => updateCreateField("role", e.target.value)}>
+                      <select disabled={isSelfEdit} className="h-10 w-full rounded-md border border-border bg-white px-3 py-2 text-sm" value={createForm.role} onChange={(e) => updateCreateField("role", e.target.value)}>
                         <option value="EMPLOYEE">EMPLOYEE</option>
                         <option value="MANAGER">MANAGER</option>
                         <option value="ADMIN">ADMIN</option>
@@ -439,7 +460,12 @@ function NewEmployeePageContent() {
                 <div className="space-y-4">
                   <div className="rounded-xl border border-indigo-200 bg-white p-4 shadow-sm">
                     <p className="mb-4 text-sm font-semibold text-slate-900">Compensation & Banking</p>
-                    <div className="grid gap-4 md:grid-cols-2">
+                    {isSelfEdit ? (
+                      <p className="mb-4 text-xs text-amber-700">
+                        You cannot change your own salary, bank or PAN details. Another administrator must make these changes.
+                      </p>
+                    ) : null}
+                    <fieldset disabled={isSelfEdit} className="grid gap-4 md:grid-cols-2">
                       <label className="space-y-1">
                         <span className="text-xs text-slate-500">Current Salary (USD)</span>
                         <Input placeholder="e.g. 65000" type="number" min="0" value={createForm.currentSalaryUsd} onChange={(e) => updateCreateField("currentSalaryUsd", e.target.value)} />
@@ -464,11 +490,12 @@ function NewEmployeePageContent() {
                         <span className="text-xs text-slate-500">IFSC</span>
                         <Input placeholder="e.g. HDFC0001234" value={createForm.bankIfsc} onChange={(e) => updateCreateField("bankIfsc", e.target.value)} />
                       </label>
-                    </div>
+                    </fieldset>
                   </div>
                   <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 shadow-sm">
                     <p className="mb-4 text-sm font-semibold text-slate-900">Statutory Details</p>
                     <div className="grid gap-4 md:grid-cols-2">
+                      <fieldset disabled={isSelfEdit} className="contents">
                       <label className="space-y-1">
                         <span className="text-xs text-slate-500">PAN Number</span>
                         <Input placeholder="e.g. ABCDE1234F" value={createForm.panNumber} onChange={(e) => updateCreateField("panNumber", e.target.value)} />
@@ -481,6 +508,7 @@ function NewEmployeePageContent() {
                         <span className="text-xs text-slate-500">PAN Date of Birth</span>
                         <DatePicker value={createForm.panDob} onChange={(value) => updateCreateField("panDob", value)} placeholder="Select PAN DOB" />
                       </label>
+                      </fieldset>
                       <label className="space-y-1">
                         <span className="text-xs text-slate-500">PF UAN</span>
                         <Input placeholder="Provident Fund UAN" value={createForm.pfUan} onChange={(e) => updateCreateField("pfUan", e.target.value)} />

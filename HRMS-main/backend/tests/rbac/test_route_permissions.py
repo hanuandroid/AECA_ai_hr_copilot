@@ -91,6 +91,9 @@ CASES: list[Case] = [
          json={"email": EMPLOYEE.email, "password": PASSWORD}),
     Case("POST", "/api/v1/auth/token", "/api/v1/auth/token", (OK, OK, OK, OK),
          data={"username": EMPLOYEE.email, "password": PASSWORD}),
+    Case("POST", "/api/v1/auth/change-password", "/api/v1/auth/change-password", (AUTH, OK, OK, OK),
+         json={"current_password": PASSWORD, "new_password": "a-brand-new-password"},
+         note="Step 4: self-service password change for any authenticated active user (own account only)"),
     Case("GET", "/api/v1/health", "/api/v1/health", (OK, OK, OK, OK)),
     # --- employees: directory and self ---------------------------------------------------------------------------
     Case("GET", f"{E}/departments", f"{E}/departments", (AUTH, OK, OK, OK)),

@@ -5,12 +5,13 @@ from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
 
+import structlog
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
-from sqlalchemy import desc, func, or_, select, true
+from sqlalchemy import desc, func, or_, select, true, update
 from sqlalchemy import text as sa_text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,6 +42,7 @@ from app.services import skill_search
 from app.services.auth import get_current_user, require_roles
 
 router = APIRouter()
+logger = structlog.get_logger()
 ALLOWED_PROFILE_PHOTO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 ALLOWED_DOCUMENT_EXTENSIONS = {".pdf", ".txt", ".md", ".doc", ".docx"}
 ALLOWED_DOCUMENT_TYPES = {"APPOINTMENT", "PAYSLIP", "TAX", "OTHER"}
@@ -88,6 +90,47 @@ def _hidden_detail_fields(viewer: Employee, employee: Employee) -> tuple[str, ..
 # employee list and detail endpoints. ADMIN: everyone. MANAGER: self and direct reports (employees.manager_id).
 # EMPLOYEE: own record only (and no list at all). Applied as a query condition so out-of-scope rows are never loaded.
 EMPLOYEE_NOT_FOUND_DETAIL = error_response("EMPLOYEE_NOT_FOUND", "Employee not found")
+
+
+# Admin self-actions (RBAC remediation step 4, approved Decision 2). The acting identity always comes from the
+# authenticated, database-loaded user (never from the request body).
+SELF_SENSITIVE_FIELDS = frozenset({
+    "current_salary_usd", "bank_name", "bank_account_number", "bank_account_name", "bank_branch", "bank_ifsc",
+    "pan_number", "pan_name", "pan_dob",
+})
+
+
+def _forbid_self(code: str, message: str) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error_response(code, message))
+
+
+def _reject_self_action(actor: Employee, reason: str) -> None:
+    logger.warning("security.self_action_rejected", actor_employee_id=actor.id, reason=reason)
+
+
+async def _remove_admin_guarded(db: AsyncSession, employee_id: int, values: dict) -> None:
+    """Demote or deactivate an ADMIN only if another ACTIVE ADMIN remains. The check and the write are ONE conditional
+    UPDATE, so concurrent requests cannot both pass a separate check (SQLite serialises writers; a conflicting
+    concurrent write surfaces as OperationalError and is reported as 409). Raises HTTPException on refusal."""
+    other_active_admins = (
+        select(func.count(Employee.id))
+        .where(Employee.role == Role.ADMIN, Employee.status == EmployeeStatus.ACTIVE, Employee.id != employee_id)
+        .scalar_subquery()
+    )
+    try:
+        result = await db.execute(
+            update(Employee).where(Employee.id == employee_id, other_active_admins >= 1).values(**values)
+            .execution_options(synchronize_session=False)
+        )
+    except OperationalError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail=error_response("CONCURRENT_UPDATE", "Another change is in progress. Please retry.")) from exc
+    if result.rowcount != 1:
+        await db.rollback()
+        logger.warning("security.last_admin_protected", employee_id=employee_id)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail=error_response("LAST_ACTIVE_ADMIN", "At least one active administrator must remain"))
 
 
 def _directory_visibility(viewer: Employee):
@@ -802,6 +845,12 @@ async def upload_my_document(
     normalized_type = document_type.strip().upper()
     if normalized_type not in ALLOWED_DOCUMENT_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document type")
+    # RBAC step 4 (Decision 2): an ADMIN must not place a payslip in their own record through self-service either
+    # (the payroll authority would otherwise approve its own payroll documents). Employees' self-uploaded documents
+    # follow the existing documented policy (see the step 4 report). Checked before the file is read or stored.
+    if normalized_type == "PAYSLIP" and current_user.role == Role.ADMIN:
+        _reject_self_action(current_user, "SELF_PAYSLIP_UPLOAD")
+        raise _forbid_self("SELF_PAYSLIP_FORBIDDEN", "Payslips for your own record must be uploaded by another administrator")
 
     raw = await file.read()
     if len(raw) == 0:
@@ -977,6 +1026,11 @@ async def upload_employee_payslip(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=error_response("EMPLOYEE_NOT_FOUND", "Employee not found"),
         )
+    # RBAC step 4 (Decision 2): nobody uploads payroll documents into their own record, administrators included;
+    # checked before the file is read or stored.
+    if employee.id == uploader.id:
+        _reject_self_action(uploader, "SELF_PAYSLIP_UPLOAD")
+        raise _forbid_self("SELF_PAYSLIP_FORBIDDEN", "Payslips for your own record must be uploaded by another administrator")
     # S-01c: payslips only for direct reports (never the manager's own payroll documents); before the file is stored.
     _ensure_manager_scope(uploader, employee, allow_self=False)
 
@@ -1135,7 +1189,11 @@ async def deactivate_employee(
             detail=error_response("ALREADY_INACTIVE", "Employee is already inactive"),
         )
 
-    employee.status = EmployeeStatus.INACTIVE
+    if employee.role == Role.ADMIN:
+        # RBAC step 4: never deactivate the last active administrator (atomic, race-safe guard).
+        await _remove_admin_guarded(db, employee.id, {"status": EmployeeStatus.INACTIVE})
+    else:
+        employee.status = EmployeeStatus.INACTIVE
     await db.commit()
     await db.refresh(employee)
     return success_response({"id": employee.id, "status": employee.status.value})
@@ -1470,7 +1528,7 @@ async def update_employee_job_title(
 async def update_employee(
     employee_id: int,
     payload: EmployeeAdminUpdate,
-    _: Employee = Depends(require_roles(Role.ADMIN)),
+    current_user: Employee = Depends(require_roles(Role.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     employee = (await db.execute(select(Employee).where(Employee.id == employee_id))).scalar_one_or_none()
@@ -1479,6 +1537,29 @@ async def update_employee(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=error_response("EMPLOYEE_NOT_FOUND", "Employee not found"),
         )
+
+    # RBAC step 4 (Decision 2): checked before anything is modified, so a refused request changes nothing.
+    new_role: Role | None = None
+    if payload.role is not None:
+        try:
+            new_role = Role(payload.role.strip().upper())
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_response("INVALID_ROLE", "role must be ADMIN, MANAGER, or EMPLOYEE"),
+            ) from exc
+    if employee.id == current_user.id:
+        if new_role is not None and new_role != employee.role:
+            _reject_self_action(current_user, "SELF_ROLE_CHANGE")
+            raise _forbid_self("SELF_ROLE_CHANGE_FORBIDDEN", "You cannot change your own role")
+        if SELF_SENSITIVE_FIELDS & payload.model_fields_set:
+            _reject_self_action(current_user, "SELF_SENSITIVE_EDIT")
+            raise _forbid_self("SELF_SENSITIVE_EDIT_FORBIDDEN",
+                               "Salary, bank and PAN details on your own record must be changed by another administrator")
+        if "password" in payload.model_fields_set:
+            _reject_self_action(current_user, "SELF_PASSWORD_RESET")
+            raise _forbid_self("SELF_PASSWORD_RESET_FORBIDDEN",
+                               "Use POST /api/v1/auth/change-password to change your own password")
 
     if payload.email is not None:
         normalized_email = payload.email.strip().lower()
@@ -1505,14 +1586,13 @@ async def update_employee(
             )
         employee.department_id = payload.department_id
 
-    if payload.role is not None:
-        try:
-            employee.role = Role(payload.role.strip().upper())
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=error_response("INVALID_ROLE", "role must be ADMIN, MANAGER, or EMPLOYEE"),
-            ) from exc
+    if new_role is not None and new_role != employee.role:
+        if employee.role == Role.ADMIN:
+            # Demoting an administrator: guarded so at least one active administrator always remains.
+            await _remove_admin_guarded(db, employee.id, {"role": new_role})
+            await db.refresh(employee, attribute_names=["role"])
+        else:
+            employee.role = new_role
 
     if payload.name is not None:
         employee.name = payload.name.strip()

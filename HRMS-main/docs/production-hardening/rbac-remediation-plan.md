@@ -45,7 +45,7 @@
 | 1 | **Route-permission regression suite**: every API route (77 method+path pairs) × anonymous, employee, manager, admin with an explicit expected outcome class, plus a completeness test that fails on unclassified routes. It encodes **current** behaviour; later steps edit the expectations. | **done** |
 | 2 | Directory scope (decision 1): list, detail, profile pictures, limited org chart; identical 404 for out-of-scope ids | **done** |
 | 3 | Manager skill search (decisions 1 and 6): `GET /api/v1/employees/skill-search` (MANAGER, ADMIN) and the Copilot path (MANAGER pure skill questions answered by the same backend-authored query in `app/services/skill_search.py`, not model SQL); capability `SKILL_SEARCH_ORG` replaces `DIRECTORY_READ`; fields employee_id, employee_name, department, skill, level; tests `tests/rbac/test_skill_search.py`, `tests/ai/sql/test_skill_search_path.py` | **done** |
-| 4 | Admin self-actions and self-service password change (decision 2, X-1) | pending |
+| 4 | Admin self-actions and self-service password change (decision 2, X-1): self role, salary/bank/PAN, admin-endpoint password reset and self payslip refused; last-active-admin invariant via one conditional UPDATE (concurrency-tested); `POST /api/v1/auth/change-password` (throttled; tokens stay valid until expiry - no revocation); see `authorization-matrix.md` §2 | **done** |
 | 5 | Ticket status (decision 4): API, AI parity, UI | pending |
 | 6 | Announcements and polls audience; project catalogue and status rules (decision 5, X-2, X-3) | pending |
 | 7 | RAG audiences (decision 3): migration, list, download, indexing, retrieval, citations, conversation replay, synthetic negative tests | pending |
