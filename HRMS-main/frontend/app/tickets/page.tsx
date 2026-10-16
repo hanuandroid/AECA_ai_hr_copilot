@@ -116,6 +116,12 @@ export default function TicketsPage() {
     if (!token) return;
     const result = await updateTicketStatus(token, ticketId, nextStatus);
     if (!result.ok) {
+      // The backend decides who may change status (assignee, manager in scope, admin); refresh to show its view.
+      if (result.status === 403 || result.status === 404) {
+        await loadData();
+        setError("You are not allowed to change this ticket's status.");
+        return;
+      }
       setError("Failed to update status");
       return;
     }

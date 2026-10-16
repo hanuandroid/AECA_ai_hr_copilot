@@ -98,7 +98,7 @@ def test_matrix_is_immutable_at_runtime():
     "capability,role",
     [
         # D7: stricter than the existing endpoints (characterized in tests/characterization/).
-        (C.TICKET_STATUS_UPDATE, E),  # existing API lets ticket owners update status
+        (C.TICKET_STATUS_UPDATE, E),  # existing API lets an EMPLOYEE assignee update status (owners: no, RBAC step 5)
         (C.PROJECT_CREATE, M),  # existing API lets managers create projects
     ],
 )

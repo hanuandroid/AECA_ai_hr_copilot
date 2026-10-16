@@ -49,7 +49,9 @@ Legend:
 | Route | Role gate | Object scope | Evidence |
 |---|---|---|---|
 | `GET /tickets`, `POST /tickets` | any | Employee: raised by or assigned to self. Manager: raised by or assigned to self, or raised by direct reports (S-01a). ADMIN: all | `characterization/test_tickets.py` |
-| `POST /tickets/{id}/assign`, `…/status`, `…/onboarding-tasks`, `…/complete` | role logic in handler | Out-of-scope → 404 identical to unknown; manager assignees limited to self or direct reports | `characterization/test_tickets.py` |
+| `POST /tickets/{id}/assign`, `…/onboarding-tasks` | MANAGER / ADMIN (handler) | Out-of-scope → 404 identical to unknown; manager assignees limited to self or direct reports. Assignment also moves OPEN → IN_PROGRESS | `characterization/test_tickets.py` |
+| `POST /tickets/{id}/status` | any (handler) | **RBAC step 5 (decision 4, 2026-10-17):** ADMIN any ticket; MANAGER in S-01a scope (out-of-scope → 404); EMPLOYEE **only as the current assignee**. The EMPLOYEE owner gets 403 `FORBIDDEN` (before: allowed). Role from the DB; extra body fields ignored | `rbac/test_ticket_status.py`, `characterization/test_tickets.py` |
+| `POST /tickets/{id}/onboarding-tasks/{task_id}/complete` | any (handler) | Owner or assignee (employee), manager in scope, ADMIN. Unchanged by step 5: completing a task does not change ticket status | `characterization/test_tickets.py` |
 
 ### HR policies (now 6 routes)
 | Route | Role gate | Object scope | Evidence |

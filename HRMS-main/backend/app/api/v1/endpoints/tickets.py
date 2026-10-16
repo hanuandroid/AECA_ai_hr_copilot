@@ -191,8 +191,13 @@ async def update_ticket_status(
     if ticket is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_response("TICKET_NOT_FOUND", "Ticket not found"))
 
-    if current_user.role not in {Role.ADMIN, Role.MANAGER} and ticket.assignee_id != current_user.id and ticket.employee_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error_response("FORBIDDEN", "Not allowed to update this ticket"))
+    # RBAC step 5 (decision 4): employees raise tickets and check their status but do not change it; only the assignee
+    # does. Owning a ticket no longer grants status changes (previously the EMPLOYEE owner could re-status it).
+    if current_user.role not in {Role.ADMIN, Role.MANAGER} and ticket.assignee_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_response("FORBIDDEN", "Only the ticket assignee or a manager can change ticket status"),
+        )
     await _ensure_manager_ticket_scope(current_user, ticket, db, _ticket_not_found())
 
     try:

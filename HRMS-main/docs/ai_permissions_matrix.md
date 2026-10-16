@@ -25,7 +25,7 @@ The value in each cell is the **target rule**. `—` means denied.
 | LEAVE_REJECT | ORG_EXCEPT_SELF | REPORTS | — | same |
 | TICKET_CREATE | SELF | SELF | SELF | |
 | TICKET_ASSIGN | ORG | TEAM | — | target = ticket owner. **Stricter than API** (managers: any ticket). |
-| TICKET_STATUS_UPDATE | ORG | TEAM | — | **stricter than API** (owners may update). The assignment matrix says "Employee: No". |
+| TICKET_STATUS_UPDATE | ORG | TEAM | — | **stricter than API** (since RBAC step 5 the API lets only an EMPLOYEE *assignee* update status; owners no longer can). The assignment matrix says "Employee: No". |
 | ANNOUNCEMENT_CREATE | NONE | NONE | — | |
 | PROJECT_ASSIGN | ORG | TEAM | — | **stricter than API (R4)** |
 | PROJECT_CREATE | NONE | — | — | **stricter than API** (managers may create). The assignment lists it as an admin action. |

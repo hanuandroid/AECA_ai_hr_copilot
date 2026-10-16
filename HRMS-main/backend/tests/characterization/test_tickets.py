@@ -158,13 +158,14 @@ async def test_assign_not_found(client, auth, ticket_id, assignee_id, code):
 # --- POST /tickets/{id}/status ---------------------------------------------
 
 
-async def test_ticket_owner_employee_can_update_status(client, auth):
-    """CURRENT BEHAVIOUR: owners/assignees may update status. The AI matrix is stricter (EMPLOYEE: no)."""
+async def test_ticket_owner_employee_cannot_update_status(client, auth):
+    """RBAC step 5 (decision 4). Old behaviour (until 2026-10-17): the EMPLOYEE owner could re-status their own ticket
+    (200, RESOLVED). Now only the assignee, a manager in scope or an admin can; see tests/rbac/test_ticket_status.py."""
     response = await client.post(
         f"/api/v1/tickets/{EMPLOYEE_TICKET_ID}/status", json={"status": "resolved"}, headers=await auth("employee")
     )
-    assert response.status_code == 200
-    assert data(response)["status"] == "RESOLVED"
+    assert response.status_code == 403
+    assert error_code(response) == "FORBIDDEN"
 
 
 async def test_unrelated_employee_cannot_update_ticket_status(client, auth):
