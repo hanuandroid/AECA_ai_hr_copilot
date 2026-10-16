@@ -1,0 +1,54 @@
+# RBAC remediation plan (approved 2026-10-16)
+
+**Inputs:**
+- `assignment_05_ai_hr_copilot.md`
+- The Phase 0 RBAC audit (findings A-01 to A-09)
+- `authorization-matrix.md`
+- The assignment-compliance review (C-01, D1–D5)
+
+**Status:** IN PROGRESS. The release status stays **NOT YET PRODUCTION READY**.
+
+**Rules:**
+- The backend is the authorization boundary, and backend changes come before frontend changes.
+- Every intentional behaviour change updates the affected tests, with a docstring recording the old behaviour.
+- New negative tests cover IDOR, forged ids, direct URLs, restricted RAG documents, unauthorized SQL and action execution.
+- Small local commits. No push.
+
+## 1. Approved decisions
+
+| # | Decision (as approved) |
+|---|---|
+| 1 | **Employee directory.** ADMIN: organisation-wide directory and authorized details. MANAGER: self and direct reports for general employee details. EMPLOYEE: own record only; the employee list and other employees' detail endpoints are denied. The limited organisation chart and birthdays stay available to all roles. Photos are available only for people visible in the chart. A separate organisation-wide **manager skill search** returns only approved directory fields and skills. |
+| 2 | **Admin self-actions.** No self role changes. Never demote or deactivate the last active admin. Block self-edits to salary, bank and PAN fields, and self payslip uploads; these require another admin. Password changes go through a secure self-service flow. |
+| 3 | **RAG audiences.** ALL, MANAGERS and ADMINS. Existing policies migrate to ALL. Unknown or malformed values fail closed. Enforced in listing, downloads, ingestion and indexing, retrieval, citations, and any cache or conversation history that could expose restricted content. Synthetic negative tests cover title, quotation, synonym and citation-based retrieval attempts. |
+| 4 | **Tickets.** Employees create tickets and check status, but cannot change status. Authorized managers and assignees keep status updates within their scope. The same rule applies to the API, the frontend and AI tools. |
+| 5 | **Announcements, polls, projects.** Managers create **team-scoped** announcements and polls. Only admins publish organisation-wide announcements and manage organisation-wide polls. Managers assign employees to projects within their scope. Project catalogue creation is admin-only. Managers change status only on projects they are authorized to manage. All assignment-required manager capabilities are preserved. |
+| 6 | **Skill search.** Managers search skills organisation-wide through a dedicated restricted query path that returns only approved directory fields and skills. No wider manager access to payroll, leave, tickets, job history or other restricted data. Employee SQL stays self-scoped, and the existing SQL controls are preserved. |
+
+## 2. Conflicts with existing rules and how they are resolved (documented, not silently changed)
+
+| # | Existing behaviour or gap | Resolution |
+|---|---|---|
+| X-1 | **No self-service password change exists.** Passwords change only through the admin `PUT /employees/{id}`. | Add `POST /api/v1/auth/change-password`. It requires the current password and a new one of at least 8 characters, is throttled like login, never returns or logs the passwords, and is audited by structured log. The admin endpoint refuses `password` for the caller's own record. Existing tokens stay valid until they expire (15 minutes); there's no revocation list (B-17). |
+| X-2 | **Announcements and polls have no audience or team field.** | New migration adds `audience` (`ORG` or `TEAM`) and `team_manager_id`. Existing rows become `ORG`. TEAM items are visible to the authoring manager and their direct reports; ORG items to everyone. Managers can only create TEAM items; admins create either. Results of a TEAM poll are visible only within that team, plus admins. |
+| X-3 | **Projects have no owner.** "Authorized to manage" isn't modelled. | **Interpretation, recorded here:** a manager may change a project's status only if they or one of their direct reports is currently assigned to it. No ownership data is invented. If a product owner wants an explicit owner, that's a later schema change. |
+| X-4 | The org chart lists **all** employees, including inactive ones; the photo endpoint serves anyone's photo. | "Limited chart" means **active** employees with `id`, `name`, `role` and `manager_id` only. Photos are served only for active employees, the people visible in the chart. |
+| X-5 | Topbar search, the payslips and projects pages, and the AI use `GET /employees`. | They inherit the new scope. Managers see self and reports, which matches what they may act on. The topbar search is hidden for employees. Skill search becomes a separate endpoint. |
+| X-6 | The AI capability `DIRECTORY_READ` is granted to all roles but used nowhere. | Replaced by a manager and admin `SKILL_SEARCH_ORG` capability for the new restricted path. The AI matrix doc is corrected, including the announcement entry: managers **are** allowed, with TEAM scope after X-2. |
+| X-7 | Characterization tests pin today's behaviour: the directory open to all, owners changing ticket status, admin self-actions, managers creating projects. | Updated in the step that changes each behaviour, with the old behaviour documented in the test docstring. |
+
+## 3. Implementation sequence (one reviewable local commit per step)
+
+| Step | Content | Status |
+|---|---|---|
+| 0 | This plan | **done** |
+| 1 | **Route-permission regression suite**: every API route (77 method+path pairs) × anonymous, employee, manager, admin with an explicit expected outcome class, plus a completeness test that fails on unclassified routes. It encodes **current** behaviour; later steps edit the expectations. | **done** |
+| 2 | Directory scope (decision 1): list, detail, profile pictures, limited org chart; identical 404 for out-of-scope ids | pending |
+| 3 | Manager skill search (decisions 1 and 6): new restricted endpoint and SQL-agent capability, organisation-wide, approved fields only | pending |
+| 4 | Admin self-actions and self-service password change (decision 2, X-1) | pending |
+| 5 | Ticket status (decision 4): API, AI parity, UI | pending |
+| 6 | Announcements and polls audience; project catalogue and status rules (decision 5, X-2, X-3) | pending |
+| 7 | RAG audiences (decision 3): migration, list, download, indexing, retrieval, citations, conversation replay, synthetic negative tests | pending |
+| 8 | AI parity review: action registry, capabilities, confirmation-time re-authorization against steps 2–7 | pending |
+| 9 | Frontend: one permission map, role-filtered sidebar, direct-URL guards, access-denied view (all pages, including `/organization` and `/admin/*`) | pending |
+| 10 | Documentation: `authorization-matrix.md`, `ai_permissions_matrix.md`, page and endpoint inventory with verification status; full verification run | pending |
