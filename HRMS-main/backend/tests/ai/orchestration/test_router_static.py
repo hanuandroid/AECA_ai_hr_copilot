@@ -15,7 +15,7 @@ SOURCES = sorted(PACKAGE.glob("*.py"))
 BACKEND = PACKAGE.parents[3]
 
 FORBIDDEN_IMPORT_ROOTS = {"sqlalchemy", "aiosqlite", "sqlite3", "httpx", "requests", "urllib", "socket", "subprocess", "os",
-                          "shutil", "pickle", "importlib", "anthropic", "sqlglot", "langchain", "langchain_community",
+                          "shutil", "pickle", "importlib", "anthropic", "openai", "sqlglot", "langchain", "langchain_community",
                           "langchain_openai"}
 FORBIDDEN_IMPORT_MODULES = ("app.db", "app.models", "app.api", "app.services.auth", "app.core.security",
                             "app.services.ai.actions.client", "app.services.ai.actions.confirmation",

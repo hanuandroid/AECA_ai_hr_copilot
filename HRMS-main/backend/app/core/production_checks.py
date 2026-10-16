@@ -63,6 +63,13 @@ def production_problems(config: Settings, environ: Mapping[str, str] | None = No
             config.anthropic_api_key and config.anthropic_api_key.get_secret_value().strip()
         ):
             problems.append("ANTHROPIC_API_KEY is required when AI_LLM_PROVIDER=anthropic (or set AI_ENABLED=false)")
+        if config.ai_llm_provider.strip().lower() == "openai":
+            if not (config.openai_api_key and config.openai_api_key.get_secret_value().strip()):
+                problems.append("OPENAI_API_KEY is required when AI_LLM_PROVIDER=openai (or set AI_ENABLED=false)")
+            if not (config.ai_openai_model or "").strip():
+                problems.append("AI_OPENAI_MODEL is required when AI_LLM_PROVIDER=openai")
+        if config.ai_llm_provider.strip().lower() not in ("anthropic", "openai", "fake"):
+            problems.append("AI_LLM_PROVIDER must be anthropic or openai")
     return problems
 
 

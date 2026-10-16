@@ -17,7 +17,7 @@ from app.services.ai.orchestration.models import Intent
 
 PACKAGE = Path(service_module.__file__).parent
 SOURCES = sorted(PACKAGE.glob("*.py"))
-FORBIDDEN_IMPORT_ROOTS = {"httpx", "requests", "urllib", "subprocess", "os", "anthropic", "sqlglot", "langchain"}
+FORBIDDEN_IMPORT_ROOTS = {"httpx", "requests", "urllib", "subprocess", "os", "anthropic", "openai", "sqlglot", "langchain"}
 FORBIDDEN_IMPORT_MODULES = ("app.services.ai.actions.client", "app.services.ai.actions.confirmation",
                             "app.services.ai.sql.executor", "app.api", "app.services.auth", "app.core.security")
 LOG_FORBIDDEN_KEYS = {"content", "message", "text", "question", "answer", "resolved_content", "title", "rows"}

@@ -29,10 +29,16 @@ class Settings(BaseSettings):
 
     # AI copilot settings. Secrets are read from the environment only; never hardcode keys.
     ai_enabled: bool = True
-    ai_llm_provider: str = "anthropic"  # anthropic | fake
-    ai_llm_model: str = "claude-sonnet-5-5"
+    ai_llm_provider: str = "anthropic"  # anthropic | openai | fake (no automatic fallback between real providers)
+    ai_llm_model: str = "claude-sonnet-5-5"  # Anthropic models (AI_LLM_PROVIDER=anthropic)
     ai_llm_fast_model: str = "claude-haiku-4-5-20251001"
     anthropic_api_key: SecretStr | None = None
+    # OpenAI (AI_LLM_PROVIDER=openai). No default model id: the model must be chosen explicitly for the OpenAI project
+    # (it must support Structured Outputs with JSON schema). The fast model falls back to AI_OPENAI_MODEL.
+    openai_api_key: SecretStr | None = None
+    ai_openai_model: str | None = None
+    ai_openai_fast_model: str | None = None
+    ai_openai_reasoning_effort: str | None = None  # sent only when set (reasoning-capable models only)
     # Current Claude 5.x models reject non-default sampling params; only sent when explicitly set.
     ai_temperature: float | None = None
     ai_max_tokens: int = 4096
@@ -74,6 +80,11 @@ class Settings(BaseSettings):
     ai_llm_output_cost_per_mtok: float | None = None
     ai_llm_fast_input_cost_per_mtok: float | None = None
     ai_llm_fast_output_cost_per_mtok: float | None = None
+    # OpenAI pricing, kept separate: Anthropic rates never apply to OpenAI models (and vice versa).
+    ai_openai_input_cost_per_mtok: float | None = None
+    ai_openai_output_cost_per_mtok: float | None = None
+    ai_openai_fast_input_cost_per_mtok: float | None = None
+    ai_openai_fast_output_cost_per_mtok: float | None = None
     ai_conversation_context_messages: int = 6
     ai_conversation_context_chars: int = 2000
     ai_conversation_stored_message_chars: int = 4000

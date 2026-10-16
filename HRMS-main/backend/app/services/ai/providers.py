@@ -36,8 +36,39 @@ def build_llm_provider(config: Settings = settings) -> LLMProvider:
             temperature=config.ai_temperature,
             server_fallbacks=config.ai_llm_server_fallbacks,
         )
+    if provider == "openai":
+        return _openai_provider(config, kind="llm", model=config.ai_openai_model, max_tokens=config.ai_max_tokens)
     logger.error("ai.provider.unknown", kind="llm", provider=provider)
     raise AIUnavailableError()
+
+
+def _openai_provider(config: Settings, *, kind: str, model: str | None, max_tokens: int) -> LLMProvider:
+    """OpenAI needs its own key and an explicitly configured model; anything missing fails closed (never falls back
+    to another real provider)."""
+    api_key = config.openai_api_key.get_secret_value() if config.openai_api_key else ""
+    if not api_key.strip():
+        logger.warning("ai.provider.missing_key", kind=kind, provider="openai")
+        raise AIUnavailableError()
+    if not (model or "").strip():
+        logger.warning("ai.provider.missing_model", kind=kind, provider="openai")
+        raise AIUnavailableError()
+    from app.services.ai.llm.openai_provider import OpenAILLMProvider
+
+    return OpenAILLMProvider(
+        api_key=api_key,
+        model=model.strip(),
+        max_tokens=max_tokens,
+        timeout_seconds=config.ai_request_timeout_seconds,
+        temperature=config.ai_temperature,
+        reasoning_effort=config.ai_openai_reasoning_effort or None,
+    )
+
+
+def fast_model_for(config: Settings) -> str | None:
+    """Model id used for routing classification by the configured provider."""
+    if config.ai_llm_provider.strip().lower() == "openai":
+        return config.ai_openai_fast_model or config.ai_openai_model
+    return config.ai_llm_fast_model
 
 
 def build_fast_llm_provider(config: Settings = settings) -> LLMProvider:
@@ -67,6 +98,8 @@ def build_fast_llm_provider(config: Settings = settings) -> LLMProvider:
             temperature=config.ai_temperature,
             server_fallbacks=False,
         )
+    if provider == "openai":
+        return _openai_provider(config, kind="fast_llm", model=fast_model_for(config), max_tokens=1024)
     logger.error("ai.provider.unknown", kind="fast_llm", provider=provider)
     raise AIUnavailableError()
 
@@ -85,14 +118,15 @@ def build_embedding_provider(config: Settings = settings) -> EmbeddingProvider:
 
 def get_llm_provider() -> LLMProvider:
     """Process-wide provider (one HTTP client). Failures are not cached, so a fixed config recovers."""
-    key = f"{settings.ai_llm_provider}:{settings.ai_llm_model}"
+    main_model = settings.ai_openai_model if settings.ai_llm_provider.strip().lower() == "openai" else settings.ai_llm_model
+    key = f"{settings.ai_llm_provider}:{main_model}"
     if key not in _llm_cache:
         _llm_cache[key] = build_llm_provider(settings)
     return _llm_cache[key]
 
 
 def get_fast_llm_provider() -> LLMProvider:
-    key = f"fast:{settings.ai_llm_provider}:{settings.ai_llm_fast_model}"
+    key = f"fast:{settings.ai_llm_provider}:{fast_model_for(settings)}"
     if key not in _llm_cache:
         _llm_cache[key] = build_fast_llm_provider(settings)
     return _llm_cache[key]

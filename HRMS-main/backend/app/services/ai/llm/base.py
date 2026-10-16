@@ -18,6 +18,7 @@ class LLMUsage:
 
     input_tokens: int | None = None
     output_tokens: int | None = None
+    reported: bool = False  # True once the provider called report_usage (even with None = "not returned")
 
 
 # Per-task sink set by the observability wrapper; providers report usage into it when they know it.
@@ -27,7 +28,7 @@ usage_sink: ContextVar[LLMUsage | None] = ContextVar("llm_usage_sink", default=N
 def report_usage(input_tokens: int | None, output_tokens: int | None) -> None:
     sink = usage_sink.get()
     if sink is not None:
-        sink.input_tokens, sink.output_tokens = input_tokens, output_tokens
+        sink.input_tokens, sink.output_tokens, sink.reported = input_tokens, output_tokens, True
 
 
 class LLMResponse(BaseModel):

@@ -52,6 +52,7 @@ os.environ["AUTH_LOGIN_RATE_LIMIT_PER_MINUTE"] = "100000"
 os.environ["AI_LLM_PROVIDER"] = "fake"
 os.environ["AI_EMBEDDING_PROVIDER"] = "fake"
 os.environ.pop("ANTHROPIC_API_KEY", None)
+os.environ.pop("OPENAI_API_KEY", None)
 
 # App imports must come after the environment is configured.
 import httpx  # noqa: E402

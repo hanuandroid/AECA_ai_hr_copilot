@@ -17,14 +17,27 @@ from app.services.ai.limits import llm_slots
 from app.services.ai.llm.base import LLMMessage, LLMResponse, LLMUsage, StructuredT, usage_sink
 
 
+def _pricing_table(provider: str | None, config: Settings) -> dict[str | None, tuple[float | None, float | None]]:
+    """Configured USD-per-million-token rates for one provider's models. Rates are never shared across providers."""
+    if (provider or "").lower() == "openai":
+        fast = config.ai_openai_fast_model or config.ai_openai_model
+        table = {config.ai_openai_model: (config.ai_openai_input_cost_per_mtok, config.ai_openai_output_cost_per_mtok)}
+        if fast != config.ai_openai_model:
+            table[fast] = (config.ai_openai_fast_input_cost_per_mtok, config.ai_openai_fast_output_cost_per_mtok)
+        return table
+    if (provider or "anthropic").lower() == "anthropic":
+        return {
+            config.ai_llm_model: (config.ai_llm_input_cost_per_mtok, config.ai_llm_output_cost_per_mtok),
+            config.ai_llm_fast_model: (config.ai_llm_fast_input_cost_per_mtok, config.ai_llm_fast_output_cost_per_mtok),
+        }
+    return {}  # fake or unknown providers have no pricing
+
+
 def estimate_cost_usd(model: str, input_tokens: int | None, output_tokens: int | None,
-                      config: Settings = settings) -> float | None:
+                      config: Settings = settings, provider: str | None = None) -> float | None:
     if input_tokens is None or output_tokens is None:
         return None
-    pricing = {
-        config.ai_llm_model: (config.ai_llm_input_cost_per_mtok, config.ai_llm_output_cost_per_mtok),
-        config.ai_llm_fast_model: (config.ai_llm_fast_input_cost_per_mtok, config.ai_llm_fast_output_cost_per_mtok),
-    }.get(model)
+    pricing = _pricing_table(provider, config).get(model)
     if pricing is None or pricing[0] is None or pricing[1] is None:
         return None
     return round((input_tokens * pricing[0] + output_tokens * pricing[1]) / 1_000_000, 6)
@@ -67,12 +80,15 @@ class ObservedLLMProvider:
             raise
         finally:
             usage_sink.reset(token)
-        if isinstance(result, LLMResponse) and usage.input_tokens is None:
+        # Fall back to LLMResponse counts only when the provider reported nothing at all; a provider that reported
+        # "usage not returned" (None) must not be turned into a fabricated 0.
+        if isinstance(result, LLMResponse) and not usage.reported:
             usage.input_tokens, usage.output_tokens = result.input_tokens, result.output_tokens
         total = None if usage.input_tokens is None or usage.output_tokens is None else usage.input_tokens + usage.output_tokens
         record(AuditEventType.AI_PROVIDER_RESPONSE, AuditStatus.SUCCESS, duration_ms=timer.ms,
                input_tokens=usage.input_tokens, output_tokens=usage.output_tokens, total_tokens=total,
-               estimated_cost_usd=estimate_cost_usd(str(self.model), usage.input_tokens, usage.output_tokens), **meta)
+               estimated_cost_usd=estimate_cost_usd(str(self.model), usage.input_tokens, usage.output_tokens,
+                                                    provider=str(self.name)), **meta)
         return result
 
 
