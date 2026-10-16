@@ -98,6 +98,8 @@ CASES: list[Case] = [
          note="Decision 1 (step 2): EMPLOYEE denied (was ok); MANAGER sees self + direct reports only"),
     Case("GET", f"{E}/{{employee_id}}", f"{E}/{OTHER}", (AUTH, HIDDEN, HIDDEN, OK),
          note="Decision 1 (step 2): another employee is hidden from EMPLOYEE and from a non-managing MANAGER (was ok)"),
+    Case("GET", f"{E}/skill-search", f"{E}/skill-search?skill=Python", (AUTH, DENY, OK, OK),
+         note="Step 3: restricted org-wide skill search (approved fields only); not a directory"),
     Case("GET", f"{E}/me", f"{E}/me", (AUTH, OK, OK, OK)),
     Case("PUT", f"{E}/me", f"{E}/me", (AUTH, OK, OK, OK), json={"phone": "9876543210"}),
     Case("POST", f"{E}/me/profile-picture", f"{E}/me/profile-picture", (AUTH, OK, OK, OK),

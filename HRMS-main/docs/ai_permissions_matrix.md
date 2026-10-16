@@ -11,7 +11,7 @@ The value in each cell is the **target rule**. `—` means denied.
 | Capability | ADMIN | MANAGER | EMPLOYEE | Notes |
 |---|---|---|---|---|
 | POLICY_READ | NONE | NONE | NONE | policy RAG |
-| DIRECTORY_READ | NONE | NONE | NONE | directory fields, departments, skills, project catalog ("search by skill: Limited", "general catalog") |
+| SKILL_SEARCH_ORG | ORG | ORG | — | **Restricted organisation-wide skill search** (RBAC step 3, 2026-10-16; replaces the unused `DIRECTORY_READ`). Approved fields only: employee_id, employee_name, department, skill, level (active employees). Copilot: a MANAGER's pure skill question is answered by the dedicated backend query (`services/ai/sql/skill_search.py`), not model SQL. API: `GET /api/v1/employees/skill-search`. Not a directory: general employee data stays SELF/TEAM/ORG-scoped. EMPLOYEE: "search by skill: Limited" = own skills via SELF-scoped SQL |
 | HR_READ_SELF | SELF | SELF | SELF | own leave/balance/projects/tickets/job history |
 | HR_READ_TEAM | TEAM | TEAM | — | caller + direct reports |
 | HR_READ_ORG | ORG | — | — | |
@@ -47,7 +47,7 @@ Target rules:
 **Deviations from the Phase 2 prompt's draft matrix (decided per D7 and the assignment matrix):**
 - TICKET_STATUS_UPDATE for EMPLOYEE: draft Y → **N**. The assignment matrix row "Assign/update ticket" says Employee: No.
 - PROJECT_CREATE for MANAGER: draft Y → **N**. The assignment lists "Create projects" under Admin actions only.
-- Added DIRECTORY_READ, SQL_VIEW_RAW, PAYROLL_READ_ORG and AUDIT_READ_OWN/ORG to cover assignment matrix rows the draft didn't have.
+- Added DIRECTORY_READ, SQL_VIEW_RAW, PAYROLL_READ_ORG and AUDIT_READ_OWN/ORG to cover assignment matrix rows the draft didn't have. (2026-10-16: DIRECTORY_READ, granted to all roles but never used, was replaced by SKILL_SEARCH_ORG for MANAGER and ADMIN; RBAC step 3.)
 - Tickets for MANAGER: the Phase 0 design said "ALL (matches existing API)". It is now **TEAM**, so one team rule applies across all employee-owned data (stricter, allowed by D7).
 
 Inactive users are denied **every** capability, regardless of role.

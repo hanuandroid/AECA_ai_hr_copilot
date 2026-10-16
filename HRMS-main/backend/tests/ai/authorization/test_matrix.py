@@ -21,7 +21,7 @@ A, M, E = Role.ADMIN, Role.MANAGER, Role.EMPLOYEE
 # capability: (ADMIN, MANAGER, EMPLOYEE); None = denied
 EXPECTED: dict[Capability, tuple[TargetRule | None, TargetRule | None, TargetRule | None]] = {
     C.POLICY_READ: (T.NONE, T.NONE, T.NONE),
-    C.DIRECTORY_READ: (T.NONE, T.NONE, T.NONE),
+    C.SKILL_SEARCH_ORG: (T.ORG, T.ORG, None),  # RBAC step 3: employees have no organisation-wide skill search
     C.HR_READ_SELF: (T.SELF, T.SELF, T.SELF),
     C.HR_READ_TEAM: (T.TEAM, T.TEAM, None),
     C.HR_READ_ORG: (T.ORG, None, None),

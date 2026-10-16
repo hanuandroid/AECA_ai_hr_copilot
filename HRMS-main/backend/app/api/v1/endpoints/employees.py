@@ -11,6 +11,7 @@ from pypdf import PdfReader, PdfWriter
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from sqlalchemy import desc, func, or_, select, true
+from sqlalchemy import text as sa_text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,6 +37,7 @@ from app.schemas.employee import (
     ProjectCreate,
     ProjectStatusUpdate,
 )
+from app.services import skill_search
 from app.services.auth import get_current_user, require_roles
 
 router = APIRouter()
@@ -545,6 +547,29 @@ async def list_employees(
         "meta": {"total": total, "limit": limit, "offset": offset},
     }
     return success_response(data)
+
+
+@router.get("/skill-search")
+async def search_employee_skills(
+    skill: str = Query(min_length=skill_search.MIN_TERM, max_length=skill_search.MAX_TERM),
+    limit: int = Query(default=20, ge=1, le=skill_search.MAX_LIMIT),
+    offset: int = Query(default=0, ge=0),
+    _: Employee = Depends(require_roles(Role.ADMIN, Role.MANAGER)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Restricted organisation-wide skill search (RBAC step 3): MANAGER and ADMIN; approved fields only
+    (employee_id, employee_name, department, skill, level) for active employees. Not a directory: it does not widen
+    GET /employees or employee-detail scope."""
+    try:
+        term = skill_search.normalize_term(skill)
+    except skill_search.InvalidSkillQuery as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=error_response("INVALID_SKILL_QUERY", str(exc))) from exc
+    params = skill_search.search_params(skill_search.like_pattern(term), limit=limit, offset=offset)
+    total = (await db.execute(sa_text(skill_search.COUNT_SQL), {"pattern": params["pattern"]})).scalar_one()
+    rows = (await db.execute(sa_text(skill_search.SEARCH_SQL), params)).mappings().all()
+    return success_response({"items": [skill_search.to_item(row) for row in rows],
+                             "meta": {"total": total, "limit": params["limit"], "offset": params["offset"]}})
 
 
 @router.get("/me")

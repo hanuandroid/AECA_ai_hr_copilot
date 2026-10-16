@@ -6,7 +6,9 @@ class Capability(str, enum.Enum):
 
     # Knowledge
     POLICY_READ = "POLICY_READ"
-    DIRECTORY_READ = "DIRECTORY_READ"  # directory fields, departments, skills, project catalog
+    # Restricted organisation-wide skill search (RBAC step 3): approved fields only (employee id, name, department,
+    # skill, level). Not a directory: general employee data stays SELF/TEAM/ORG-scoped by the SQL and HR capabilities.
+    SKILL_SEARCH_ORG = "SKILL_SEARCH_ORG"
 
     # Protected HR data about a specific employee (leave, projects, job history, tickets)
     HR_READ_SELF = "HR_READ_SELF"

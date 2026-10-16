@@ -20,13 +20,15 @@ Legend:
 ### Employees (26 routes)
 | Route | Role gate | Object scope | Evidence |
 |---|---|---|---|
-| `GET /employees`, `GET /employees/departments` | any | Directory fields only, active employees; all employees and emails are listable (directory feature) | code; `characterization/test_employees.py` (fields) |
-| `GET /employees/{id}` | any | Financial / government-ID fields: self + ADMIN. Phone / address / blood type: self + ADMIN + direct manager (B-01) | `characterization/test_employees.py` |
+| `GET /employees` | ADMIN, MANAGER (EMPLOYEE 403) | **RBAC step 2:** ADMIN all active employees; MANAGER self + direct reports; directory fields only | `rbac/test_directory_scope.py`, `rbac/test_route_permissions.py` |
+| `GET /employees/departments` | any | Department catalogue | code |
+| `GET /employees/skill-search` | ADMIN, MANAGER (EMPLOYEE 403) | **RBAC step 3:** restricted organisation-wide skill search; fields employee_id, employee_name, department, skill, level; active employees; does not widen list or detail | `rbac/test_skill_search.py`, `ai/sql/test_skill_search_path.py` |
+| `GET /employees/{id}` | any (scoped) | **RBAC step 2:** EMPLOYEE own record; MANAGER self + direct reports; ADMIN anyone; out of scope = the same 404 as unknown. Fields: financial / government-ID self + ADMIN; phone / address / blood type also direct manager (B-01) | `characterization/test_employees.py` |
 | `POST /employees` | ADMIN | Any role may be assigned | code |
 | `PUT /employees/{id}` | ADMIN | Any employee, **including self** (**S-02**, §2) | `characterization/test_admin_self_actions.py` |
 | `DELETE /employees/{id}` (deactivate), `PATCH …/reactivate` | ADMIN | Any employee; deactivating self is prohibited (400) | `characterization/test_employees.py`, `test_admin_self_actions.py` |
 | `GET/PUT /employees/me`, profile picture (`/me`), `/me/job-history` | any | Self only. Self may change name, phone, address, blood type, occupancy, DOB | code |
-| `GET /employees/{id}/profile-picture` | any | Any employee's photo (directory feature; business decision, Phase 2) | code |
+| `GET /employees/{id}/profile-picture` | any | **RBAC step 2:** only employees visible on the org chart (active); inactive/unknown = same 404 | `rbac/test_directory_scope.py` |
 | `GET/POST /employees/me/documents`, `DELETE /me/documents/{id}`, `GET /me/documents/{id}/download` | any | Owner only | code |
 | `POST /employees/{id}/documents` | ADMIN, MANAGER | Manager: direct reports + self (S-01b). ADMIN: anyone | `characterization/test_employees.py` |
 | `POST /employees/{id}/documents/payslip` | ADMIN, MANAGER | Manager: direct reports only, never self (S-01c). ADMIN: anyone, **including self** (**S-02**) | `characterization/test_employees.py`, `test_admin_self_actions.py` |
@@ -69,7 +71,7 @@ Legend:
 | `GET /finance/payroll/me`, `/statutory/me`, `/profile/me` | any | Self | code |
 | `GET /calendar/team` | any | Manager / ADMIN: own department; employee: self. Approved-leave markers only (Phase 1 review) | code |
 | `GET /calendar/holidays`, `/calendar/birthdays` | any | Holidays; birthdays without year | code |
-| `GET /org/tree` | any | Directory fields | code |
+| `GET /org/tree` | any | **RBAC step 2:** active employees only; id, name, role, manager_id | `rbac/test_directory_scope.py` |
 
 **Coverage gaps (no dedicated tests):** polls, attendance, finance, calendar and org tree are reviewed by code only. Their scopes are self-only or aggregate, but characterization tests are recommended (proposed, not added).
 
@@ -93,7 +95,7 @@ Current behaviour is pinned by `tests/characterization/test_admin_self_actions.p
 
 | Feature | Business purpose (inferred) | Current permissions | Cross-role exposure | Proposed options for decision |
 |---|---|---|---|---|
-| Announcements | Company and team news | Create: ADMIN, MANAGER, organisation-wide, no audience field, no edit/delete, no moderation. Read: everyone. Copilot: ADMIN only (`ANNOUNCEMENT_CREATE`) | Any manager broadcasts to the whole company. Content is not used by Policy RAG | (a) Keep. (b) ADMIN-only org-wide, managers department-scoped (needs an audience field and migration). (c) Manager posts as drafts awaiting ADMIN approval (like policies) |
+| Announcements | Company and team news | Create: ADMIN, MANAGER, organisation-wide, no audience field, no edit/delete, no moderation. Read: everyone. Copilot: MANAGER and ADMIN (`ANNOUNCEMENT_CREATE`; corrected 2026-10-16, this row previously said ADMIN only) | Any manager broadcasts to the whole company. Content is not used by Policy RAG | (a) Keep. (b) ADMIN-only org-wide, managers department-scoped (needs an audience field and migration). (c) Manager posts as drafts awaiting ADMIN approval (like policies) |
 | Polls | Engagement surveys | Create: ADMIN, MANAGER, organisation-wide. Vote: everyone, once. Results: aggregates to everyone at any time | Small-population polls can let readers infer individual answers. No close date | (a) Keep. (b) Results visible to the creator and ADMIN only, or only after closing. (c) Department-scoped audiences |
 | Project catalogue | Shared project list for staffing | List / create / status change: ADMIN and **any** MANAGER, organisation-wide, with no owner field. Copilot: create ADMIN-only | A manager can mark another team's project COMPLETED or ON_HOLD | (a) Keep. (b) Add `owner_id`; managers change only projects they own; ADMIN all. (c) Status changes ADMIN-only |
 

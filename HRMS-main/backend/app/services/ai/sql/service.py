@@ -24,7 +24,7 @@ from app.core.config import settings
 from app.services.ai.audit.events import AuditEventType, AuditStatus
 from app.services.ai.audit.provider import observe
 from app.services.ai.audit.recorder import Timer, record
-from app.services.ai.authorization import AIUserContext, Capability, grant_for, run_authorized, sql_read_scope
+from app.services.ai.authorization import AIUserContext, Capability, ScopeLevel, grant_for, run_authorized, sql_read_scope
 from app.services.ai.errors import AIError, AISQLError
 from app.services.ai.llm.base import LLMProvider
 from app.services.ai.providers import get_llm_provider
@@ -34,6 +34,7 @@ from app.services.ai.sql.formatter import deterministic_summary, format_answer, 
 from app.services.ai.sql.generator import SQLGenerator
 from app.services.ai.sql.models import SQLAnswer, SQLRunRecord
 from app.services.ai.sql.parser import DIALECT, parse_select
+from app.services.ai.sql import skill_search as skill_paths
 from app.services.ai.sql.scope import enforce_scope
 from app.services.ai.sql.validator import validate_generated_sql
 from app.services.ai.validation import validate_question
@@ -96,6 +97,16 @@ class SQLAgentService:
             scope = sql_read_scope(ctx)
             record.scope = scope.level.value
 
+            # RBAC step 3: a pure skill-search question from a caller whose SQL scope is narrower than the organisation
+            # is answered by the restricted organisation-wide skill search (no model SQL, approved fields only).
+            if scope.level != ScopeLevel.ORG and grant_for(ctx.role, Capability.SKILL_SEARCH_ORG) \
+                    and skill_paths.is_skill_search_question(cleaned):
+                executor = self._executor_factory()
+                skills = skill_paths.match_catalog_skills(cleaned, await skill_paths.catalog_skills(executor))
+                if skills:
+                    return await run_authorized(ctx, Capability.SKILL_SEARCH_ORG,
+                                                lambda: self._skill_search(executor, skills, record))
+
             llm = observe(self._llm_factory(), "sql")
             generated = await SQLGenerator(llm).generate(cleaned, ctx, scope, self._today())
             record.llm_calls += 1
@@ -133,6 +144,22 @@ class SQLAgentService:
         finally:
             record.duration_ms = int((time.monotonic() - started) * 1000)
             logger.info("ai.sql.run", **{k: v for k, v in vars(record).items()})
+
+    async def _skill_search(self, executor: ReadOnlySQLExecutor, skills: list[str], run: SQLRunRecord) -> SQLAnswer:
+        run.capability = Capability.SKILL_SEARCH_ORG.value
+        run.scope = ScopeLevel.ORG.value
+        run.tables = sorted(skill_paths.skill_search.TABLES)
+        items, truncated = await skill_paths.search(executor, skills, limit=self._max_rows)
+        run.row_count = len(items)
+        run.outcome = "ok"
+        noun = "match" if len(items) == 1 else "matches"
+        answer = (f"Found {len(items)} skill {noun} for {', '.join(skills)} across the organisation. "
+                  "Skill search shows only name, department, skill and level.") if items else (
+                  f"No active employee has {', '.join(skills)} recorded as a skill.")
+        if truncated:
+            answer += " Only the first results are shown."
+        return SQLAnswer(answer=answer, scope=ScopeLevel.ORG.value, columns=list(skill_paths.skill_search.RESULT_FIELDS),
+                         rows=items, row_count=len(items), truncated=truncated, sql=None)
 
 
 def get_sql_agent_service() -> SQLAgentService:
