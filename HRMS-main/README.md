@@ -159,22 +159,27 @@ Use `backend/.env.example` as reference. Current key settings:
 
 ### AI configuration (backend/.env)
 
+Provider selection (Anthropic or OpenAI), setup, mocked tests and the approved smoke test: [`docs/ai-provider-setup.md`](docs/ai-provider-setup.md).
+
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `ANTHROPIC_API_KEY` | yes, for the live model | — | Anthropic key. Environment only; never committed. |
+| `ANTHROPIC_API_KEY` | yes, when `AI_LLM_PROVIDER=anthropic` | — | Anthropic key. Environment only; never committed. |
+| `OPENAI_API_KEY` | yes, when `AI_LLM_PROVIDER=openai` | — | OpenAI key. Environment only; never committed; never sent to the browser. |
+| `AI_OPENAI_MODEL` / `AI_OPENAI_FAST_MODEL` | `AI_OPENAI_MODEL` yes, when `openai` | none / falls back to `AI_OPENAI_MODEL` | OpenAI model ids (must support Structured Outputs with JSON schema). No default model is assumed |
+| `AI_OPENAI_REASONING_EFFORT` | no | unset | Sent only when set (reasoning-capable OpenAI models) |
 | `AI_ENABLED` | no | `true` | `false` turns every AI endpoint into `503 AI_UNAVAILABLE` |
-| `AI_LLM_PROVIDER` | no | `anthropic` | `anthropic` or `fake` (fake is for tests; refused when `ENVIRONMENT=production`) |
-| `AI_LLM_MODEL` / `AI_LLM_FAST_MODEL` | no | `claude-sonnet-5-5` / `claude-haiku-4-5-20251001` | Answer/generation model, and the routing classifier model |
+| `AI_LLM_PROVIDER` | no | `anthropic` | `anthropic`, `openai` or `fake` (fake is for tests; refused when `ENVIRONMENT=production`). Switching is configuration only; a misconfigured provider fails closed (`AI_UNAVAILABLE`) and never falls back to another provider |
+| `AI_LLM_MODEL` / `AI_LLM_FAST_MODEL` | no | `claude-sonnet-5-5` / `claude-haiku-4-5-20251001` | Anthropic answer/generation model, and the routing classifier model |
 | `AI_EMBEDDING_PROVIDER` / `AI_EMBEDDING_MODEL` | no | `fastembed` / `BAAI/bge-small-en-v1.5` | Local embeddings for Policy RAG (no external API) |
 | `AI_RAG_TOP_K`, `AI_RAG_MIN_SCORE`, `AI_POLICY_CHUNK_SIZE`, `AI_POLICY_CHUNK_OVERLAP` | no | `4`, `0.35`, `800`, `120` | Retrieval and chunking |
 | `AI_SQL_MAX_ROWS`, `AI_SQL_MAX_JOINS`, `AI_SQL_TIMEOUT_SECONDS` | no | `100`, `4`, `3` | SQL agent limits |
 | `AI_ACTION_CONFIRMATION_TTL_SECONDS` | no | `300` | Lifetime of an action confirmation |
 | `AI_CONVERSATION_MAX_MESSAGES`, `AI_CONVERSATION_CONTEXT_MESSAGES`, `AI_CONVERSATION_CONTEXT_CHARS` | no | `200`, `6`, `2000` | Conversation limits and follow-up context |
 | `AI_AUDIT_ENABLED` | no | `true` | Persist AI audit events |
-| `AI_LLM_[FAST_]INPUT/OUTPUT_COST_PER_MTOK` | no | unset | Optional pricing for **estimated** cost in the usage dashboard |
+| `AI_LLM_[FAST_]INPUT/OUTPUT_COST_PER_MTOK`, `AI_OPENAI_[FAST_]INPUT/OUTPUT_COST_PER_MTOK` | no | unset | Optional per-provider pricing for **estimated** cost in the usage dashboard (rates are never shared between providers) |
 
 With `ENVIRONMENT=production` the API refuses to start with the default `JWT_SECRET_KEY`, fake AI providers, or a
-missing Anthropic key.
+missing key or model for the selected provider (`ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` + `AI_OPENAI_MODEL`).
 
 ## Common Commands
 

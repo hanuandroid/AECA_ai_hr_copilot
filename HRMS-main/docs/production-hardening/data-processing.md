@@ -1,11 +1,11 @@
 # HR Data Processing and Model-Provider Register
 
 **Status:** provisional · **Owner of open decisions:** business / legal / security (not engineering)
-**Date:** 2026-10-13 · **Scope:** every place where data leaves the backend for an AI model provider.
+**Date:** 2026-10-13 (OpenAI added 2026-10-16) · **Scope:** every place where data leaves the backend for an AI model provider.
 **Evidence:** code paths cited below; payload tests in `backend/tests/ai/orchestration/test_provider_payloads.py`.
 
-> No provider retention, training or residency guarantee is stated here. Those depend on the Anthropic account
-> configuration and contract, and remain **open decisions** (§5). Until they are confirmed, the safe defaults in §4
+> No provider retention, training or residency guarantee is stated here. Those depend on the Anthropic or OpenAI
+> account (organisation/project) configuration and contract, and remain **open decisions** (§5). Until they are confirmed, the safe defaults in §4
 > stay in place.
 
 ## 1. Providers
@@ -13,10 +13,11 @@
 | Provider | Used for | Where it runs | Configured by |
 |---|---|---|---|
 | Anthropic Messages API | Routing fallback, policy answers, SQL generation, optional SQL result wording, action proposals | External (internet) | `AI_LLM_PROVIDER=anthropic`, `AI_LLM_MODEL`, `AI_LLM_FAST_MODEL`, `ANTHROPIC_API_KEY` |
+| OpenAI Responses API (**alternative**, one provider active at a time) | Same operations as the Anthropic row, with the same payloads (§2) | External (internet) | `AI_LLM_PROVIDER=openai`, `AI_OPENAI_MODEL`, `AI_OPENAI_FAST_MODEL`, `OPENAI_API_KEY`. Requests are sent with `store=false` (not stored for later API retrieval); this is **not** Zero Data Retention |
 | fastembed `BAAI/bge-small-en-v1.5` | Policy embeddings | **Local** (in the API container); no data leaves | `AI_EMBEDDING_PROVIDER=fastembed` |
 | Hugging Face Hub | **One-time download** of the embedding model files at first ingestion; no HR data is sent | External | `AI_EMBEDDING_CACHE_DIR` (cached afterwards) |
 
-No API key is configured in this repository's environments today: **no live provider call has been made**.
+No API key is configured in this repository's environments today: **no live provider call has been made** (Anthropic or OpenAI). Only one LLM provider is active per deployment (`AI_LLM_PROVIDER`), and a misconfigured provider fails closed: there is no automatic fallback that would send data to the other processor.
 
 ## 2. Call sites (what is sent)
 
@@ -56,6 +57,8 @@ number into a question, it reaches the provider. Optional pre-provider redaction
 | `AI_ENABLED` | `false` in `production.env.example` | No provider calls until AI is deliberately enabled with an approved configuration |
 | Audit | content-free | Audit stores ids, codes, latency and token counts; message text only as a keyed fingerprint |
 | Conversations | redacted text, owner-only | Stored in the app DB (retention: see deployment runbook, provisional 90 days) |
+| OpenAI `store` | `false` on every request (`openai_provider.py`) | Responses are not kept for later retrieval through the API. Does **not** by itself establish Zero Data Retention; abuse-monitoring retention and training use depend on the organisation/project settings and contract (decision 8) |
+| OpenAI endpoint | pinned to `https://api.openai.com/v1` | An `OPENAI_BASE_URL` environment variable cannot silently redirect HR data |
 
 Failure behaviour: without a key, or when the provider fails, the Copilot returns `AI_UNAVAILABLE` / `AI_PROVIDER_ERROR`.
 Deterministic refusals and the RAG "insufficient evidence" path still work.
@@ -69,6 +72,11 @@ Deterministic refusals and the RAG "insufficient evidence" path still work.
 | 3 | Data processing agreement / contractual approval, data residency requirements | Legal | Enabling `AI_ENABLED` in production |
 | 4 | Whether `AI_SQL_RESULT_FORMATTING=llm` may ever be enabled (sends in-scope HR rows) | Legal / DPO | Any change from `deterministic` |
 | 5 | Whether to redact user-typed identifiers (PAN, account numbers, tokens) before provider calls | Security + product | Optional hardening |
-| 6 | Employee notice / transparency text for the Copilot | HR / legal | Production rollout |
+| 6 | Employee notice / transparency text for the Copilot (must name the processor actually used: Anthropic or OpenAI) | HR / legal | Production rollout |
+| 7 | **OpenAI:** which employee data categories may be sent to OpenAI (same categories as #1, decided separately per processor) | Legal / DPO | Selecting `AI_LLM_PROVIDER=openai` with real HR data |
+| 8 | **OpenAI:** the actual organisation/project retention, data-control and training-use settings (e.g. whether Zero Data Retention or modified abuse-monitoring is granted), verified in the real account and current terms. Nothing here assumes ZDR | Account owner + legal | Same |
+| 9 | **OpenAI:** DPA / contractual approval and any data-residency requirement (whether a regional project or endpoint is required) | Legal | Same |
+| 10 | **OpenAI:** PII minimisation and redaction policy for prompts (#5 applied to OpenAI) | Security + product | Same |
+| 11 | **OpenAI:** live evaluation budget and the approved model id (must support Structured Outputs with JSON schema) | Product + finance | Live validation (Phase 3 workstream 3.1) |
 
-Status of all items above: **OPEN** (none confirmed as of 2026-10-13).
+Status of all items above: **OPEN** (none confirmed as of 2026-10-16). Development validation must use synthetic data only; no real employee data may be sent to either provider before these decisions are approved.

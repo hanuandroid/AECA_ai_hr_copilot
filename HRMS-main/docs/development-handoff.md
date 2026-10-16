@@ -73,7 +73,7 @@ All production-hardening documents are in `docs/production-hardening/`.
 |---|---|
 | Security | S-02, S-03 open; B-17 (JWT in `localStorage`, no revocation) |
 | Dependencies | `braces` GHSA-vfj7 (build-time; no patched release) has a PROPOSED exception, so the CI gate fails. Next's postcss is fixed by an override (remove it on `next@16`) |
-| AI evaluation | No live-model results (no key). Retrieval calibration is a proposal on a small demo dataset |
+| AI evaluation | No live-model results with either provider (no key). OpenAI provider added 2026-10-16 and verified with mocked clients only (`docs/ai-provider-setup.md`); OpenAI governance decisions 7–11 open (`data-processing.md` §5). Retrieval calibration is a proposal on a small demo dataset |
 | Operations | CI never ran on GitHub. No TLS proxy, alerting or backup schedule. Single worker / single instance only |
 
 ## 5. Required versions
@@ -131,7 +131,7 @@ docker compose exec api python scripts/ingest_policies.py       # needs AI_ENABL
 | Core and auth | `ENVIRONMENT`, `APP_NAME`, `APP_TIMEZONE`, `DATABASE_URL`, `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS` |
 | HTTP | `ALLOWED_HOSTS`, `CORS_ALLOW_ORIGINS`, `FORWARDED_ALLOW_IPS` |
 | Storage | `EMPLOYEE_DOCUMENT_UPLOAD_DIR`, `POLICY_UPLOAD_DIR`, `PROFILE_PHOTO_UPLOAD_DIR` |
-| AI provider | `AI_ENABLED`, `AI_LLM_PROVIDER`, `AI_LLM_MODEL`, `AI_LLM_FAST_MODEL`, `ANTHROPIC_API_KEY`, `AI_MAX_TOKENS`, `AI_TEMPERATURE`, `AI_LLM_EFFORT`, `AI_LLM_SERVER_FALLBACKS`, `AI_REQUEST_TIMEOUT_SECONDS`, `AI_*_COST_PER_MTOK` |
+| AI provider | `AI_ENABLED`, `AI_LLM_PROVIDER` (`anthropic` / `openai` / `fake`), `AI_LLM_MODEL`, `AI_LLM_FAST_MODEL`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `AI_OPENAI_MODEL`, `AI_OPENAI_FAST_MODEL`, `AI_OPENAI_REASONING_EFFORT`, `AI_OPENAI_*_COST_PER_MTOK`, `AI_MAX_TOKENS`, `AI_TEMPERATURE`, `AI_LLM_EFFORT`, `AI_LLM_SERVER_FALLBACKS`, `AI_REQUEST_TIMEOUT_SECONDS`, `AI_*_COST_PER_MTOK` |
 | AI behaviour | `AI_EMBEDDING_PROVIDER`, `AI_EMBEDDING_MODEL`, `AI_EMBEDDING_CACHE_DIR`, `AI_RAG_TOP_K`, `AI_RAG_MIN_SCORE`, `AI_POLICY_CHUNK_SIZE`, `AI_POLICY_CHUNK_OVERLAP`, `AI_SQL_MAX_ROWS`, `AI_SQL_MAX_JOINS`, `AI_SQL_TIMEOUT_SECONDS`, `AI_SQL_RESULT_FORMATTING` (keep `deterministic`), `AI_ACTION_CONFIRMATION_TTL_SECONDS`, `AI_ACTION_EXECUTION_TIMEOUT_SECONDS`, `AI_CONVERSATION_*` |
 | Limits | `AI_RATE_LIMIT_PER_MINUTE`, `AI_DAILY_TOKEN_BUDGET`, `AI_DAILY_COST_CAP_USD`, `AI_MAX_CONCURRENT_LLM_CALLS`, `AI_LLM_QUEUE_TIMEOUT_SECONDS`, `AUTH_LOGIN_RATE_LIMIT_PER_MINUTE` |
 | Audit and retention | `AI_AUDIT_ENABLED`, `AI_AUDIT_FINGERPRINT_KEY`, `AI_CONVERSATION_RETENTION_DAYS`, `AI_PENDING_ACTION_RETENTION_DAYS`, `AI_AUDIT_RETENTION_DAYS`, `ALLOW_EXTERNAL_TRACING` |

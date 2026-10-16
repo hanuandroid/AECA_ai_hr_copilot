@@ -40,9 +40,9 @@ Full evidence, data flows and diagrams are in [ai-components-architecture-and-pr
 | Prompt-injection containment | IMPLEMENTED | Authorization independent of the model; escaped context | Adversarial matrix `[inherited]` | — |
 | Prompt-injection detection | PARTIAL | Refusal regexes | `[runtime]` refusals | Regex bypass |
 | Output guardrails | IMPLEMENTED | `rag/guard.py`, `sql/formatter.py` | Tests | Heuristic |
-| Provider abstraction | IMPLEMENTED | `llm/base.py`, `llm/anthropic_provider.py`, `providers.py` | Tests | Anthropic only |
+| Provider abstraction | IMPLEMENTED | `llm/base.py`, `llm/anthropic_provider.py`, `llm/openai_provider.py`, `providers.py` | Tests (mocked clients) | Anthropic or OpenAI, one active per deployment; no live call verified for either |
 | AI gateway | MISSING | — | — | — |
-| Retries | PARTIAL | Anthropic SDK `max_retries=2` | Code | No deadline or breaker |
+| Retries | PARTIAL | Anthropic and OpenAI SDKs `max_retries=2` | Code | No circuit breaker |
 | Provider / model fallback | MISSING | — | — | Deterministic degradation only |
 | Circuit breaker | MISSING | — | — | — |
 | Caching: model and client | IMPLEMENTED | HF cache in `storage/models`; in-process provider cache | `[runtime]` | — |
