@@ -150,7 +150,7 @@ async def test_proposal_never_mutates_business_data(agent):
         ("employee", proposal("TICKET_STATUS_UPDATE", resource_id=EMPLOYEE_TICKET_ID, arguments={"status": "RESOLVED"})),  # D7
         ("employee", proposal("TICKET_ASSIGN", resource_id=EMPLOYEE_TICKET_ID, assignee_name="Manager Test")),
         ("manager", proposal("EMPLOYEE_DEACTIVATE", target_employee_name="Employee Test")),
-        ("manager", proposal("PROJECT_CREATE", arguments={"project_name": "Shadow Project"})),  # D7: API would allow
+        ("manager", proposal("PROJECT_CREATE", arguments={"project_name": "Shadow Project"})),  # API is ADMIN-only too since RBAC step 6
     ],
 )
 async def test_capability_denied_and_nothing_changes(agent, db, user_key, payload):

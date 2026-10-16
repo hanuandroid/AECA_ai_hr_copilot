@@ -162,6 +162,20 @@ def _ensure_can_manage_projects_of(current_user: Employee, employee: Employee) -
     _ensure_manager_scope(current_user, employee, allow_self=True)
 
 
+async def _manager_team_on_project(db: AsyncSession, manager_id: int, project_id: int) -> bool:
+    """RBAC step 6 (decision 5, X-3 interpretation): a manager may change a project's status only while they, or an
+    ACTIVE direct report (employees.manager_id, one level), are assigned to it in employee_projects. Evaluated on every
+    request from persisted rows, so an assignment change applies to the next request. There is no project owner field."""
+    direct_reports = select(Employee.id).where(Employee.manager_id == manager_id, Employee.status == EmployeeStatus.ACTIVE)
+    match = await db.execute(
+        select(EmployeeProject.id).where(
+            EmployeeProject.project_id == project_id,
+            or_(EmployeeProject.employee_id == manager_id, EmployeeProject.employee_id.in_(direct_reports)),
+        ).limit(1)
+    )
+    return match.scalar_one_or_none() is not None
+
+
 def _employee_directory_payload(e: Employee):
     return {
         "id": e.id,
@@ -1245,7 +1259,7 @@ async def list_projects_catalog(
 @router.post("/projects/catalog")
 async def create_project_catalog_item(
     payload: ProjectCreate,
-    _: Employee = Depends(require_roles(Role.ADMIN, Role.MANAGER)),
+    _: Employee = Depends(require_roles(Role.ADMIN)),  # RBAC step 6 (decision 5): catalogue creation is ADMIN-only
     db: AsyncSession = Depends(get_db),
 ):
     normalized_name = payload.name.strip()
@@ -1288,7 +1302,7 @@ async def create_project_catalog_item(
 async def update_project_catalog_status(
     project_id: int,
     payload: ProjectStatusUpdate,
-    _: Employee = Depends(require_roles(Role.ADMIN, Role.MANAGER)),
+    current_user: Employee = Depends(require_roles(Role.ADMIN, Role.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
     project = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one_or_none()
@@ -1296,6 +1310,11 @@ async def update_project_catalog_status(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=error_response("PROJECT_NOT_FOUND", "Project not found"),
+        )
+    if current_user.role == Role.MANAGER and not await _manager_team_on_project(db, current_user.id, project_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_response("FORBIDDEN", "You can only change the status of projects you or your direct reports work on"),
         )
     try:
         project.status = ProjectStatus(payload.status.strip().upper())

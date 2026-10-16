@@ -22,7 +22,7 @@ from app.services.ai.actions.models import (
 )
 from app.services.ai.actions.registry import ActionSpec
 from app.services.ai.actions.resolver import ClarificationNeeded, TargetResolver
-from app.services.ai.authorization import AIUserContext, TargetEmployee, require
+from app.services.ai.authorization import AIUserContext, TargetEmployee, TargetRule, grant_for, require
 
 _FIELD_LABELS = {
     "leave_type": "leave type (CASUAL, SICK or EARNED)", "start_date": "start date", "end_date": "end date",
@@ -102,10 +102,14 @@ async def prepare_action(
         return _prepared(spec, ticket.employee_id, ticket.id, {"ticket_id": ticket.id}, params.model_dump(mode="json"), summary)
 
     if name == ActionName.ANNOUNCEMENT_CREATE:
-        params = _validate(AnnouncementCreateParams, {"title": _clean(args.title), "body": _clean(args.body) or _clean(args.description)})
+        # RBAC step 6: the audience comes from the deterministic grant (policy.py), never from the model or the prompt.
+        audience = "ORG" if grant_for(ctx.role, capability) == TargetRule.ORG else "TEAM"
+        params = _validate(AnnouncementCreateParams, {"title": _clean(args.title), "body": _clean(args.body) or _clean(args.description),
+                                                      "audience": audience})
         preview = params.body if len(params.body) <= 160 else params.body[:157] + "..."
+        readers = "everyone" if audience == "ORG" else "your team (you and your direct reports)"
         return _prepared(spec, None, None, {}, params.model_dump(mode="json"),
-                         f"Publish announcement '{params.title}' to everyone: {preview}")
+                         f"Publish announcement '{params.title}' to {readers}: {preview}")
 
     if name == ActionName.PROJECT_ASSIGN:
         employee = await resolver.employee(capability, name=proposal.target_employee_name,

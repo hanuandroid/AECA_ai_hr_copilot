@@ -8,7 +8,8 @@ is denied. Deliberate deviations from existing endpoint behaviour:
 - PROJECT_ASSIGN: MANAGER limited to own team (existing API: anyone, R4).
 - TICKET_ASSIGN/STATUS_UPDATE: MANAGER limited to tickets raised by own team; EMPLOYEE denied
   (existing API lets owners update status; assignment matrix says "Employee: No").
-- PROJECT_CREATE: ADMIN only (existing API also allows MANAGER; assignment lists it as admin action).
+- PROJECT_CREATE: ADMIN only (since RBAC step 6 the API is ADMIN-only too).
+- ANNOUNCEMENT_CREATE: ADMIN -> ORG audience, MANAGER -> TEAM audience (RBAC step 6, same rule as the API).
 - Every capability is denied to INACTIVE users (existing auth does not check status, R9).
 """
 
@@ -37,7 +38,7 @@ _MATRIX: dict[C, dict[Role, T]] = {
     C.TICKET_CREATE: {A: T.SELF, M: T.SELF, E: T.SELF},
     C.TICKET_ASSIGN: {A: T.ORG, M: T.TEAM},
     C.TICKET_STATUS_UPDATE: {A: T.ORG, M: T.TEAM},
-    C.ANNOUNCEMENT_CREATE: {A: T.NONE, M: T.NONE},
+    C.ANNOUNCEMENT_CREATE: {A: T.ORG, M: T.TEAM},  # RBAC step 6: ADMIN publishes org-wide, MANAGER to own team
     C.PROJECT_ASSIGN: {A: T.ORG, M: T.TEAM},
     C.PROJECT_CREATE: {A: T.NONE},
     C.EMPLOYEE_DEACTIVATE: {A: T.ORG_EXCEPT_SELF},

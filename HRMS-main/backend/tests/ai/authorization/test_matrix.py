@@ -36,7 +36,7 @@ EXPECTED: dict[Capability, tuple[TargetRule | None, TargetRule | None, TargetRul
     C.TICKET_CREATE: (T.SELF, T.SELF, T.SELF),
     C.TICKET_ASSIGN: (T.ORG, T.TEAM, None),
     C.TICKET_STATUS_UPDATE: (T.ORG, T.TEAM, None),
-    C.ANNOUNCEMENT_CREATE: (T.NONE, T.NONE, None),
+    C.ANNOUNCEMENT_CREATE: (T.ORG, T.TEAM, None),  # RBAC step 6: the grant is the audience
     C.PROJECT_ASSIGN: (T.ORG, T.TEAM, None),
     C.PROJECT_CREATE: (T.NONE, None, None),
     C.EMPLOYEE_DEACTIVATE: (T.ORG_EXCEPT_SELF, None, None),
@@ -99,7 +99,7 @@ def test_matrix_is_immutable_at_runtime():
     [
         # D7: stricter than the existing endpoints (characterized in tests/characterization/).
         (C.TICKET_STATUS_UPDATE, E),  # existing API lets an EMPLOYEE assignee update status (owners: no, RBAC step 5)
-        (C.PROJECT_CREATE, M),  # existing API lets managers create projects
+        (C.PROJECT_CREATE, M),  # API matched it in RBAC step 6 (ADMIN-only); kept as a regression pin
     ],
 )
 def test_ai_is_stricter_than_existing_api_where_documented(capability, role):

@@ -230,16 +230,26 @@ async def test_employee_cannot_create_project(client, auth):
     assert response.status_code == 403
 
 
-@pytest.mark.parametrize("user_key", ["manager", "admin"])
-async def test_manager_and_admin_create_project(client, auth, user_key):
-    """CURRENT BEHAVIOUR: MANAGER may create projects. The AI matrix is stricter (ADMIN only)."""
+async def test_admin_creates_project(client, auth):
     response = await client.post(
         "/api/v1/employees/projects/catalog",
         json={"name": "Leave Analytics", "description": "Dashboards", "status": "planned"},
-        headers=await auth(user_key),
+        headers=await auth("admin"),
     )
     assert response.status_code == 200
     assert data(response)["status"] == "PLANNED"
+
+
+async def test_manager_cannot_create_project(client, auth):
+    """RBAC step 6 (decision 5). Old behaviour (until 2026-10-17): MANAGER could create catalogue projects (200) while
+    the AI matrix was already ADMIN-only. Now the API is ADMIN-only too; see tests/rbac/test_project_scope.py."""
+    response = await client.post(
+        "/api/v1/employees/projects/catalog",
+        json={"name": "Leave Analytics", "description": "Dashboards", "status": "planned"},
+        headers=await auth("manager"),
+    )
+    assert response.status_code == 403
+    assert error_code(response) == "FORBIDDEN"
 
 
 async def test_duplicate_project_name_rejected_case_insensitively(client, auth):

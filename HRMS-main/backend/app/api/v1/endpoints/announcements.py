@@ -9,6 +9,7 @@ from app.models.employee import Employee
 from app.models.enums import Role
 from app.schemas.announcement import AnnouncementCreate
 from app.services.auth import get_current_user
+from app.services.content_audience import resolve_audience, visible_to
 
 router = APIRouter()
 
@@ -20,13 +21,15 @@ async def list_announcements(
     current_user: Employee = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    _ = current_user
-    count_q = select(func.count(Announcement.id))
+    # RBAC step 6: the same audience filter for the items and the total, so hidden TEAM items are not even counted.
+    visible = visible_to(Announcement, current_user)
+    count_q = select(func.count(Announcement.id)).where(visible)
     total = (await db.execute(count_q)).scalar_one()
 
     result = await db.execute(
         select(Announcement, Employee.name)
         .join(Employee, Employee.id == Announcement.author_id)
+        .where(visible)
         .order_by(desc(Announcement.created_at), desc(Announcement.id))
         .limit(limit)
         .offset(offset)
@@ -42,6 +45,7 @@ async def list_announcements(
                     "body": announcement.body,
                     "author_id": announcement.author_id,
                     "author_name": author_name,
+                    "audience": announcement.audience,
                     "created_at": announcement.created_at,
                 }
                 for announcement, author_name in rows
@@ -63,6 +67,7 @@ async def create_announcement(
             detail=error_response("FORBIDDEN", "Only manager/admin can create announcements"),
         )
 
+    audience, team_manager_id = resolve_audience(current_user, payload.audience)
     clean_title = payload.title.strip()
     clean_body = payload.body.strip()
     if len(clean_title) < 3 or len(clean_body) < 5:
@@ -75,6 +80,8 @@ async def create_announcement(
         title=clean_title,
         body=clean_body,
         author_id=current_user.id,
+        audience=audience,
+        team_manager_id=team_manager_id,
     )
     db.add(announcement)
     await db.commit()
@@ -87,6 +94,7 @@ async def create_announcement(
             "body": announcement.body,
             "author_id": announcement.author_id,
             "author_name": current_user.name,
+            "audience": announcement.audience,
             "created_at": announcement.created_at,
         }
     )

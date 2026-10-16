@@ -74,3 +74,10 @@ class PolicyStatus(str, enum.Enum):
     PUBLISHED = "PUBLISHED"  # the active version: listed to everyone and indexed for Policy RAG
     REJECTED = "REJECTED"  # declined by an ADMIN
     ARCHIVED = "ARCHIVED"  # superseded by a newer published version of the same title
+
+
+class ContentAudience(str, enum.Enum):
+    """Who sees an announcement or poll (RBAC step 6, decision 5; migration 0022)."""
+
+    ORG = "ORG"  # everyone; only ADMIN may publish it
+    TEAM = "TEAM"  # team_manager_id, that person's direct reports, and admins

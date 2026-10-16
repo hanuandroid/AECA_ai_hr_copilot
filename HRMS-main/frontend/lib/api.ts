@@ -128,12 +128,16 @@ export type LeaveRequest = {
   approver_id: number | null;
 };
 
+// RBAC step 6: ORG = everyone (admins only); TEAM = the creator, their direct reports and admins. Enforced by the backend.
+export type ContentAudience = "ORG" | "TEAM";
+
 export type Announcement = {
   id: number;
   title: string;
   body: string;
   author_id: number;
   author_name: string;
+  audience: ContentAudience;
   created_at: string;
 };
 
@@ -237,6 +241,7 @@ export type Poll = {
   question: string;
   options: string[];
   created_by: number;
+  audience: ContentAudience;
   created_at: string;
   my_vote: number | null;
 };
@@ -1070,7 +1075,7 @@ export async function fetchAnnouncements(
 
 export async function createAnnouncement(
   token: string,
-  payload: { title: string; body: string }
+  payload: { title: string; body: string; audience?: ContentAudience }
 ): Promise<ApiResult<ApiEnvelope<Announcement> | { detail?: unknown }>> {
   const response = await fetch(`${API_BASE}/api/v1/announcements`, {
     method: "POST",
@@ -1293,7 +1298,7 @@ export async function fetchPolls(
 
 export async function createPoll(
   token: string,
-  payload: { question: string; options: string[] }
+  payload: { question: string; options: string[]; audience?: ContentAudience }
 ): Promise<ApiResult<ApiEnvelope<Poll> | { detail?: unknown }>> {
   const response = await fetch(`${API_BASE}/api/v1/polls`, {
     method: "POST",

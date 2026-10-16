@@ -10,6 +10,7 @@ from app.models.poll import Poll
 from app.models.poll_response import PollResponse
 from app.schemas.poll import PollCreate, PollVote
 from app.services.auth import get_current_user
+from app.services.content_audience import resolve_audience, visible_to
 
 router = APIRouter()
 
@@ -21,9 +22,10 @@ async def list_polls(
     current_user: Employee = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    _ = current_user
-    total = (await db.execute(select(func.count(Poll.id)))).scalar_one()
-    polls = (await db.execute(select(Poll).order_by(desc(Poll.created_at), desc(Poll.id)).limit(limit).offset(offset))).scalars().all()
+    # RBAC step 6: the same audience filter for the items and the total, so hidden TEAM polls are not even counted.
+    visible = visible_to(Poll, current_user)
+    total = (await db.execute(select(func.count(Poll.id)).where(visible))).scalar_one()
+    polls = (await db.execute(select(Poll).where(visible).order_by(desc(Poll.created_at), desc(Poll.id)).limit(limit).offset(offset))).scalars().all()
     if not polls:
         return success_response({"items": [], "meta": {"total": total, "limit": limit, "offset": offset}})
 
@@ -41,6 +43,7 @@ async def list_polls(
                     "question": poll.question,
                     "options": poll.options,
                     "created_by": poll.created_by,
+                    "audience": poll.audience,
                     "created_at": poll.created_at,
                     "my_vote": my_votes_by_poll.get(poll.id),
                 }
@@ -70,11 +73,14 @@ async def create_poll(
             detail=error_response("INVALID_POLL_OPTIONS", "At least 2 options are required"),
         )
 
-    poll = Poll(question=payload.question.strip(), options=cleaned_options, created_by=current_user.id)
+    audience, team_manager_id = resolve_audience(current_user, payload.audience)
+    poll = Poll(question=payload.question.strip(), options=cleaned_options, created_by=current_user.id,
+                audience=audience, team_manager_id=team_manager_id)
     db.add(poll)
     await db.commit()
     await db.refresh(poll)
-    return success_response({"id": poll.id, "question": poll.question, "options": poll.options, "created_by": poll.created_by, "created_at": poll.created_at})
+    return success_response({"id": poll.id, "question": poll.question, "options": poll.options, "created_by": poll.created_by,
+                             "audience": poll.audience, "created_at": poll.created_at})
 
 
 @router.post("/{poll_id}/vote")
@@ -84,8 +90,8 @@ async def vote_poll(
     current_user: Employee = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    poll = (await db.execute(select(Poll).where(Poll.id == poll_id))).scalar_one_or_none()
-    if poll is None:
+    poll = (await db.execute(select(Poll).where(Poll.id == poll_id, visible_to(Poll, current_user)))).scalar_one_or_none()
+    if poll is None:  # unknown and not-visible (another team's TEAM poll) give the same 404
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_response("POLL_NOT_FOUND", "Poll not found"))
 
     if payload.option_index >= len(poll.options):
@@ -108,9 +114,8 @@ async def poll_results(
     current_user: Employee = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    _ = current_user
-    poll = (await db.execute(select(Poll).where(Poll.id == poll_id))).scalar_one_or_none()
-    if poll is None:
+    poll = (await db.execute(select(Poll).where(Poll.id == poll_id, visible_to(Poll, current_user)))).scalar_one_or_none()
+    if poll is None:  # unknown and not-visible (another team's TEAM poll) give the same 404
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_response("POLL_NOT_FOUND", "Poll not found"))
 
     rows = (

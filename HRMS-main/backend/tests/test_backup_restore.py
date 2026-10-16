@@ -34,7 +34,7 @@ def test_backup_contains_consistent_db_uploads_and_manifest(tmp_path, uploads):
     assert result.path.name == "hrms-backup-20261013T020000Z"
     manifest = verify_backup(result.path)
     assert manifest["database_integrity"] == "ok"
-    assert manifest["alembic_revision"] == "0021_hr_policy_publication"
+    assert manifest["alembic_revision"] == "0022_content_audience"
     assert {"hrms.db", "config.json", "uploads/hr-policies/leave.md", "uploads/hr-policies/nested/doc.pdf"} <= set(manifest["files"])
     assert (result.path / "uploads" / "profile-photos").is_dir()  # absent source recorded as empty
     with sqlite3.connect(result.path / "hrms.db") as connection:
@@ -67,7 +67,7 @@ def test_restore_targets_an_explicit_empty_destination_and_verifies(tmp_path, up
     result = _backup(tmp_path, uploads)
     destination = tmp_path / "restore" / "drill"
     manifest = restore_backup(result.path, destination)
-    assert manifest["alembic_revision"] == "0021_hr_policy_publication"
+    assert manifest["alembic_revision"] == "0022_content_audience"
     assert (destination / "uploads" / "hr-policies" / "nested" / "doc.pdf").read_bytes() == b"%PDF-1.4 fake"
     with sqlite3.connect(destination / "hrms.db") as connection:
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"

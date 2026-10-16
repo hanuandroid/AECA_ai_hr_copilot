@@ -207,6 +207,11 @@ function EmployeeProjectsPageContent() {
     try {
       const result = await updateProjectCatalogStatus(token, projectId, statusValue);
       if (result.status === 401) return clearAuthAndRedirect();
+      if (result.status === 403) {
+        // RBAC step 6: managers change status only while they or a direct report are assigned to the project.
+        setError("You can only change the status of projects you or your direct reports are assigned to.");
+        return;
+      }
       if (!result.ok || !("success" in result.body) || !result.body.success) {
         setError("Failed to update project status.");
         return;
@@ -289,6 +294,8 @@ function EmployeeProjectsPageContent() {
                     </select>
                   </label>
 
+                  {/* RBAC step 6: catalogue creation is ADMIN-only (backend returns 403 to managers). */}
+                  {viewerRole === "ADMIN" && (
                   <div className="rounded-md border border-border p-3">
                     <p className="mb-2 text-xs font-medium text-slate-700">Create Project</p>
                     <div className="grid gap-3 md:grid-cols-4">
@@ -321,6 +328,7 @@ function EmployeeProjectsPageContent() {
                       </Button>
                     </div>
                   </div>
+                  )}
 
                   <div className="rounded-md border border-border p-3">
                     <p className="mb-2 text-xs font-medium text-slate-700">Assign New Project</p>

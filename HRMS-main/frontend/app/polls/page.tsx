@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { AudienceBadge, AudienceField, audienceError, audienceFor } from "@/components/content-audience";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Poll, PollResultItem, createPoll, fetchPollResults, fetchPolls, fetchProfile, votePoll } from "@/lib/api";
+import { ContentAudience, Poll, PollResultItem, createPoll, fetchPollResults, fetchPolls, fetchProfile, votePoll } from "@/lib/api";
 
 export default function PollsPage() {
   const [name, setName] = useState("User");
@@ -16,6 +17,7 @@ export default function PollsPage() {
   const [polls, setPolls] = useState<Poll[]>([]);
   const [question, setQuestion] = useState("");
   const [optionsText, setOptionsText] = useState("");
+  const [audience, setAudience] = useState<ContentAudience>("ORG");
   const [resultsByPoll, setResultsByPoll] = useState<Record<number, PollResultItem[]>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -77,9 +79,9 @@ export default function PollsPage() {
             .trim()
         )
         .filter(Boolean);
-      const result = await createPoll(token, { question: question.trim(), options });
+      const result = await createPoll(token, { question: question.trim(), options, audience: audienceFor(role, audience) });
       if (!result.ok) {
-        setError("Failed to create poll");
+        setError(audienceError(result.status, "Failed to create poll"));
         return;
       }
       setQuestion("");
@@ -94,6 +96,12 @@ export default function PollsPage() {
     if (!token) return;
     const result = await votePoll(token, pollId, optionIndex);
     if (!result.ok) {
+      if (result.status === 404) {
+        // Hidden and unknown polls look the same (RBAC step 6); refresh to the polls the backend still shows.
+        await loadData();
+        setError("This poll is no longer available to you.");
+        return;
+      }
       setError("Failed to submit vote");
       return;
     }
@@ -134,6 +142,9 @@ export default function PollsPage() {
                   <Button type="submit" disabled={submitting || loading}>
                     {submitting ? "Creating..." : "Create"}
                   </Button>
+                  <div className="md:col-span-3">
+                    <AudienceField role={role} value={audience} onChange={setAudience} />
+                  </div>
                 </form>
               </CardContent>
             </Card>
@@ -149,7 +160,10 @@ export default function PollsPage() {
               <div className="space-y-3">
                 {polls.map((poll) => (
                   <article className="rounded border border-border p-4" key={poll.id}>
-                    <p className="text-sm font-semibold text-slate-900">{poll.question}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-semibold text-slate-900">{poll.question}</p>
+                      <AudienceBadge audience={poll.audience} />
+                    </div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {poll.options.map((option, idx) => (
                         <Button

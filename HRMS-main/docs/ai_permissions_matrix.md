@@ -26,9 +26,9 @@ The value in each cell is the **target rule**. `—` means denied.
 | TICKET_CREATE | SELF | SELF | SELF | |
 | TICKET_ASSIGN | ORG | TEAM | — | target = ticket owner. **Stricter than API** (managers: any ticket). |
 | TICKET_STATUS_UPDATE | ORG | TEAM | — | **stricter than API** (since RBAC step 5 the API lets only an EMPLOYEE *assignee* update status; owners no longer can). The assignment matrix says "Employee: No". |
-| ANNOUNCEMENT_CREATE | NONE | NONE | — | |
+| ANNOUNCEMENT_CREATE | ORG | TEAM | — | RBAC step 6: the grant is the announcement audience (ADMIN → ORG, MANAGER → TEAM), set by the validator, never by the model; the API enforces the same rule |
 | PROJECT_ASSIGN | ORG | TEAM | — | **stricter than API (R4)** |
-| PROJECT_CREATE | NONE | — | — | **stricter than API** (managers may create). The assignment lists it as an admin action. |
+| PROJECT_CREATE | NONE | — | — | Same as the API since RBAC step 6 (catalogue creation is ADMIN-only). The assignment lists it as an admin action. |
 | EMPLOYEE_DEACTIVATE | ORG_EXCEPT_SELF | — | — | |
 | AUDIT_READ_OWN | SELF | SELF | SELF | |
 | AUDIT_READ_ORG | ORG | — | — | |
@@ -167,7 +167,7 @@ Code source of truth: `backend/app/services/ai/actions/registry.py` (`ACTION_REG
 | TICKET_STATUS_UPDATE | POST `/api/v1/tickets/{id}/status` | any ticket | team-raised tickets | — (D7) | ticket by id/title; status ∈ OPEN/IN_PROGRESS/RESOLVED |
 | ANNOUNCEMENT_CREATE | POST `/api/v1/announcements` | ✓ | ✓ | — | — |
 | PROJECT_ASSIGN | POST `/api/v1/employees/{id}/projects` | anyone | team | — | employee (ACTIVE) + project from the catalog |
-| PROJECT_CREATE | POST `/api/v1/employees/projects/catalog` | ✓ | — (D7: the API allows it) | — | — |
+| PROJECT_CREATE | POST `/api/v1/employees/projects/catalog` | ✓ | — (API is ADMIN-only too since RBAC step 6) | — | — |
 | EMPLOYEE_DEACTIVATE | DELETE `/api/v1/employees/{id}` | anyone except self | — | — | employee |
 
 Every action requires confirmation (D6): a server-side, single-use token bound to the user, action, target and payload, with a TTL of `AI_ACTION_CONFIRMATION_TTL_SECONDS` (300).

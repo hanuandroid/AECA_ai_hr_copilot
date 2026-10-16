@@ -109,6 +109,9 @@ class TicketStatusParams(_Params):
 class AnnouncementCreateParams(_Params):
     title: str = Field(min_length=3, max_length=180)
     body: str = Field(min_length=5, max_length=5000)
+    # Set by the validator from the caller's ANNOUNCEMENT_CREATE grant (ORG -> ORG, TEAM -> TEAM), never by the model.
+    # The announcements endpoint enforces the same rule again (RBAC step 6).
+    audience: Literal["ORG", "TEAM"]
 
 
 class ProjectAssignParams(_Params):

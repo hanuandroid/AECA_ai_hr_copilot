@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { AudienceBadge, AudienceField, audienceError, audienceFor } from "@/components/content-audience";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { RichText } from "@/components/ui/rich-text";
-import { Announcement, createAnnouncement, fetchAnnouncements, fetchProfile } from "@/lib/api";
+import { Announcement, ContentAudience, createAnnouncement, fetchAnnouncements, fetchProfile } from "@/lib/api";
 import { formatDateTimeDDMMYY } from "@/lib/date";
 
 export default function AnnouncementsPage() {
@@ -18,6 +19,7 @@ export default function AnnouncementsPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [audience, setAudience] = useState<ContentAudience>("ORG");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -84,9 +86,13 @@ export default function AnnouncementsPage() {
     setSubmitting(true);
     setError("");
     try {
-      const result = await createAnnouncement(token, { title: title.trim(), body: body.trim() });
+      const result = await createAnnouncement(token, {
+        title: title.trim(),
+        body: body.trim(),
+        audience: audienceFor(role, audience),
+      });
       if (!result.ok) {
-        setError("Failed to create announcement");
+        setError(audienceError(result.status, "Failed to create announcement"));
         return;
       }
       setTitle("");
@@ -129,6 +135,7 @@ export default function AnnouncementsPage() {
                     minLength={5}
                     maxLength={5000}
                   />
+                  <AudienceField role={role} value={audience} onChange={setAudience} />
                   <Button disabled={submitting || loading} type="submit">
                     {submitting ? "Posting..." : "Post Announcement"}
                   </Button>
@@ -149,7 +156,10 @@ export default function AnnouncementsPage() {
               <div className="space-y-3">
                 {announcements.map((item) => (
                   <article className="rounded-md border border-border bg-white p-4" key={item.id}>
-                    <h3 className="text-base font-semibold text-slate-900">{item.title}</h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-base font-semibold text-slate-900">{item.title}</h3>
+                      <AudienceBadge audience={item.audience} />
+                    </div>
                     <div className="mt-2">
                       <RichText content={item.body} />
                     </div>

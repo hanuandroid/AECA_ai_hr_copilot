@@ -36,7 +36,9 @@ Legend:
 | `PUT /employees/{id}/job-title` | ADMIN, MANAGER | Manager: direct reports only (S-01d). ADMIN: anyone, including self | `characterization/test_employees.py` |
 | `GET /employees/{id}/projects` | ADMIN, MANAGER | Manager: self + direct reports (S-01e) | `characterization/test_employees.py` |
 | `POST /employees/{id}/projects`, `DELETE …/projects/{pid}` | ADMIN, MANAGER | Manager: self + direct reports (B-05) | `characterization/test_employees.py` |
-| `GET/POST /employees/projects/catalog`, `PUT …/catalog/{id}/status` | ADMIN, MANAGER | **Organisation-wide**: any manager creates projects and changes any project's status (**DECISION**, §3) | code |
+| `GET /employees/projects/catalog` | ADMIN, MANAGER | Whole catalogue (unchanged) | code |
+| `POST /employees/projects/catalog` | **ADMIN** (step 6; before: ADMIN, MANAGER) | The only creation path; assignment never creates projects | `rbac/test_project_scope.py` |
+| `PUT /employees/projects/catalog/{id}/status` | ADMIN, MANAGER | ADMIN: any. MANAGER: only while they or an **active direct report** (one level) are assigned in `employee_projects`, checked per request; else 403 `FORBIDDEN` (step 6, §3) | `rbac/test_project_scope.py` |
 
 ### Leaves (6 routes)
 | Route | Role gate | Object scope | Evidence |
@@ -65,11 +67,11 @@ Legend:
 ### Announcements, polls, attendance, finance, calendar, org
 | Route | Role gate | Object scope | Evidence |
 |---|---|---|---|
-| `GET /announcements` | any | All announcements, with author name | `characterization/test_announcements.py` |
-| `POST /announcements` | ADMIN, MANAGER (in handler) | **Organisation-wide** (**DECISION**, §3) | `characterization/test_announcements.py` |
-| `GET /polls`, `POST /polls/{id}/vote` | any | All polls; one vote per employee | code |
-| `POST /polls` | ADMIN, MANAGER (in handler) | **Organisation-wide** (**DECISION**, §3) | code |
-| `GET /polls/{id}/results` | any | Aggregate counts per option, at any time; no individual votes | code |
+| `GET /announcements` | any | **Audience-filtered** (step 6): ORG + TEAM items of the caller's own team or their manager's team; ADMIN all. Total counts the same filter | `rbac/test_content_audience.py` |
+| `POST /announcements` | ADMIN, MANAGER (in handler) | ADMIN: ORG (default) or TEAM. MANAGER: TEAM only (default); ORG → 403 `AUDIENCE_FORBIDDEN`. Team = creator's own | `rbac/test_content_audience.py` |
+| `GET /polls`, `POST /polls/{id}/vote` | any | **Audience-filtered** like announcements; one vote per employee. Voting on a hidden poll = the same 404 as an unknown id | `rbac/test_content_audience.py` |
+| `POST /polls` | ADMIN, MANAGER (in handler) | Same audience rule as announcements | `rbac/test_content_audience.py` |
+| `GET /polls/{id}/results` | any | Aggregates only (unchanged); a TEAM poll's results only for that team and admins, otherwise the unknown-id 404 | `rbac/test_content_audience.py` |
 | `GET /attendance/me`, `/today`, `POST /clock-in`, `/clock-out` | any | Self | code |
 | `GET /finance/payroll/me`, `/statutory/me`, `/profile/me` | any | Self | code |
 | `GET /calendar/team` | any | Manager / ADMIN: own department; employee: self. Approved-leave markers only (Phase 1 review) | code |
@@ -123,7 +125,37 @@ Tests:
 - `tests/rbac/test_password_change.py`
 - `tests/rbac/test_route_permissions.py`
 
-## 3. Announcements, polls, project catalogue (proposal; no permissions changed)
+## 3. Announcements, polls, project catalogue (implemented 2026-10-17, RBAC step 6)
+
+Approved decision 5 with plan items X-2 and X-3. Migration `0022_content_audience`. Tests: `tests/rbac/test_content_audience.py`,
+`test_content_audience_migration.py`, `test_project_scope.py`, `tests/ai/actions/test_announcement_audience_ai.py`,
+frontend `tests/content-audience.test.tsx`.
+
+**Audience model.** `announcements` and `polls` get `audience` (`ORG` | `TEAM`, server default `ORG`) and
+`team_manager_id` (FK `employees.id`). A CHECK constraint requires ORG ⇔ no team and TEAM ⇔ a team, and rejects any other
+value. Existing rows were backfilled to ORG, so nothing visible before became hidden.
+
+| | Before | Now |
+|---|---|---|
+| Create ORG announcement / poll | ADMIN, MANAGER | ADMIN only (ADMIN default). MANAGER asking for ORG → 403 `AUDIENCE_FORBIDDEN`, nothing saved |
+| Create TEAM item | — | MANAGER (default) and ADMIN. The team is always the creator: `team_manager_id = caller`. Client `team_manager_id`, `author_id`, `created_by` are ignored |
+| See / count | everything | ORG; TEAM where `team_manager_id` is the caller or the caller's manager (direct reports, one level; no indirect reports); ADMIN all. Membership is read from `employees.manager_id` on every request |
+| Vote / results of a TEAM poll | anyone with the id | that team and admins; others get the same 404 as an unknown id (checked before option validation). Results stay aggregate; individual votes are never returned |
+| Update / delete / publish | no such routes | no such routes (unchanged) |
+| Copilot | `ANNOUNCEMENT_CREATE` ADMIN, MANAGER, org-wide | grant is the audience: ADMIN → ORG, MANAGER → TEAM; the model cannot set it; the API re-checks at confirmation. No AI poll or project-status action; the SQL agent cannot read `announcements`, `polls` or `poll_responses` |
+| Catalogue create | ADMIN, MANAGER | ADMIN only (API and Copilot) |
+| Project status | ADMIN, any MANAGER | ADMIN any; MANAGER only while they or an active direct report are assigned (X-3 interpretation; no owner field) |
+
+**Limits and notes.**
+- ADMIN TEAM items go to the admin's own direct reports; an admin cannot target another manager's team (not in the approved plan).
+- Visibility follows the current reporting line: when an employee changes manager, the old team's TEAM items disappear for
+  them and the new team's appear (TEAM items are not snapshotted to a member list).
+- The X-3 rule counts **active** direct reports only; an inactive report's leftover assignment does not grant status changes.
+- Downgrading 0022 keeps the rows but the older code shows them to everyone; review TEAM items before any rollback.
+- Verified on SQLite only (the supported database). The project-status check and the write are in one request but not one
+  statement; a concurrent assignment removal can race a status change (no stronger guarantee is claimed).
+
+### Original proposal (kept for the record)
 
 | Feature | Business purpose (inferred) | Current permissions | Cross-role exposure | Proposed options for decision |
 |---|---|---|---|---|
@@ -137,5 +169,5 @@ Tests:
 |---|---|---|---|
 | S-01f | Managers could publish organisation-wide policies that feed Copilot answers | Medium | **Fixed** (approved policy): migration 0021, publication workflow, retrieval filter, tests |
 | S-02 | Admin self-actions without controls (self-demotion to zero admins; own payroll and bank changes; password change without re-authentication; own payslips) | Medium (last-admin lockout: availability; self-dealing: integrity) | **Fixed (RBAC step 4, 2026-10-16)**, §2; open: employee self-service PAYSLIP-type documents |
-| S-03 | Announcements, polls and catalogue are organisation-wide for any manager | Low to Medium (business) | **Open, decision in §3** |
+| S-03 | Announcements, polls and catalogue are organisation-wide for any manager | Low to Medium (business) | **Fixed (RBAC step 6, 2026-10-17)**, §3 |
 | S-04 | Polls, attendance, finance, calendar and org tree have no dedicated characterization tests | Low (test gap) | Proposed |
