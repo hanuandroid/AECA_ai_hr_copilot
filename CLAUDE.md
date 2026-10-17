@@ -14,13 +14,15 @@ Assignment Phases 0–10 are complete. A separate **production-hardening program
 
 - **Done (`origin/main` is at `86001f5`; everything after it is local only):** hardening Phases 0–2, the approved
   Phase 2 closure, the approved Phase 3 *offline* workstreams 3.3 / 3.6 / 3.8 / 3.9 (all on origin); locally, the
-  OpenAI provider (`e3ec3d6`, `90e6582`, `0ca8326`) and RBAC remediation Plan Steps 1–7
-  (`HRMS-main/docs/production-hardening/rbac-remediation-plan.md`; Step 7 policy audiences = `c105746`). S-02 and S-03
-  were fixed by Steps 4 and 6.
-- **Verified 2026-10-17 (Python 3.11.17 container, Node 24):** backend 2675 tests, frontend 108 tests, TypeScript
-  0 errors, Next.js build PASS, offline evaluation 139/139. Live-model evaluation: NOT_RUN (the 10-check OpenAI
-  smoke test in `0ca8326` is not that evaluation). Only SQLite is verified.
-- **Blocked on approval:** RBAC Plan Steps 8–10 (one step at a time), live-model work (3.1/3.2/3.4/3.5), Playwright
+  OpenAI provider (`e3ec3d6`, `90e6582`, `0ca8326`) and the complete RBAC remediation plan, Steps 1–10
+  (`HRMS-main/docs/production-hardening/rbac-remediation-plan.md`; Step 9 = `345ca96`). S-02, S-03 and S-05 fixed.
+  Route and page coverage: `HRMS-main/docs/production-hardening/page-endpoint-inventory.md`.
+- **Verified 2026-10-17 (Step 10 full run):** backend 2778 tests, frontend 152 tests, TypeScript 0 errors, Next.js
+  build PASS, offline evaluation 139/139, gitleaks PASS, Docker production smoke PASS. Live-model evaluation: NOT_RUN
+  (the 10-check OpenAI smoke test in `0ca8326` is not that evaluation). Only SQLite is verified; downgrade below
+  migration 0016 fails (S-07).
+- **Open decisions:** S-06 (team-calendar scope), S-07, S-04 test gaps; release gates in `release-readiness.md` §6.
+- **Blocked on approval:** live-model work (3.1/3.2/3.4/3.5), Playwright
   (3.7), the `braces` advisory exception (stays PROPOSED; CI gate fails by design), data-governance, retention and
   backup decisions. Never push, deploy or approve exceptions without approval.
 - **Do not start a new phase automatically.** First inspect the current implementation and run the requested

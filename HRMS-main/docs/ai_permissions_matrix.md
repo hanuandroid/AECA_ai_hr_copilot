@@ -23,13 +23,13 @@ The value in each cell is the **target rule**. `—` means denied.
 | SQL_VIEW_RAW | NONE | NONE | — | "View raw SQL: Employee No" |
 | PAYROLL_READ_ORG | ORG | — | — | gross/net/month only. PAN/UAN/ESI/deductions stay forbidden for all roles. |
 | LEAVE_CREATE | SELF | SELF | SELF | |
-| LEAVE_APPROVE | ORG_EXCEPT_SELF | REPORTS | — | **stricter than API (R4)**: manager limited to direct reports, never self |
+| LEAVE_APPROVE | ORG_EXCEPT_SELF | REPORTS | — | manager limited to direct reports, never self; **equal to the API** since R4 was fixed (hardening Phase 1; step 8 parity table) |
 | LEAVE_REJECT | ORG_EXCEPT_SELF | REPORTS | — | same |
 | TICKET_CREATE | SELF | SELF | SELF | |
-| TICKET_ASSIGN | ORG | TEAM | — | target = ticket owner. **Stricter than API** (managers: any ticket). |
-| TICKET_STATUS_UPDATE | ORG | TEAM | — | **stricter than API** (since RBAC step 5 the API lets only an EMPLOYEE *assignee* update status; owners no longer can). The assignment matrix says "Employee: No". |
+| TICKET_ASSIGN | ORG | TEAM | — | target = ticket owner. **Stricter than API by exception E2**: the API also lets a manager act on a ticket merely assigned to them (§3.0a) |
+| TICKET_STATUS_UPDATE | ORG | TEAM | — | **stricter than API by exceptions E1 (approved) and E2**: the API lets an EMPLOYEE *assignee* update status (step 5); the Copilot never does (§3.0a). The assignment matrix says "Employee: No". |
 | ANNOUNCEMENT_CREATE | ORG | TEAM | — | RBAC step 6: the grant is the announcement audience (ADMIN → ORG, MANAGER → TEAM), set by the validator, never by the model; the API enforces the same rule |
-| PROJECT_ASSIGN | ORG | TEAM | — | **stricter than API (R4)** |
+| PROJECT_ASSIGN | ORG | TEAM | — | **equal to the API** since R4 was fixed (manager: self + direct reports; step 8 parity table) |
 | PROJECT_CREATE | NONE | — | — | Same as the API since RBAC step 6 (catalogue creation is ADMIN-only). The assignment lists it as an admin action. |
 | EMPLOYEE_DEACTIVATE | ORG_EXCEPT_SELF | — | — | |
 | AUDIT_READ_OWN | SELF | SELF | SELF | |
