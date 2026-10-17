@@ -1,7 +1,7 @@
 # Business API authorization matrix (S-01 closure, S-02 admin self-actions)
 
 **Date:** 2026-10-14, reconciled 2026-10-17 (RBAC Step 10) · **Scope:** the business routes under `/api/v1` (AI routes
-are covered by `ai_permissions_matrix.md`). The complete, generated list of all 79 registered method + path pairs, with
+are covered by `ai_permissions_matrix.md`). The complete, generated list of all 80 registered method + path pairs, with
 per-role outcomes and verification status, is `page-endpoint-inventory.md` (source of truth for route coverage).
 **Method:** code reading of every handler, plus the automated tests named in the Evidence column.
 **Status:** NOT YET PRODUCTION READY. S-02, S-03 and S-05 are fixed (RBAC Steps 4, 6, 8); S-06 fixed (team calendar); S-04 test gaps closed
@@ -17,6 +17,7 @@ Legend:
 ### Auth and health
 | Route | Role gate | Object scope | Evidence |
 |---|---|---|---|
+| `POST /auth/logout` | any authenticated | Own account only: global sign-out (token_version + 1, one atomic UPDATE); no parameters; a retry with the same token is 401 `TOKEN_REVOKED` (B-17 follow-up, 2026-10-17) | `rbac/test_logout.py` |
 | `POST /auth/change-password` | any authenticated | Own account only; current password required; throttled per account (step 4, §2) | `rbac/test_password_change.py` |
 | `POST /auth/login`, `POST /auth/token` | public | Inactive accounts get 401 identical to a wrong password; throttled 10/min per IP + account | `characterization/test_auth.py`, `ai/test_limits.py` |
 | `GET /health` | public | — | `test_infrastructure.py` |

@@ -86,7 +86,7 @@ policy and a start-up revision guard (restore not yet drilled in the target envi
 
 | Area | Blocker |
 |---|---|
-| Security | B-17 partly fixed (2026-10-17): tokens are revoked after any password change (migration 0024); the JWT is still kept in `localStorage` (XSS exposure) and there is no logout endpoint. S-02, S-03, S-05, S-06 and S-08 fixed; S-04 closed; S-07 mitigated |
+| Security | B-17: tokens revoked after password changes (0024) and by global sign-out (`POST /auth/logout`); the frontend ends sessions through `lib/session.ts`. Still open: JWT in `localStorage` (approved for now, S1) and a strict `script-src` CSP (nonce design awaiting approval). S-02, S-03, S-05, S-06, S-08 fixed; S-04 closed; S-07 mitigated |
 | Dependencies | `braces` GHSA-vfj7 (build-time; no patched release) has a PROPOSED exception, so the CI gate fails. Next's postcss is fixed by an override (remove it on `next@16`) |
 | AI evaluation | No live-model results with either provider (no key). OpenAI provider added 2026-10-16 and verified with mocked clients only (`docs/ai-provider-setup.md`); OpenAI governance decisions 7–11 open (`data-processing.md` §5). Retrieval calibration is a proposal on a small demo dataset |
 | Operations | CI never ran on GitHub. No TLS proxy, alerting or backup schedule. Single worker / single instance only |

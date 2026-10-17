@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera } from "lucide-react";
 
+import { ChangePasswordCard } from "@/components/account/change-password-card";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import {
   uploadMyProfilePicture,
 } from "@/lib/api";
 import { formatDateDDMMYY } from "@/lib/date";
+import { endSession } from "@/lib/session";
 
 export default function MePage() {
   const [employeeId, setEmployeeId] = useState<number | null>(null);
@@ -51,9 +53,7 @@ export default function MePage() {
   }, [jobHistory]);
 
   const clearAuthAndRedirect = () => {
-    localStorage.removeItem("hrms_access_token");
-    document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-    router.push("/login");
+    endSession(router);
   };
 
   const loadData = async () => {
@@ -286,6 +286,8 @@ export default function MePage() {
               )}
             </CardContent>
           </Card>
+
+          <ChangePasswordCard />
 
           <Card>
             <CardHeader>

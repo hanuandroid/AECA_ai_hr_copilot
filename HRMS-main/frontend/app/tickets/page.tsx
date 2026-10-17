@@ -18,6 +18,7 @@ import {
   fetchTickets,
   updateTicketStatus,
 } from "@/lib/api";
+import { endSession } from "@/lib/session";
 
 export default function TicketsPage() {
   const [name, setName] = useState("User");
@@ -41,9 +42,7 @@ export default function TicketsPage() {
   }, []);
 
   const clearAuthAndRedirect = () => {
-    localStorage.removeItem("hrms_access_token");
-    document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-    router.push("/login");
+    endSession(router);
   };
 
   const loadData = async () => {

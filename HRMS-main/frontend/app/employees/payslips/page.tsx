@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Employee, fetchEmployees, fetchProfile, uploadEmployeeDocument, uploadEmployeePayslip } from "@/lib/api";
+import { endSession } from "@/lib/session";
 
 function EmployeePayslipsPageContent() {
   const router = useRouter();
@@ -33,9 +34,7 @@ function EmployeePayslipsPageContent() {
   }, []);
 
   const clearAuthAndRedirect = () => {
-    localStorage.removeItem("hrms_access_token");
-    document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-    router.push("/login");
+    endSession(router);
   };
 
   useEffect(() => {

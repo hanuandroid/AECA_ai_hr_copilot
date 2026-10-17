@@ -8,6 +8,7 @@ import { AuditView } from "@/components/copilot/audit-view";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { fetchProfile } from "@/lib/api";
+import { endSession } from "@/lib/session";
 
 /** Admin AI audit log. Access is decided by the backend (AUDIT_READ_ORG); a 403 is shown as such. */
 export default function AIAuditPage() {
@@ -16,9 +17,7 @@ export default function AIAuditPage() {
   const [name, setName] = useState("User");
 
   const clearAuthAndRedirect = useCallback(() => {
-    localStorage.removeItem("hrms_access_token");
-    document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-    router.push("/login");
+    endSession(router);
   }, [router]);
 
   useEffect(() => {

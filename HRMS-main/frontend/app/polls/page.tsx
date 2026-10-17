@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ContentAudience, Poll, PollResultItem, createPoll, fetchPollResults, fetchPolls, fetchProfile, votePoll } from "@/lib/api";
+import { endSession } from "@/lib/session";
 
 export default function PollsPage() {
   const [name, setName] = useState("User");
@@ -30,9 +31,7 @@ export default function PollsPage() {
   }, []);
 
   const clearAuthAndRedirect = () => {
-    localStorage.removeItem("hrms_access_token");
-    document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-    router.push("/login");
+    endSession(router);
   };
 
   const loadData = async () => {

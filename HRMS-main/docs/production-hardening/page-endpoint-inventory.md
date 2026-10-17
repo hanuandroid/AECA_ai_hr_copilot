@@ -14,7 +14,7 @@ enforced, and how that is verified. The backend is the only authorization bounda
 | **NOT VERIFIED** | Needs something not available here (real browser, live model, production-like infrastructure) |
 | **N/A** | Not applicable |
 
-## 1. API endpoints (79 method + path pairs)
+## 1. API endpoints (80 method + path pairs)
 
 Source: `backend/tests/rbac/test_route_permissions.py`. The table is **generated** from that suite's `CASES`; its
 completeness test proves every registered route has exactly one row (0 unclassified). Outcome per role for the suite's
@@ -25,6 +25,7 @@ the role gate (validation or state, e.g. a fixture that is already published). R
 |---|---|---|---|---|---|---|
 | `POST` | `/api/v1/auth/login` | ok | ok | ok | ok |  |
 | `POST` | `/api/v1/auth/token` | ok | ok | ok | ok |  |
+| `POST` | `/api/v1/auth/logout` | auth | ok | ok | ok | B-17 follow-up: global sign-out of the caller only (token_version + 1) |
 | `POST` | `/api/v1/auth/change-password` | auth | ok | ok | ok | Step 4: self-service password change for any authenticated active user (own account only) |
 | `GET` | `/api/v1/health` | ok | ok | ok | ok |  |
 | `GET` | `/api/v1/employees/departments` | auth | ok | ok | ok |  |

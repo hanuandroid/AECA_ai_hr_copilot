@@ -24,6 +24,7 @@ import {
   reactivateEmployee,
 } from "@/lib/api";
 import { formatDateDDMMYY } from "@/lib/date";
+import { endSession } from "@/lib/session";
 
 const DIRECTORY_NOT_AVAILABLE =
   "The employee directory is available to managers and admins. Your own details are on My Profile.";
@@ -102,9 +103,7 @@ function EmployeesPageContent() {
   };
 
   const clearAuthAndRedirect = () => {
-    localStorage.removeItem("hrms_access_token");
-    document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-    router.push("/login");
+    endSession(router);
   };
 
   const loadData = async (params?: { loc?: string; deptId?: string; searchTerm?: string; nextOffset?: number }) => {

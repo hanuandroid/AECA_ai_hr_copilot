@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -9,13 +9,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { login } from "@/lib/api";
+import { messageForReason } from "@/lib/session";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("admin@mock-hrms.dev");
   const [password, setPassword] = useState("password123");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const router = useRouter();
+
+  // B-17 follow-up: explain why the previous session ended (?reason=signed-out|session-ended|password-changed).
+  useEffect(() => {
+    setNotice(messageForReason(new URLSearchParams(window.location.search).get("reason")));
+  }, []);
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -91,6 +98,7 @@ export default function LoginPage() {
                 required
               />
             </div>
+            {notice && !error ? <p role="status" className="text-sm text-emerald-200">{notice}</p> : null}
             {error ? <p className="text-sm text-rose-300">{error}</p> : null}
             <Button className="w-full bg-indigo-500 text-white hover:bg-indigo-400" disabled={loading} type="submit">
               {loading ? "Signing in..." : "Sign in"}

@@ -379,6 +379,34 @@ export async function login(email: string, password: string): Promise<LoginRespo
   return response.json();
 }
 
+// B-17 follow-up: global sign-out and self-service password change. Both end every earlier session server-side.
+export async function logoutEverywhere(token: string): Promise<ApiResult<unknown>> {
+  const response = await fetch(`${API_BASE}/api/v1/auth/logout`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return { ok: response.ok, status: response.status, body: await response.json().catch(() => null) };
+}
+
+export async function changePassword(
+  token: string,
+  payload: { current_password: string; new_password: string }
+): Promise<ApiResult<unknown>> {
+  const response = await fetch(`${API_BASE}/api/v1/auth/change-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  return { ok: response.ok, status: response.status, body: await response.json().catch(() => null) };
+}
+
+/** Error code from either envelope shape ({error:{code}} or {detail:{error:{code}}}); null when absent. */
+export function apiErrorCode(body: unknown): string | null {
+  const record = body as { error?: { code?: unknown }; detail?: { error?: { code?: unknown } } } | null;
+  const code = record?.error?.code ?? record?.detail?.error?.code;
+  return typeof code === "string" ? code : null;
+}
+
 export async function fetchEmployees(
   token: string,
   options?: { location?: string; department_id?: number; q?: string; limit?: number; offset?: number }

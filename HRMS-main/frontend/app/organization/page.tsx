@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OrgNode, fetchOrgTree, fetchProfile } from "@/lib/api";
+import { endSession } from "@/lib/session";
 
 function TreeNode({ node, depth = 0 }: { node: OrgNode; depth?: number }) {
   return (
@@ -35,9 +36,7 @@ export default function OrganizationPage() {
   }, []);
 
   const clearAuthAndRedirect = () => {
-    localStorage.removeItem("hrms_access_token");
-    document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-    router.push("/login");
+    endSession(router);
   };
 
   const loadData = async () => {

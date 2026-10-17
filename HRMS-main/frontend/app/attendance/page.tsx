@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AttendanceLog, clockIn, clockOut, fetchAttendanceLogs, fetchProfile, fetchTodayAttendance } from "@/lib/api";
 import { formatDateDDMMYY } from "@/lib/date";
+import { endSession } from "@/lib/session";
 
 const statusClassMap: Record<string, string> = {
   ON_TIME: "bg-emerald-100 text-emerald-700",
@@ -45,9 +46,7 @@ export default function AttendancePage() {
   }, []);
 
   const clearAuthAndRedirect = () => {
-    localStorage.removeItem("hrms_access_token");
-    document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-    router.push("/login");
+    endSession(router);
   };
 
   const loadData = async (nextOffset = 0) => {

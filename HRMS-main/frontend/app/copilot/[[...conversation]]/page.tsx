@@ -10,6 +10,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { fetchProfile } from "@/lib/api";
 import { fetchAiPermissions } from "@/lib/copilot-api";
+import { endSession } from "@/lib/session";
 
 /**
  * /copilot              -> new or most recent conversation
@@ -30,9 +31,7 @@ export default function CopilotPage() {
   const [capabilities, setCapabilities] = useState<string[] | null>(null);
 
   const clearAuthAndRedirect = useCallback(() => {
-    localStorage.removeItem("hrms_access_token");
-    document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-    router.push("/login");
+    endSession(router);
   }, [router]);
 
   useEffect(() => {

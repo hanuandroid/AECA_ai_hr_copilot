@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { fetchBirthdays, fetchHolidays, fetchProfile, type Birthday, type Holiday } from "@/lib/api";
 import { formatDateDDMMYY } from "@/lib/date";
+import { endSession } from "@/lib/session";
 
 export default function DashboardPage() {
   const [name, setName] = useState("User");
@@ -50,18 +51,14 @@ export default function DashboardPage() {
   useEffect(() => {
     const loadProfile = async () => {
       if (!token) {
-        localStorage.removeItem("hrms_access_token");
-        document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-        router.push("/login");
+        endSession(router);
         return;
       }
 
       try {
         const profile = await fetchProfile(token);
         if (profile.status === 401) {
-          localStorage.removeItem("hrms_access_token");
-          document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-          router.push("/login");
+          endSession(router);
           return;
         }
         if (profile.ok && "success" in profile.body && profile.body.success) {
@@ -72,9 +69,7 @@ export default function DashboardPage() {
 
         const holidaysResponse = await fetchHolidays(token, { limit: 200 });
         if (holidaysResponse.status === 401) {
-          localStorage.removeItem("hrms_access_token");
-          document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-          router.push("/login");
+          endSession(router);
           return;
         }
         if (holidaysResponse.ok && "success" in holidaysResponse.body && holidaysResponse.body.success) {
@@ -91,9 +86,7 @@ export default function DashboardPage() {
 
         const birthdaysResponse = await fetchBirthdays(token, { limit: 500 });
         if (birthdaysResponse.status === 401) {
-          localStorage.removeItem("hrms_access_token");
-          document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-          router.push("/login");
+          endSession(router);
           return;
         }
         if (birthdaysResponse.ok && "success" in birthdaysResponse.body && birthdaysResponse.body.success) {

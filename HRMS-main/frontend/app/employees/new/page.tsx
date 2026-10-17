@@ -19,6 +19,7 @@ import {
   fetchProfile,
   updateEmployee,
 } from "@/lib/api";
+import { endSession } from "@/lib/session";
 
 // RBAC step 4: fields an admin cannot change on their own record (the backend refuses them with 403).
 const SELF_PROTECTED_FIELDS: (keyof EmployeeUpdatePayload)[] = [
@@ -82,9 +83,7 @@ function NewEmployeePageContent() {
   ];
 
   const clearAuthAndRedirect = () => {
-    localStorage.removeItem("hrms_access_token");
-    document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-    router.push("/login");
+    endSession(router);
   };
 
   useEffect(() => {

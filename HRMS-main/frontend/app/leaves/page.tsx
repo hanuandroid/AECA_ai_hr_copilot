@@ -23,6 +23,7 @@ import {
   submitLeaveRequest,
 } from "@/lib/api";
 import { formatDateDDMMYY } from "@/lib/date";
+import { endSession } from "@/lib/session";
 
 const statusClassMap: Record<string, string> = {
   PENDING: "bg-amber-100 text-amber-700",
@@ -73,9 +74,7 @@ export default function LeavesPage() {
   };
 
   const clearAuthAndRedirect = () => {
-    localStorage.removeItem("hrms_access_token");
-    document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-    router.push("/login");
+    endSession(router);
   };
 
   const loadData = async () => {

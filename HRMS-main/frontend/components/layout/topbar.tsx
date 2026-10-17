@@ -6,7 +6,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { NotificationBell } from "@/components/layout/notification-bell";
 import { Button } from "@/components/ui/button";
-import { Employee, fetchEmployees, fetchMyProfilePicture, fetchProfile } from "@/lib/api";
+import { Employee, fetchEmployees, fetchMyProfilePicture, fetchProfile, logoutEverywhere } from "@/lib/api";
+import { endSession, getToken } from "@/lib/session";
 
 export function Topbar({ name, title = "Employee Directory" }: { name: string; title?: string }) {
   const router = useRouter();
@@ -105,11 +106,18 @@ export function Topbar({ name, title = "Employee Directory" }: { name: string; t
     };
   }, [profilePictureUrl]);
 
-  const onLogout = () => {
-    localStorage.removeItem("hrms_access_token");
-    document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-    document.cookie = "hrms_role=; path=/; max-age=0; samesite=lax";
-    router.push("/login");
+  // B-17 follow-up (decision L1): signing out ends every session of this user on every device (server-side
+  // token_version + 1). Local credentials are cleared even if the request fails (offline, server error).
+  const [signingOut, setSigningOut] = useState(false);
+  const onLogout = async () => {
+    setSigningOut(true);
+    const token = getToken();
+    try {
+      if (token) await logoutEverywhere(token);
+    } catch {
+      // network failure: still sign out locally below
+    }
+    endSession(router, "signed-out");
   };
 
   return (
@@ -184,9 +192,15 @@ export function Topbar({ name, title = "Employee Directory" }: { name: string; t
                   <p className="text-xs text-slate-400">Profile menu</p>
                 </div>
                 <div className="p-2">
-                  <Button className="w-full justify-start gap-2" onClick={onLogout} variant="outline">
+                  <Button
+                    className="w-full justify-start gap-2"
+                    onClick={onLogout}
+                    variant="outline"
+                    disabled={signingOut}
+                    title="Signs you out on all your devices"
+                  >
                     <LogOut className="h-4 w-4" />
-                    Logout
+                    {signingOut ? "Signing out..." : "Sign out everywhere"}
                   </Button>
                 </div>
               </div>

@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { deleteMyDocument, downloadMyDocument, EmployeeDocument, fetchMyDocuments, fetchProfile, uploadMyDocument } from "@/lib/api";
 import { formatDateDDMMYY } from "@/lib/date";
+import { endSession } from "@/lib/session";
 
 export default function MyDocumentsPage() {
   const [name, setName] = useState("User");
@@ -45,9 +46,7 @@ export default function MyDocumentsPage() {
       try {
         const [profileResult, docsResult] = await Promise.all([fetchProfile(token), fetchMyDocuments(token)]);
         if (profileResult.status === 401 || docsResult.status === 401) {
-          localStorage.removeItem("hrms_access_token");
-          document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-          router.push("/login");
+          endSession(router);
           return;
         }
         if (profileResult.ok && "success" in profileResult.body && profileResult.body.success) {

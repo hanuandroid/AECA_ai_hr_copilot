@@ -21,6 +21,7 @@ import {
   removeEmployeeProject,
   updateProjectCatalogStatus,
 } from "@/lib/api";
+import { endSession } from "@/lib/session";
 
 function EmployeeProjectsPageContent() {
   const router = useRouter();
@@ -51,9 +52,7 @@ function EmployeeProjectsPageContent() {
   }, []);
 
   const clearAuthAndRedirect = () => {
-    localStorage.removeItem("hrms_access_token");
-    document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-    router.push("/login");
+    endSession(router);
   };
 
   const formatProjectStatus = (status: "ONGOING" | "COMPLETED" | "ON_HOLD" | "PLANNED") =>

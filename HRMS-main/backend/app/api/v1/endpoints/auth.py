@@ -1,7 +1,7 @@
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -112,3 +112,26 @@ async def change_password(
         "password_changed": True,
         "existing_tokens": "All earlier sessions, including this one, have been signed out. Sign in again with the new password.",
     })
+
+
+@router.post("/logout")
+async def logout_everywhere(
+    current_user: Employee = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Global sign-out (B-17 follow-up, decision L1, approved 2026-10-17).
+
+    Increments the caller's token_version in one atomic UPDATE, so every access token issued to this user so far -
+    on every device, including the one used for this request - is refused from the next request on. Only the
+    authenticated caller's own row is touched (no parameters). A repeated call with the same token is refused with
+    401 TOKEN_REVOKED by get_current_user, so logout is safe to retry. The response reveals no version or token.
+    """
+    await db.execute(
+        update(Employee)
+        .where(Employee.id == current_user.id)
+        .values(token_version=Employee.token_version + 1)
+        .execution_options(synchronize_session=False)
+    )
+    await db.commit()
+    logger.info("auth.signed_out_everywhere", employee_id=current_user.id)
+    return success_response({"signed_out": True, "scope": "all_sessions"})

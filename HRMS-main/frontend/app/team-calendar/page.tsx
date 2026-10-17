@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Holiday, TeamCalendarDay, TeamCalendarItem, fetchHolidays, fetchProfile, fetchTeamCalendar } from "@/lib/api";
 import { formatMonthToDDMMYY } from "@/lib/date";
+import { endSession } from "@/lib/session";
 
 const markerClassMap: Record<string, string> = {
   LEAVE: "bg-amber-200 text-amber-900 border border-amber-300",
@@ -37,9 +38,7 @@ export default function TeamCalendarPage() {
   }, []);
 
   const clearAuthAndRedirect = () => {
-    localStorage.removeItem("hrms_access_token");
-    document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-    router.push("/login");
+    endSession(router);
   };
 
   const loadData = async (nextYear = year, nextMonth = month) => {

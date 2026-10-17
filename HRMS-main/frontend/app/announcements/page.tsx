@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { RichText } from "@/components/ui/rich-text";
 import { Announcement, ContentAudience, createAnnouncement, fetchAnnouncements, fetchProfile } from "@/lib/api";
 import { formatDateTimeDDMMYY } from "@/lib/date";
+import { endSession } from "@/lib/session";
 
 export default function AnnouncementsPage() {
   const [name, setName] = useState("User");
@@ -33,9 +34,7 @@ export default function AnnouncementsPage() {
   }, []);
 
   const clearAuthAndRedirect = () => {
-    localStorage.removeItem("hrms_access_token");
-    document.cookie = "hrms_auth=; path=/; max-age=0; samesite=lax";
-    router.push("/login");
+    endSession(router);
   };
 
   const loadData = async () => {

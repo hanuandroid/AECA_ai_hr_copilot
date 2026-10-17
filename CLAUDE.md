@@ -22,7 +22,7 @@ Assignment Phases 0–10 are complete. A separate **production-hardening program
   (the 10-check OpenAI smoke test in `0ca8326` is not that evaluation). Only SQLite is verified; downgrade below
   migration 0016 fails (S-07).
 - **Open decisions:** release gates in `release-readiness.md` §6. S-06 and S-08 fixed, S-04 closed, S-07 mitigated,
-  B-17 revocation fixed (tokens still in `localStorage`) 2026-10-17 (forward-only migrations; the API refuses to start unless the DB is at the code's Alembic head).
+  B-17 revocation and global sign-out done (tokens still in `localStorage`; strict script CSP pending) 2026-10-17 (forward-only migrations; the API refuses to start unless the DB is at the code's Alembic head).
 - **Blocked on approval:** live-model work (3.1/3.2/3.4/3.5), Playwright
   (3.7), the `braces` advisory exception (stays PROPOSED; CI gate fails by design), data-governance, retention and
   backup decisions. Never push, deploy or approve exceptions without approval.
