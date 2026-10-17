@@ -110,10 +110,11 @@ def test_no_migration_was_added_for_orchestration():
     # 0021 (2026-10-14) is the business policy-publication workflow (hr_policies status + hr_policy_events), not AI.
     # 0022 (2026-10-17, RBAC step 6) is the business announcement/poll audience, not AI.
     # 0023 (2026-10-17, RBAC step 7) adds hr_policies.audience and the cited-policy ids of conversation replies, not
-    # router state.
+    # router state. 0024 (B-17) adds employees.token_version (token revocation), not AI.
     assert [name for name in versions if name > "0018_"] == ["0018_ai_pending_actions.py", "0019_ai_conversations.py",
                                                              "0020_ai_audit_events.py", "0021_hr_policy_publication.py",
-                                                             "0022_content_audience.py", "0023_policy_audience.py"]
+                                                             "0022_content_audience.py", "0023_policy_audience.py",
+                                                             "0024_employee_token_version.py"]
 
 
 def test_no_api_key_in_orchestration_sources():

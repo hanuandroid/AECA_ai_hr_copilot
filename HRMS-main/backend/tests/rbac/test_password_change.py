@@ -2,8 +2,9 @@
 
 Contract: authenticated (DB-loaded, active) caller; {current_password, new_password}; new password 8-128 characters,
 not blank, different from the current one; hashed with the existing passlib context; throttled per account with the
-login limiter; nothing about passwords is returned or logged. Tokens are stateless JWTs without revocation: tokens
-issued before the change stay valid until expiry (asserted below as the ACTUAL behaviour).
+login limiter; nothing about passwords is returned or logged. Sessions (B-17, 2026-10-17): a successful change
+revokes every token issued before it, including the caller's (tests/rbac/test_token_revocation.py has the full matrix).
+Old behaviour (until 2026-10-17): earlier access tokens stayed valid until they expired.
 """
 
 import json
@@ -112,6 +113,9 @@ async def test_attempts_are_throttled_per_account(client, auth, db, monkeypatch,
         statuses.append(response.status_code)
         if response.status_code == 200:
             current = new
+            # B-17: the change revoked this session; sign in again with the new password, as a real client must.
+            login = await client.post("/api/v1/auth/login", json={"email": EMPLOYEE.email, "password": new})
+            headers = {"Authorization": f"Bearer {login.json()['data']['access_token']}"}
     assert statuses[:3] == ([200, 200, 200] if correct else [400, 400, 400])
     assert statuses[3] == 429
     assert error_code(response) == "TOO_MANY_ATTEMPTS"
@@ -119,11 +123,13 @@ async def test_attempts_are_throttled_per_account(client, auth, db, monkeypatch,
     assert other.status_code == 200  # the limit is per account
 
 
-async def test_tokens_issued_before_the_change_remain_valid_until_expiry(client, auth):
-    """Actual behaviour (stateless JWT, no revocation list): documented limitation, not a revocation claim."""
+async def test_tokens_issued_before_the_change_are_revoked(client, auth):
+    """B-17 (approved 2026-10-17). Old behaviour (until 2026-10-17): this request still returned 200 until the token
+    expired (stateless JWT, no revocation). Now the caller's own session ends with the change."""
     headers = await auth("employee")
     assert (await client.post(URL, json={"current_password": PASSWORD, "new_password": NEW}, headers=headers)).status_code == 200
-    assert (await client.get("/api/v1/employees/me", headers=headers)).status_code == 200
+    response = await client.get("/api/v1/employees/me", headers=headers)
+    assert response.status_code == 401 and error_code(response) == "TOKEN_REVOKED"
 
 
 async def test_wrong_password_attempt_is_logged_without_secrets(client, auth):

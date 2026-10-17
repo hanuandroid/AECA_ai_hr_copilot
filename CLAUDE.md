@@ -21,8 +21,8 @@ Assignment Phases 0–10 are complete. A separate **production-hardening program
   build PASS, offline evaluation 139/139, gitleaks PASS, Docker production smoke PASS. Live-model evaluation: NOT_RUN
   (the 10-check OpenAI smoke test in `0ca8326` is not that evaluation). Only SQLite is verified; downgrade below
   migration 0016 fails (S-07).
-- **Open decisions:** release gates in `release-readiness.md` §6. S-06 and S-08 fixed, S-04 closed, S-07 mitigated
-  2026-10-17 (forward-only migrations; the API refuses to start unless the DB is at the code's Alembic head).
+- **Open decisions:** release gates in `release-readiness.md` §6. S-06 and S-08 fixed, S-04 closed, S-07 mitigated,
+  B-17 revocation fixed (tokens still in `localStorage`) 2026-10-17 (forward-only migrations; the API refuses to start unless the DB is at the code's Alembic head).
 - **Blocked on approval:** live-model work (3.1/3.2/3.4/3.5), Playwright
   (3.7), the `braces` advisory exception (stays PROPOSED; CI gate fails by design), data-governance, retention and
   backup decisions. Never push, deploy or approve exceptions without approval.
@@ -33,7 +33,7 @@ Assignment Phases 0–10 are complete. A separate **production-hardening program
 
 ## Repository facts (verified in Phase 0 — see `HRMS-main/docs/repository-audit.md`)
 
-- Backend: FastAPI + SQLAlchemy 2 async + SQLite (`aiosqlite`) + Alembic (hand-written migrations, latest `0023_policy_audience`; 0017-0020 are AI-owned, 0021 is the business policy-publication workflow, 0022 the announcement/poll audience (RBAC step 6), 0023 the HR policy audience plus the cited-policy ids of conversation replies (RBAC step 7). Downgrading 0022/0023 makes restricted content visible to everyone under the older code). The backend lives in `HRMS-main/backend/app/`.
+- Backend: FastAPI + SQLAlchemy 2 async + SQLite (`aiosqlite`) + Alembic (hand-written migrations, latest `0024_employee_token_version` (B-17 token revocation); 0017-0020 are AI-owned, 0021 is the business policy-publication workflow, 0022 the announcement/poll audience (RBAC step 6), 0023 the HR policy audience plus the cited-policy ids of conversation replies (RBAC step 7). Downgrading 0022/0023 makes restricted content visible to everyone under the older code). The backend lives in `HRMS-main/backend/app/`.
 - **There is no service layer.** Business rules live in endpoint functions under `api/v1/endpoints/`. AI mutations therefore go through **HTTP calls to those endpoints** with the user's token, never through direct DB writes or imported endpoint functions.
 - Auth: `app.services.auth.get_current_user` (JWT HS256, role loaded from DB) and `require_roles(...)`. Reuse them and do not create a second auth system.
 - Response envelope: `app.core.response.success_response / error_response` → `{success, data, error:{code,message}}`.

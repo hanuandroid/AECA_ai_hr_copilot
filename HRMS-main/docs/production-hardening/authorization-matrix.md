@@ -117,7 +117,7 @@ Legend:
   - 422 when the schema rules aren't met;
   - 403 `USER_INACTIVE`; 401 when unauthenticated.
 - **Throttling:** `AUTH_LOGIN_RATE_LIMIT_PER_MINUTE` attempts per account per minute (default 10), successful and failed alike, giving 429 `TOO_MANY_ATTEMPTS`. The limiter is in-process, so it holds for the supported single-worker deployment only.
-- **Sessions:** JWTs are stateless and there is no revocation list. Access tokens issued before the change **stay valid until they expire** (`ACCESS_TOKEN_EXPIRE_MINUTES`, default 15). The old password stops working for login immediately. Refresh tokens are issued at login but there is no refresh endpoint, and they're rejected as bearer tokens.
+- **Sessions (B-17 revocation, fixed 2026-10-17, migration 0024):** every password write (this change, an admin reset, a re-hire with a new password) increments `employees.token_version`; access tokens carry it as `tv` and a mismatch is refused (401 `TOKEN_REVOKED`), so all earlier sessions end, including the caller's. Tests: `rbac/test_token_revocation.py`, `rbac/test_password_change.py`. Still open: tokens are kept in `localStorage` (B-17 XSS exposure).
 - **Logging:** structured events only (`auth.password_changed`, `auth.password_change_failed`, `security.self_action_rejected`, `security.last_admin_protected`), with the employee id and a reason code. No passwords, hashes, tokens or field values.
 
 **Open decision:** any employee may upload a PAYSLIP-type document into their own record through self-service. This is documented policy in `document_upload_policy.md`, and only ADMINs are blocked as of step 4. Decide whether payslip-type documents should be restricted to payroll uploads for everyone.

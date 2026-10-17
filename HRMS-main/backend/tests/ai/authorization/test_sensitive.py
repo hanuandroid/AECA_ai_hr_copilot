@@ -13,7 +13,7 @@ from tests.ai.authorization.conftest import make_ctx
 EMPLOYEES_SENSITIVE = {
     "hashed_password", "date_of_birth", "phone", "address", "blood_type", "profile_photo_path",
     "profile_photo_mime", "current_salary_usd", "bank_name", "bank_account_number", "bank_account_name",
-    "bank_branch", "bank_ifsc", "pan_number", "pan_name", "pan_dob",
+    "bank_branch", "bank_ifsc", "pan_number", "pan_name", "pan_dob", "token_version",
 }
 EMPLOYEES_SAFE = {"id", "name", "email", "department_id", "manager_id", "role", "status", "joining_date", "occupancy"}
 PAYROLL_ALWAYS_SENSITIVE = {"pan", "pf_uan", "esi_no", "deductions"}

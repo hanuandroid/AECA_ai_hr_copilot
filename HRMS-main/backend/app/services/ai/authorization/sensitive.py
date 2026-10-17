@@ -19,6 +19,7 @@ SENSITIVE_COLUMNS: frozenset[str] = frozenset(
     {
         # employees
         "hashed_password",
+        "token_version",  # B-17: session revocation state (authentication data, never AI-readable)
         "date_of_birth",
         "phone",
         "address",

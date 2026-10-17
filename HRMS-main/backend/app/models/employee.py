@@ -1,6 +1,6 @@
 from datetime import date
 
-from sqlalchemy import Date, Enum, ForeignKey, Numeric, String
+from sqlalchemy import Date, Enum, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -14,6 +14,9 @@ class Employee(Base):
     name: Mapped[str] = mapped_column(String(120), index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
+    # B-17 (migration 0024): incremented by every password write; access tokens carry it as `tv` and stop working
+    # as soon as it changes (services/auth.get_current_user).
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.id"), nullable=True, index=True)
     manager_id: Mapped[int | None] = mapped_column(ForeignKey("employees.id"), nullable=True)
     role: Mapped[Role] = mapped_column(Enum(Role), default=Role.EMPLOYEE)

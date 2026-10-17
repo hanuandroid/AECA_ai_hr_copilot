@@ -44,8 +44,8 @@ async def login(payload: LoginRequest, request: Request, db: AsyncSession = Depe
         )
 
     tokens = {
-        "access_token": create_access_token(subject=str(user.id), role=user.role.value),
-        "refresh_token": create_refresh_token(subject=str(user.id)),
+        "access_token": create_access_token(subject=str(user.id), role=user.role.value, token_version=user.token_version),
+        "refresh_token": create_refresh_token(subject=str(user.id), token_version=user.token_version),
         "token_type": "bearer",
     }
     return success_response(tokens)
@@ -64,7 +64,7 @@ async def token(request: Request, form_data: OAuth2PasswordRequestForm = Depends
         )
 
     return {
-        "access_token": create_access_token(subject=str(user.id), role=user.role.value),
+        "access_token": create_access_token(subject=str(user.id), role=user.role.value, token_version=user.token_version),
         "token_type": "bearer",
     }
 
@@ -81,8 +81,9 @@ async def change_password(
     - Throttled with the login limiter (AUTH_LOGIN_RATE_LIMIT_PER_MINUTE attempts per account per minute, successful
       and failed alike), before any password hashing. The limiter is in-process: it holds for the supported
       single-worker deployment only (see app/core/rate_limit.py).
-    - Sessions: tokens are stateless JWTs with no revocation list, so access tokens issued before the change stay
-      valid until they expire (ACCESS_TOKEN_EXPIRE_MINUTES); the old password stops working for login immediately.
+    - Sessions (B-17, approved 2026-10-17): a successful change increments the user's token_version, so every token
+      issued before it - including the one used for this request - is refused from the next request on; the caller
+      signs in again with the new password. A failed attempt changes nothing.
     - Nothing about the passwords is logged or returned.
     """
     if not login_limiter.allow(f"change-password|{current_user.id}", settings.auth_login_rate_limit_per_minute):
@@ -104,9 +105,10 @@ async def change_password(
                             detail=error_response("PASSWORD_UNCHANGED", "The new password must differ from the current one"))
 
     current_user.hashed_password = hash_password(payload.new_password)
+    current_user.token_version = current_user.token_version + 1  # B-17: revoke every earlier token
     await db.commit()
-    logger.info("auth.password_changed", employee_id=current_user.id)
+    logger.info("auth.password_changed", employee_id=current_user.id, tokens_revoked=True)
     return success_response({
         "password_changed": True,
-        "existing_tokens": "Access tokens issued before this change remain valid until they expire.",
+        "existing_tokens": "All earlier sessions, including this one, have been signed out. Sign in again with the new password.",
     })

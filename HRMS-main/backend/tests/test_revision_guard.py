@@ -22,8 +22,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.db.revision_guard import MigrationRevisionError, assert_database_at_expected_revision, expected_revision
 from tests.conftest import BACKEND_DIR
 
-HEAD = "0023_policy_audience"
-SUPPORTED_DEV_DOWNGRADES = ["0022_content_audience", "0021_hr_policy_publication", "0020_ai_audit_events",
+HEAD = "0024_employee_token_version"
+SUPPORTED_DEV_DOWNGRADES = ["0023_policy_audience", "0022_content_audience", "0021_hr_policy_publication", "0020_ai_audit_events",
                             "0019_ai_conversations", "0018_ai_pending_actions", "0017_policy_chunks",
                             "0016_employee_documents_uploaded_by"]
 

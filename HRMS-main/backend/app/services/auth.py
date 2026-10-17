@@ -58,6 +58,13 @@ async def get_current_user(
         setattr(request.state, INACTIVE_REJECTION_STATE_KEY,
                 InactiveUserRejection(employee_id=employee.id, role=getattr(employee.role, "value", str(employee.role))))
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error_response("USER_INACTIVE", "This account is not active"))
+    # B-17: tokens issued before the latest password change are revoked. `tv` comes from the signed token; the current
+    # version comes from the database row loaded above (never from the client). A token without `tv` predates the
+    # field and counts as version 0, so it stops working after the first password change. Any non-integer is refused.
+    token_version = payload.get("tv", 0)
+    if type(token_version) is not int or token_version != employee.token_version:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail=error_response("TOKEN_REVOKED", "Your session has ended. Please sign in again."))
     return employee
 
 

@@ -15,7 +15,7 @@ from tests.conftest import (
     reset_database,
 )
 
-EXPECTED_HEAD = "0023_policy_audience"  # RBAC step 7 (2026-10-17): 0023 policy audience + reply citations; step 6: 0022 announcement/poll audience (business); Phase 3: 0017 policy_chunks; Phase 5: 0018 ai_pending_actions; Phase 7: 0019 conversations; Phase 8: 0020 audit (AI-owned); closure 2026-10-14: 0021 policy publication (business)
+EXPECTED_HEAD = "0024_employee_token_version"  # B-17 (2026-10-17): 0024 employees.token_version; RBAC step 7 (2026-10-17): 0023 policy audience + reply citations; step 6: 0022 announcement/poll audience (business); Phase 3: 0017 policy_chunks; Phase 5: 0018 ai_pending_actions; Phase 7: 0019 conversations; Phase 8: 0020 audit (AI-owned); closure 2026-10-14: 0021 policy publication (business)
 EXPECTED_TABLES = {
     "announcements", "attendance_logs", "departments", "employee_documents", "employee_projects",
     "employee_skills", "employees", "holidays", "hr_policies", "job_history", "leave_balances",

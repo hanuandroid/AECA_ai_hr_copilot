@@ -86,7 +86,7 @@ policy and a start-up revision guard (restore not yet drilled in the target envi
 
 | Area | Blocker |
 |---|---|
-| Security | B-17 (JWT in `localStorage`, no revocation; a password change does not revoke existing tokens). S-02, S-03, S-05 fixed (RBAC Steps 4, 6, 8) and S-06 fixed (team calendar, 2026-10-17) |
+| Security | B-17 partly fixed (2026-10-17): tokens are revoked after any password change (migration 0024); the JWT is still kept in `localStorage` (XSS exposure) and there is no logout endpoint. S-02, S-03, S-05, S-06 and S-08 fixed; S-04 closed; S-07 mitigated |
 | Dependencies | `braces` GHSA-vfj7 (build-time; no patched release) has a PROPOSED exception, so the CI gate fails. Next's postcss is fixed by an override (remove it on `next@16`) |
 | AI evaluation | No live-model results with either provider (no key). OpenAI provider added 2026-10-16 and verified with mocked clients only (`docs/ai-provider-setup.md`); OpenAI governance decisions 7–11 open (`data-processing.md` §5). Retrieval calibration is a proposal on a small demo dataset |
 | Operations | CI never ran on GitHub. No TLS proxy, alerting or backup schedule. Single worker / single instance only |
@@ -130,7 +130,7 @@ The virtual-environment route on a host Python 3.11 is not verified on the curre
 cd HRMS-main
 cp backend/.env.example backend/.env       # then fill values locally; never commit .env
 docker compose build
-docker compose run --rm api alembic -c alembic.ini upgrade head  # head: 0023_policy_audience; the API refuses to start until then
+docker compose run --rm api alembic -c alembic.ini upgrade head  # head: 0024_employee_token_version; the API refuses to start until then
 docker compose up -d
 docker compose exec api python scripts/seed.py                  # demo data only
 docker compose exec api python scripts/ingest_policies.py       # needs AI_ENABLED=true; downloads the embedding model once

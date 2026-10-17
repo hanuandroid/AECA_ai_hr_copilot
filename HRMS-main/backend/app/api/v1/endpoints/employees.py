@@ -422,6 +422,7 @@ async def create_employee(
         employee = existing
         employee.name = payload.name.strip()
         employee.hashed_password = hash_password(payload.password)
+        employee.token_version = employee.token_version + 1  # B-17: re-hire with a new password revokes old tokens
         employee.department_id = payload.department_id
         employee.role = role
         employee.status = EmployeeStatus.ACTIVE
@@ -1617,6 +1618,7 @@ async def update_employee(
         employee.name = payload.name.strip()
     if payload.password is not None and payload.password.strip():
         employee.hashed_password = hash_password(payload.password.strip())
+        employee.token_version = employee.token_version + 1  # B-17: an admin reset revokes the person's earlier tokens
     if payload.joining_date is not None:
         employee.joining_date = payload.joining_date
     if payload.date_of_birth is not None:

@@ -19,15 +19,17 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def create_access_token(subject: str, role: str) -> str:
+def create_access_token(subject: str, role: str, token_version: int = 0) -> str:
+    """`tv` is the user's token_version at issue time (B-17): a password change increments the stored value, and every
+    token carrying an older one is refused. The role claim is informational only; authorization uses the database."""
     expire = datetime.now(UTC) + timedelta(minutes=settings.access_token_expire_minutes)
-    payload = {"sub": subject, "role": role, "type": ACCESS_TOKEN_TYPE, "exp": expire}
+    payload = {"sub": subject, "role": role, "type": ACCESS_TOKEN_TYPE, "tv": token_version, "exp": expire}
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
-def create_refresh_token(subject: str) -> str:
+def create_refresh_token(subject: str, token_version: int = 0) -> str:
     expire = datetime.now(UTC) + timedelta(days=settings.refresh_token_expire_days)
-    payload = {"sub": subject, "type": REFRESH_TOKEN_TYPE, "exp": expire}
+    payload = {"sub": subject, "type": REFRESH_TOKEN_TYPE, "tv": token_version, "exp": expire}
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 

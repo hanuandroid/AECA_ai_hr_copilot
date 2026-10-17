@@ -21,7 +21,7 @@ EXPECTED_FORBIDDEN = {
     "employees": {
         "hashed_password", "date_of_birth", "phone", "address", "blood_type", "profile_photo_path", "profile_photo_mime",
         "current_salary_usd", "bank_name", "bank_account_number", "bank_account_name", "bank_branch", "bank_ifsc",
-        "pan_number", "pan_name", "pan_dob",
+        "pan_number", "pan_name", "pan_dob", "token_version",
     },
     "payroll_records": {"pan", "pf_uan", "esi_no", "deductions"},
     "job_history": set(), "leave_balances": set(), "leave_requests": set(), "tickets": set(),
