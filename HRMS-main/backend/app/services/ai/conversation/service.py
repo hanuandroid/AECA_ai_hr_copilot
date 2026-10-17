@@ -20,8 +20,9 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ai_conversation import AIConversation, AIConversationMessage
+from app.models.hr_policy import HRPolicy
 from app.services.ai.actions.service import utcnow
-from app.services.ai.authorization import AIUserContext
+from app.services.ai.authorization import AIUserContext, policy_audiences
 from app.services.ai.errors import AIConversationLimitError, AIConversationNotFoundError
 from app.services.ai.orchestration.followup import ConversationContext, HistoryMessage, looks_like_confirmation
 from app.services.ai.redaction import redact
@@ -34,6 +35,8 @@ TITLE_CHARS = 80
 CONTEXT_MESSAGE_CHARS = 300  # per message in the classifier context
 CAPABILITY_ROUTES = frozenset({"POLICY", "SQL", "ACTION"})
 ANCHOR_STATUSES = frozenset({"answered", "partial", "clarification_required", "confirmation_required"})
+# RBAC step 7: shown on replay instead of a reply that cited a policy the reader can no longer read.
+WITHHELD_REPLY = "This answer is hidden because it cited an HR policy you can no longer access."
 
 
 def parse_public_id(value: object) -> str | None:
@@ -118,6 +121,7 @@ class ConversationService:
         status: str | None = None,
         error_code: str | None = None,
         reserve: int = 0,
+        source_policy_ids: list[int] | None = None,
     ) -> AIConversationMessage:
         """Append one message with the next sequence number (atomic). `reserve` keeps room for the reply."""
         now = self._now()
@@ -134,7 +138,8 @@ class ConversationService:
             raise AIConversationLimitError()
         message = AIConversationMessage(conversation_id=conversation.id, sequence=sequence, role=role,
                                         content=redact(content, max_length=self._stored_chars), request_id=request_id,
-                                        route=route, status=status, error_code=error_code, created_at=now)
+                                        route=route, status=status, error_code=error_code, created_at=now,
+                                        source_policy_ids=sorted(set(source_policy_ids)) if source_policy_ids else None)
         self._db.add(message)
         await self._db.commit()
         return message
@@ -143,6 +148,21 @@ class ConversationService:
         if resolved:
             message.resolved_content = redact(resolved, max_length=self._stored_chars)
             await self._db.commit()
+
+    async def withheld_message_ids(self, ctx: AIUserContext, messages: list[AIConversationMessage]) -> set[int]:
+        """RBAC step 7: replies whose cited policies are not ALL readable by the caller *now* (audience changed, role
+        changed, policy gone or unknown audience). Checked on every replay; nothing is cached."""
+        cited = {policy_id for message in messages for policy_id in (message.source_policy_ids or [])}
+        if not cited:
+            return set()
+        readable = policy_audiences(ctx)
+        audiences = dict((await self._db.execute(
+            select(HRPolicy.id, HRPolicy.audience).where(HRPolicy.id.in_(sorted(cited)))
+        )).all())
+        return {
+            message.id for message in messages
+            if any(audiences.get(policy_id) not in readable for policy_id in (message.source_policy_ids or []))
+        }
 
     async def get_messages(self, conversation: AIConversation, limit: int) -> list[AIConversationMessage]:
         """The most recent `limit` messages, oldest first (bounded, indexed query)."""
@@ -156,11 +176,13 @@ class ConversationService:
 
     # --- context ------------------------------------------------------------------------------
 
-    async def get_recent_context(self, conversation: AIConversation) -> ConversationContext:
-        return build_context(await self.get_messages(conversation, self._context_messages), self._context_chars)
+    async def get_recent_context(self, conversation: AIConversation, ctx: AIUserContext) -> ConversationContext:
+        messages = await self.get_messages(conversation, self._context_messages)
+        # RBAC step 7: a reply citing a policy the caller can no longer read never reaches the classifier context.
+        return build_context(messages, self._context_chars, withheld=await self.withheld_message_ids(ctx, messages))
 
 
-def build_context(messages: list[AIConversationMessage], max_chars: int) -> ConversationContext:
+def build_context(messages: list[AIConversationMessage], max_chars: int, *, withheld: set[int] = frozenset()) -> ConversationContext:
     """Untrusted, bounded context from the last messages (oldest first).
 
     - recent: newest messages first until `max_chars` is used, each capped at CONTEXT_MESSAGE_CHARS.
@@ -171,7 +193,7 @@ def build_context(messages: list[AIConversationMessage], max_chars: int) -> Conv
     recent: list[HistoryMessage] = []
     budget = max_chars
     for message in reversed(messages):
-        text = message.content[:CONTEXT_MESSAGE_CHARS]
+        text = (WITHHELD_REPLY if message.id in withheld else message.content)[:CONTEXT_MESSAGE_CHARS]
         if len(text) > budget:
             break
         recent.append(HistoryMessage(role=message.role, text=text))  # type: ignore[arg-type]

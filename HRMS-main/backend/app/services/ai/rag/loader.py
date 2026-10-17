@@ -9,7 +9,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.enums import PolicyStatus
+from app.models.enums import PolicyAudience, PolicyStatus
 from app.models.hr_policy import HRPolicy
 from app.services.ai.rag.models import PolicyDocument
 
@@ -64,9 +64,12 @@ async def load_policy_documents(db: AsyncSession, upload_dir: str) -> tuple[list
     documents: list[PolicyDocument] = []
     failed: list[int] = []
     # Only PUBLISHED policies enter the index; drafts (SUBMITTED), REJECTED and ARCHIVED versions never do, and their
-    # chunks are removed by ingestion as stale.
+    # chunks are removed by ingestion as stale. RBAC step 7: a policy with an unknown audience value is not indexed
+    # either (fail closed); known audiences are indexed and filtered per caller at retrieval time.
     rows = (await db.execute(
-        select(HRPolicy).where(HRPolicy.status == PolicyStatus.PUBLISHED.value).order_by(HRPolicy.id.asc())
+        select(HRPolicy).where(HRPolicy.status == PolicyStatus.PUBLISHED.value,
+                               HRPolicy.audience.in_([audience.value for audience in PolicyAudience]))
+        .order_by(HRPolicy.id.asc())
     )).scalars().all()
     base_dir = Path(upload_dir)
 

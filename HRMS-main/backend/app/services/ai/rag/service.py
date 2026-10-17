@@ -18,7 +18,7 @@ from app.db.session import get_db
 from app.services.ai.audit.events import AuditEventType, AuditStatus
 from app.services.ai.audit.provider import observe
 from app.services.ai.audit.recorder import Timer, record
-from app.services.ai.authorization import AIUserContext, Capability, run_authorized
+from app.services.ai.authorization import AIUserContext, Capability, policy_audiences, run_authorized
 from app.services.ai.embeddings import EmbeddingProvider
 from app.services.ai.errors import AIError, AIRetrievalError
 from app.services.ai.llm.base import LLMMessage, LLMProvider
@@ -75,7 +75,7 @@ class PolicyRagService:
 
     async def _answer(self, ctx: AIUserContext, question: object) -> PolicyAnswer:
         cleaned = validate_question(question)
-        retrieved = await self._retrieve(cleaned)
+        retrieved = await self._retrieve(cleaned, policy_audiences(ctx))
         if not retrieved:
             self._log(ctx, cleaned, retrieved, grounded=False, reason="no_evidence")
             return PolicyAnswer(answer=INSUFFICIENT_EVIDENCE, grounded=False, sources=[])
@@ -93,13 +93,13 @@ class PolicyRagService:
             return PolicyAnswer(answer=message, grounded=False, sources=[])
         return PolicyAnswer(answer=output.answer.strip(), grounded=True, sources=[_source(item) for item in decision.cited])
 
-    async def _retrieve(self, question: str) -> list[RetrievedChunk]:
+    async def _retrieve(self, question: str, audiences: frozenset[str]) -> list[RetrievedChunk]:
         embedder = self._embedder_factory()
         retriever = PolicyRetriever(
             self._store_factory(embedder.model_id), embedder, top_k=self._top_k, min_score=self._min_score
         )
         try:
-            return await retriever.retrieve(question)
+            return await retriever.retrieve(question, audiences=audiences)
         except AIError:
             raise
         except Exception as exc:  # DB/driver errors must not leak
@@ -121,6 +121,7 @@ class PolicyRagService:
 
 def _source(item: RetrievedChunk) -> PolicySource:
     return PolicySource(
+        policy_id=item.chunk.policy_id,
         chunk_id=item.chunk.chunk_id,
         title=item.chunk.policy_title,
         category=item.chunk.category,

@@ -108,6 +108,9 @@ Endpoints, all using `get_ai_user_context`:
    carries `X-Conversation-Id`, so a failed first turn is not orphaned.
 5. Never stored: prompts, SQL, rows, confirmation tokens, JWTs, roles/permissions, chain-of-thought. All stored
    text passes through `redact()` (tokens, keys, PAN, IFSC, long numbers) and is capped.
+6. RBAC step 7 (migration 0023): an ASSISTANT row also stores `source_policy_ids`, the policies its POLICY part
+   cited. They are never forwarded to a service; replay and the follow-up context re-check them against the
+   caller's current policy audiences and show a neutral notice instead of a reply the caller may no longer read.
 
 **Ordering.** `append_message` allocates the sequence with one atomic statement:
 `UPDATE ai_conversations SET message_count = message_count + 1 … WHERE id = :id AND status = 'ACTIVE' AND

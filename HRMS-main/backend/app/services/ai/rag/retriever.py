@@ -78,8 +78,9 @@ class PolicyRetriever:
         self._top_k = top_k
         self._min_score = min_score
 
-    async def retrieve(self, question: str) -> list[RetrievedChunk]:
-        candidates = await self._store.all_chunks()
+    async def retrieve(self, question: str, *, audiences: frozenset[str]) -> list[RetrievedChunk]:
+        """`audiences` (required) are the caller's readable policy audiences; only those chunks are ever scored."""
+        candidates = await self._store.all_chunks(audiences=audiences)
         if not candidates:
             return []
         query_vector = await self._embedder.embed_query(question)

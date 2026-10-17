@@ -5,7 +5,11 @@ class Capability(str, enum.Enum):
     """Everything the AI layer can do. Code checks capabilities, never raw roles."""
 
     # Knowledge
-    POLICY_READ = "POLICY_READ"
+    POLICY_READ = "POLICY_READ"  # policies with audience ALL
+    # RBAC step 7 (decision 3): restricted policy audiences. Retrieval only ever sees policies whose audience the
+    # caller holds (scope.policy_audiences); nested like the business API (app/services/policy_audience.py).
+    POLICY_READ_MANAGERS = "POLICY_READ_MANAGERS"
+    POLICY_READ_ADMINS = "POLICY_READ_ADMINS"
     # Restricted organisation-wide skill search (RBAC step 3): approved fields only (employee id, name, department,
     # skill, level). Not a directory: general employee data stays SELF/TEAM/ORG-scoped by the SQL and HR capabilities.
     SKILL_SEARCH_ORG = "SKILL_SEARCH_ORG"

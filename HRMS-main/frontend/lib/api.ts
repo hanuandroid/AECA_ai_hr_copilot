@@ -141,6 +141,8 @@ export type Announcement = {
   created_at: string;
 };
 
+export type PolicyAudience = "ALL" | "MANAGERS" | "ADMINS";
+
 export type HRPolicy = {
   id: number;
   title: string;
@@ -154,6 +156,8 @@ export type HRPolicy = {
   checksum?: string | null;
   // Publication workflow: only PUBLISHED policies are public and feed Copilot answers; ADMINs publish.
   status?: "SUBMITTED" | "PUBLISHED" | "REJECTED" | "ARCHIVED";
+  // RBAC step 7: who may read it (nested). Enforced by the backend in lists, downloads and Copilot retrieval.
+  audience?: PolicyAudience;
   version?: number;
   reviewed_by?: number | null;
   reviewed_at?: string | null;
@@ -1367,11 +1371,12 @@ export async function fetchHRPolicies(
 
 export async function uploadHRPolicyDocument(
   token: string,
-  payload: { title: string; category: string; file: File }
+  payload: { title: string; category: string; file: File; audience?: PolicyAudience }
 ): Promise<ApiResult<ApiEnvelope<HRPolicy & { file_name: string }> | { detail?: unknown }>> {
   const form = new FormData();
   form.append("title", payload.title);
   form.append("category", payload.category);
+  if (payload.audience) form.append("audience", payload.audience);
   form.append("file", payload.file);
 
   const response = await fetch(`${API_BASE}/api/v1/hr-policies/upload`, {

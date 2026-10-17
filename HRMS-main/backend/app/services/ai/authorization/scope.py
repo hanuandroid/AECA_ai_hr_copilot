@@ -61,6 +61,21 @@ def _resolve(ctx: AIUserContext, org: Capability, team: Capability, self_: Capab
     return NO_SCOPE
 
 
+_POLICY_AUDIENCE_GRANTS = (
+    (Capability.POLICY_READ, "ALL"),
+    (Capability.POLICY_READ_MANAGERS, "MANAGERS"),
+    (Capability.POLICY_READ_ADMINS, "ADMINS"),
+)
+
+
+def policy_audiences(ctx: AIUserContext) -> frozenset[str]:
+    """Policy audiences the caller may retrieve and cite (RBAC step 7). Empty for inactive users or unknown roles;
+    values outside ALL/MANAGERS/ADMINS are never included, so unknown stored audiences match nobody."""
+    if not ctx.is_active:
+        return frozenset()
+    return frozenset(audience for capability, audience in _POLICY_AUDIENCE_GRANTS if grant_for(ctx.role, capability) is not None)
+
+
 def hr_read_scope(ctx: AIUserContext) -> DataScope:
     """Widest protected-HR-data scope granted by the matrix (never by role name checks)."""
     return _resolve(ctx, Capability.HR_READ_ORG, Capability.HR_READ_TEAM, Capability.HR_READ_SELF)

@@ -23,6 +23,8 @@ A, M, E = Role.ADMIN, Role.MANAGER, Role.EMPLOYEE
 
 _MATRIX: dict[C, dict[Role, T]] = {
     C.POLICY_READ: {A: T.NONE, M: T.NONE, E: T.NONE},
+    C.POLICY_READ_MANAGERS: {A: T.NONE, M: T.NONE},  # RBAC step 7: MANAGERS-audience policies
+    C.POLICY_READ_ADMINS: {A: T.NONE},  # RBAC step 7: ADMINS-audience policies
     C.SKILL_SEARCH_ORG: {A: T.ORG, M: T.ORG},  # RBAC step 3 (replaces the unused DIRECTORY_READ granted to all)
     C.HR_READ_SELF: {A: T.SELF, M: T.SELF, E: T.SELF},
     C.HR_READ_TEAM: {A: T.TEAM, M: T.TEAM},

@@ -8,7 +8,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { downloadHRPolicyDocument, fetchHRPolicies, fetchProfile, HRPolicy, reviewHRPolicy, uploadHRPolicyDocument } from "@/lib/api";
+import { downloadHRPolicyDocument, fetchHRPolicies, fetchProfile, HRPolicy, PolicyAudience, reviewHRPolicy, uploadHRPolicyDocument } from "@/lib/api";
 import { formatDateDDMMYY } from "@/lib/date";
 
 export default function HRPoliciesPage() {
@@ -17,6 +17,7 @@ export default function HRPoliciesPage() {
   const [items, setItems] = useState<HRPolicy[]>([]);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("GENERAL");
+  const [audience, setAudience] = useState<PolicyAudience>("ALL");
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -86,13 +87,19 @@ export default function HRPoliciesPage() {
         title: title.trim(),
         category: category.trim(),
         file,
+        audience,
       });
+      if (result.status === 403) {
+        setError("You can only choose an audience that includes you.");
+        return;
+      }
       if (!result.ok || !("success" in result.body) || !result.body.success) {
         setError("Upload failed. Use .txt, .md, or .pdf files (max 2 MB).");
         return;
       }
       setTitle("");
       setCategory("GENERAL");
+      setAudience("ALL");
       setFile(null);
       setMessage(
         result.body.data.status === "PUBLISHED"
@@ -255,6 +262,20 @@ export default function HRPoliciesPage() {
                     <span className="truncate text-sm text-muted-foreground">{file?.name || "No file chosen"}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">Allowed: .txt, .md, .pdf (max 2 MB).</p>
+                  <label className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">Readers</span>
+                    <select
+                      aria-label="Readers"
+                      className="h-9 rounded-md border border-border bg-white px-3 text-sm"
+                      value={audience}
+                      onChange={(e) => setAudience(e.target.value as PolicyAudience)}
+                    >
+                      {/* RBAC step 7: an uploader may only choose an audience that includes them (backend-enforced). */}
+                      <option value="ALL">Everyone</option>
+                      <option value="MANAGERS">Managers and admins</option>
+                      {role === "ADMIN" ? <option value="ADMINS">Admins only</option> : null}
+                    </select>
+                  </label>
                   {role === "MANAGER" ? (
                     <p className="text-xs text-muted-foreground">
                       Manager uploads are submitted for admin review before they are published.
@@ -308,7 +329,14 @@ export default function HRPoliciesPage() {
                 {filteredItems.map((item) => (
                   <article key={item.id} className="rounded-md border border-border bg-white p-4">
                     <div className="flex items-center justify-between gap-2">
-                      <h3 className="text-base font-semibold text-slate-900">{item.original_filename || item.title}</h3>
+                      <h3 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                        {item.original_filename || item.title}
+                        {item.audience && item.audience !== "ALL" ? (
+                          <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                            {item.audience === "MANAGERS" ? "Managers" : "Admins"}
+                          </span>
+                        ) : null}
+                      </h3>
                       <span className="text-xs text-slate-600">
                         Uploaded: {formatDateDDMMYY(item.created_at || undefined)}
                       </span>

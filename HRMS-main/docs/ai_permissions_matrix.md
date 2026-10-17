@@ -10,7 +10,9 @@ The value in each cell is the **target rule**. `—` means denied.
 
 | Capability | ADMIN | MANAGER | EMPLOYEE | Notes |
 |---|---|---|---|---|
-| POLICY_READ | NONE | NONE | NONE | policy RAG |
+| POLICY_READ | NONE | NONE | NONE | policy RAG: policies with audience `ALL` |
+| POLICY_READ_MANAGERS | NONE | NONE | — | RBAC step 7: also `MANAGERS`-audience policies |
+| POLICY_READ_ADMINS | NONE | — | — | RBAC step 7: also `ADMINS`-audience policies. `scope.policy_audiences(ctx)` turns these grants into the required retrieval filter (same sets as the business API, parity-tested) |
 | SKILL_SEARCH_ORG | ORG | ORG | — | **Restricted organisation-wide skill search** (RBAC step 3, 2026-10-16; replaces the unused `DIRECTORY_READ`). Approved fields only: employee_id, employee_name, department, skill, level (active employees). Copilot: a MANAGER's pure skill question is answered by the dedicated backend query (`services/ai/sql/skill_search.py`), not model SQL. API: `GET /api/v1/employees/skill-search`. Not a directory: general employee data stays SELF/TEAM/ORG-scoped. EMPLOYEE: "search by skill: Limited" = own skills via SELF-scoped SQL |
 | HR_READ_SELF | SELF | SELF | SELF | own leave/balance/projects/tickets/job history |
 | HR_READ_TEAM | TEAM | TEAM | — | caller + direct reports |

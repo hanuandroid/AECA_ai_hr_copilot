@@ -8,7 +8,7 @@ through `authorize`/`require`/`run_authorized`; no other module may check roles 
 from app.services.ai.authorization.capabilities import Capability, ScopeLevel, TargetRule
 from app.services.ai.authorization.context import AIUserContext, build_ai_user_context, get_ai_user_context
 from app.services.ai.authorization.policy import AI_PERMISSION_MATRIX, capabilities_for, grant_for
-from app.services.ai.authorization.scope import DataScope, TargetEmployee, hr_read_scope, sql_read_scope
+from app.services.ai.authorization.scope import DataScope, TargetEmployee, hr_read_scope, policy_audiences, sql_read_scope
 from app.services.ai.authorization.sensitive import SENSITIVE_COLUMNS, is_column_readable, is_sensitive_field
 from app.services.ai.authorization.service import (
     GENERIC_DENIAL,
@@ -39,6 +39,7 @@ __all__ = [
     "hr_read_scope",
     "is_column_readable",
     "is_sensitive_field",
+    "policy_audiences",
     "require",
     "run_authorized",
     "sql_read_scope",

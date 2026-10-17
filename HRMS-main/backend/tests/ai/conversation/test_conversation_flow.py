@@ -289,7 +289,8 @@ async def test_failed_turn_is_recorded_as_an_error_not_an_answer(chat_service, c
         ("USER", None, None), ("ASSISTANT", "error", "SQL_MUTATION_REJECTED")]
     assert messages[3].content == raised.value.message  # the safe message the client saw
     context = await make_conversations(db).get_recent_context(
-        (await db.execute(select(AIConversation).where(AIConversation.public_id == first.conversation_id))).scalar_one())
+        (await db.execute(select(AIConversation).where(AIConversation.public_id == first.conversation_id))).scalar_one(),
+        await ctx_for("employee"))
     assert context.anchor_question == "What is the WFH policy?"  # failed turns never anchor a follow-up
 
 

@@ -16,7 +16,7 @@ from app.services.ai.actions.service import ActionAgentService, get_action_agent
 from app.services.ai.authorization import AIUserContext, capabilities_for, get_ai_user_context, hr_read_scope
 from app.services.ai.conversation.chat import ConversationalCopilot, get_conversation_service, get_conversational_copilot
 from app.services.ai.conversation.models import ConversationDetail, ConversationMessageView, ConversationSummary
-from app.services.ai.conversation.service import ConversationService
+from app.services.ai.conversation.service import WITHHELD_REPLY, ConversationService
 from app.services.ai.audit.recorder import record_error
 from app.services.ai.errors import AIError, ai_error_response
 from app.services.ai.limits import enforce_ai_limits
@@ -70,8 +70,11 @@ async def get_conversation(
     """One of the caller's conversations with its most recent `limit` messages (oldest first)."""
     conversation = await conversations.get_user_conversation(ctx, conversation_id)
     messages = await conversations.get_messages(conversation, limit)
-    detail = ConversationDetail(**ConversationSummary.of(conversation).model_dump(),
-                                messages=[ConversationMessageView.of(message) for message in messages])
+    withheld = await conversations.withheld_message_ids(ctx, messages)  # RBAC step 7: re-check policy audiences
+    detail = ConversationDetail(**ConversationSummary.of(conversation).model_dump(), messages=[
+        ConversationMessageView.of(message, withheld=WITHHELD_REPLY if message.id in withheld else None)
+        for message in messages
+    ])
     return success_response(detail.model_dump(mode="json", exclude_none=True))
 
 

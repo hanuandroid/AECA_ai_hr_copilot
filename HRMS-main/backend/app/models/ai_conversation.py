@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -35,7 +35,9 @@ class AIConversation(Base):
 class AIConversationMessage(Base):
     """One persisted message. USER rows hold the (redacted) user text and, for follow-ups, the resolved
     question that was routed. ASSISTANT rows hold the (redacted) reply text plus minimal routing metadata.
-    Never stored: prompts, SQL, rows, confirmation tokens, JWTs, roles or permissions."""
+    Never stored: prompts, SQL, rows, confirmation tokens, JWTs, roles or permissions.
+    `source_policy_ids` (migration 0023) lists the policies an ASSISTANT reply cited, so replay can re-check the
+    reader's current policy audience; it is never forwarded to any service."""
 
     __tablename__ = "ai_conversation_messages"
     __table_args__ = (
@@ -54,4 +56,5 @@ class AIConversationMessage(Base):
     route: Mapped[str | None] = mapped_column(String(60), nullable=True)
     status: Mapped[str | None] = mapped_column(String(30), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    source_policy_ids: Mapped[list[int] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime)

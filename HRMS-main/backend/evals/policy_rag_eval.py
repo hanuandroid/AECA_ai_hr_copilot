@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from app.services.ai.authorization import AIUserContext
+from app.services.ai.authorization import AIUserContext, policy_audiences
 from app.services.ai.errors import AIInvalidOutputError
 from app.services.ai.llm.base import LLMMessage, LLMResponse, StructuredT
 from app.services.ai.rag.retriever import PolicyRetriever, content_terms
@@ -105,7 +105,7 @@ async def evaluate(
 ) -> EvalReport:
     report = EvalReport()
     for case in cases:
-        retrieved = await retriever.retrieve(case["question"])
+        retrieved = await retriever.retrieve(case["question"], audiences=policy_audiences(contexts[case["role"]]))
         retrieved_ids = {item.chunk.chunk_id for item in retrieved}
         answer = await service.answer(contexts[case["role"]], case["question"])
         citation_valid = all(source.chunk_id in retrieved_ids for source in answer.sources)

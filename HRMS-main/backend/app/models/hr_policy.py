@@ -21,6 +21,8 @@ class HRPolicy(Base):
     checksum: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     # Publication workflow (migration 0021): PolicyStatus value; only PUBLISHED rows are public and indexed.
     status: Mapped[str] = mapped_column(String(20), default="PUBLISHED", server_default="PUBLISHED", index=True)
+    # Readership (migration 0023, RBAC step 7): PolicyAudience value; enforced in list, download, indexing and retrieval.
+    audience: Mapped[str] = mapped_column(String(10), default="ALL", server_default="ALL", index=True)
     version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("employees.id"), nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

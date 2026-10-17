@@ -109,9 +109,11 @@ def test_no_migration_was_added_for_orchestration():
     # Phase 8 adds the audit store (0020), owned by services/ai/audit; still none for the router itself.
     # 0021 (2026-10-14) is the business policy-publication workflow (hr_policies status + hr_policy_events), not AI.
     # 0022 (2026-10-17, RBAC step 6) is the business announcement/poll audience, not AI.
+    # 0023 (2026-10-17, RBAC step 7) adds hr_policies.audience and the cited-policy ids of conversation replies, not
+    # router state.
     assert [name for name in versions if name > "0018_"] == ["0018_ai_pending_actions.py", "0019_ai_conversations.py",
                                                              "0020_ai_audit_events.py", "0021_hr_policy_publication.py",
-                                                             "0022_content_audience.py"]
+                                                             "0022_content_audience.py", "0023_policy_audience.py"]
 
 
 def test_no_api_key_in_orchestration_sources():

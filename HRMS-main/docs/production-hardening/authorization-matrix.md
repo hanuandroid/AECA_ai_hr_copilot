@@ -58,11 +58,11 @@ Legend:
 ### HR policies (now 6 routes)
 | Route | Role gate | Object scope | Evidence |
 |---|---|---|---|
-| `GET /hr-policies` | any | PUBLISHED for everyone; managers also see their own submissions; ADMIN sees all (optional `status` filter cannot widen visibility) | `characterization/test_hr_policy_publication.py` |
-| `POST /hr-policies/upload` | ADMIN, MANAGER | **Approved 2026-10-14:** ADMIN upload → PUBLISHED; MANAGER upload → SUBMITTED draft | same |
+| `GET /hr-policies` | any | PUBLISHED **within the caller's audience** (step 7: EMPLOYEE `ALL`; MANAGER `ALL`+`MANAGERS`; ADMIN everything); managers also see their own submissions; the total uses the same filter; `status` cannot widen it | `characterization/test_hr_policy_publication.py`, `rbac/test_policy_audience.py` |
+| `POST /hr-policies/upload` | ADMIN, MANAGER | **Approved 2026-10-14:** ADMIN upload → PUBLISHED; MANAGER upload → SUBMITTED draft. Step 7: optional `audience` (default `ALL`); only an audience that includes the uploader (MANAGER: `ALL`/`MANAGERS`, else 403 `POLICY_AUDIENCE_FORBIDDEN`); unknown → 400 `INVALID_POLICY_AUDIENCE`; both before storage | same, `rbac/test_policy_audience.py` |
 | `POST /hr-policies/{id}/publish`, `…/reject` | **ADMIN** | SUBMITTED only (else 409) | same |
 | `GET /hr-policies/{id}/events` | ADMIN | Append-only publication audit trail | same |
-| `GET /hr-policies/{id}/download` | any | Same visibility as the list; hidden → 404 identical to unknown | same, `characterization/test_hr_policies.py`, `test_framework_security.py` |
+| `GET /hr-policies/{id}/download` | any | Same visibility as the list, including the audience (step 7); hidden → 404 identical to unknown | same, `characterization/test_hr_policies.py`, `test_framework_security.py`, `rbac/test_policy_audience.py` |
 
 ### Announcements, polls, attendance, finance, calendar, org
 | Route | Role gate | Object scope | Evidence |
@@ -162,6 +162,41 @@ value. Existing rows were backfilled to ORG, so nothing visible before became hi
 | Announcements | Company and team news | Create: ADMIN, MANAGER, organisation-wide, no audience field, no edit/delete, no moderation. Read: everyone. Copilot: MANAGER and ADMIN (`ANNOUNCEMENT_CREATE`; corrected 2026-10-16, this row previously said ADMIN only) | Any manager broadcasts to the whole company. Content is not used by Policy RAG | (a) Keep. (b) ADMIN-only org-wide, managers department-scoped (needs an audience field and migration). (c) Manager posts as drafts awaiting ADMIN approval (like policies) |
 | Polls | Engagement surveys | Create: ADMIN, MANAGER, organisation-wide. Vote: everyone, once. Results: aggregates to everyone at any time | Small-population polls can let readers infer individual answers. No close date | (a) Keep. (b) Results visible to the creator and ADMIN only, or only after closing. (c) Department-scoped audiences |
 | Project catalogue | Shared project list for staffing | List / create / status change: ADMIN and **any** MANAGER, organisation-wide, with no owner field. Copilot: create ADMIN-only | A manager can mark another team's project COMPLETED or ON_HOLD | (a) Keep. (b) Add `owner_id`; managers change only projects they own; ADMIN all. (c) Status changes ADMIN-only |
+
+## 3a. HR policy audiences (implemented 2026-10-17, RBAC step 7)
+
+Approved decision 3. Migration `0023_policy_audience`. Tests: `tests/rbac/test_policy_audience.py`,
+`tests/ai/rag/test_policy_audience_rag.py`, `tests/ai/conversation/test_policy_replay.py`, frontend
+`tests/policy-audience.test.tsx`.
+
+| Audience | Readers | Notes |
+|---|---|---|
+| `ALL` | everyone (active) | default; every existing policy was backfilled to `ALL` |
+| `MANAGERS` | managers and admins | nested levels |
+| `ADMINS` | admins only | |
+| anything else | nobody | rejected by a CHECK constraint; code never matches it (never indexed, never retrieved, never listed to non-admins) |
+
+| Path | Enforcement |
+|---|---|
+| List, total, download | `app/services/policy_audience.py`; hidden = unknown-id 404. ADMIN sees all rows; a manager also sees their own submissions |
+| Upload | an uploader may only pick an audience that includes them; default `ALL` |
+| Indexing | only PUBLISHED policies with a known audience are indexed; the audience is **not** copied into chunks |
+| Retrieval | `policy_audiences(ctx)` from the AI matrix (`POLICY_READ`, `POLICY_READ_MANAGERS`, `POLICY_READ_ADMINS`) is a **required** argument; the vector store joins `hr_policies` and filters status + audience **before scoring**, so hidden chunks cannot affect IDF, ranks or the threshold, and a reclassification applies on the next request without re-indexing |
+| Citations | sources only come from the filtered retrieval; each carries `policy_id` (no paths, checksums or uploader ids) |
+| Conversation replay | assistant replies store the cited `source_policy_ids`; replay and follow-up classifier context replace a reply with a neutral notice if any cited policy is not readable by the caller **now** (audience changed, role changed, policy missing) |
+| Cache | none exists in the RAG path |
+| SQL agent | `hr_policies` was already a denied table |
+
+Synthetic negative tests: title, verbatim quotation, synonym paraphrase, codeword and forged-citation questions for
+EMPLOYEE (vs MANAGERS and ADMINS policies) and MANAGER (vs ADMINS); the restricted text never reaches the retrieval
+result, the LLM prompt, the answer, the sources or the HTTP response. A parity test pins the business rule and the AI
+matrix to the same sets for every role. Mutation checks: removing the retrieval filter fails 7 tests; disabling replay
+withholding fails 8.
+
+**Limits.** Admins cannot change a policy's audience after upload (re-upload a new version instead); no route was
+added for it. The upload response's version number can reveal that a same-title policy exists in a hidden audience
+(pre-existing behaviour for drafts too). Replies stored before migration 0023 have no recorded citations and are
+replayed unchanged. Verified on SQLite only. Downgrading 0023 makes restricted policies readable by everyone again.
 
 ## 4. Findings from this review
 

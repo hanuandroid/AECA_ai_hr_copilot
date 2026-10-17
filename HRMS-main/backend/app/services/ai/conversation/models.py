@@ -31,8 +31,9 @@ class ConversationMessageView(BaseModel):
     created_at: datetime
 
     @classmethod
-    def of(cls, message: AIConversationMessage) -> "ConversationMessageView":
-        return cls(sequence=message.sequence, role=message.role, content=message.content, route=message.route,
+    def of(cls, message: AIConversationMessage, *, withheld: str | None = None) -> "ConversationMessageView":
+        """`withheld` replaces the stored reply text when the reader may no longer see a policy it cited (step 7)."""
+        return cls(sequence=message.sequence, role=message.role, content=withheld or message.content, route=message.route,
                    status=message.status, error_code=message.error_code, created_at=message.created_at)
 
 

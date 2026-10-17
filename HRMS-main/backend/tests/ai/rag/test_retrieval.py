@@ -9,7 +9,7 @@ from app.services.ai.rag.retriever import (
     lexical_overlap,
 )
 from app.services.ai.rag.vector_store import SQLitePolicyVectorStore
-from tests.ai.rag.conftest import TOP_K
+from tests.ai.rag.conftest import EMPLOYEE_AUDIENCES, TOP_K
 
 
 @pytest.mark.parametrize(
@@ -24,7 +24,7 @@ from tests.ai.rag.conftest import TOP_K
     ],
 )
 async def test_relevant_policy_is_retrieved_first(ingested, retriever, question, title, section):
-    hits = await retriever.retrieve(question)
+    hits = await retriever.retrieve(question, audiences=EMPLOYEE_AUDIENCES)
     assert hits, question
     assert hits[0].chunk.policy_title == title
     if section:
@@ -34,7 +34,7 @@ async def test_relevant_policy_is_retrieved_first(ingested, retriever, question,
 async def test_wfh_question_retrieves_wfh_evidence(ingested, retriever):
     """Two policies legitimately answer this: the Attendance Policy's "Work From Home Attendance"
     section (states that WFH needs manager approval) and the WFH Policy itself (library title "WFH Policy")."""
-    hits = await retriever.retrieve("Can I work from home?")
+    hits = await retriever.retrieve("Can I work from home?", audiences=EMPLOYEE_AUDIENCES)
     titles = [h.chunk.policy_title for h in hits]
     assert "WFH Policy" in titles
     assert set(titles) <= {"WFH Policy", "Attendance Policy"}
@@ -46,43 +46,43 @@ async def test_wfh_question_retrieves_wfh_evidence(ingested, retriever):
     ["What is the stock option vesting schedule?", "What is Rahul's salary?", "Give me PAN information.", "Tell me a joke"],
 )
 async def test_irrelevant_questions_retrieve_nothing(ingested, retriever, question):
-    assert await retriever.retrieve(question) == []
+    assert await retriever.retrieve(question, audiences=EMPLOYEE_AUDIENCES) == []
 
 
 async def test_irrelevant_policies_excluded_from_context(ingested, retriever):
-    hits = await retriever.retrieve("What happens if I am late?")
+    hits = await retriever.retrieve("What happens if I am late?", audiences=EMPLOYEE_AUDIENCES)
     assert {h.chunk.policy_title for h in hits} == {"Attendance Policy"}
 
 
 async def test_top_k_is_respected(db, embedder, ingested):
     retriever = PolicyRetriever(SQLitePolicyVectorStore(db, embedder.model_id), embedder, top_k=2, min_score=0.0)
-    assert len(await retriever.retrieve("leave policy attendance work from home")) == 2
-    default = await PolicyRetriever(SQLitePolicyVectorStore(db, embedder.model_id), embedder, top_k=TOP_K, min_score=0.35).retrieve("leave")
+    assert len(await retriever.retrieve("leave policy attendance work from home", audiences=EMPLOYEE_AUDIENCES)) == 2
+    default = await PolicyRetriever(SQLitePolicyVectorStore(db, embedder.model_id), embedder, top_k=TOP_K, min_score=0.35).retrieve("leave", audiences=EMPLOYEE_AUDIENCES)
     assert len(default) <= TOP_K
 
 
 async def test_min_score_threshold(db, embedder, ingested):
     strict = PolicyRetriever(SQLitePolicyVectorStore(db, embedder.model_id), embedder, top_k=4, min_score=0.99)
-    assert await strict.retrieve("How many sick leaves can I take?") == []
+    assert await strict.retrieve("How many sick leaves can I take?", audiences=EMPLOYEE_AUDIENCES) == []
 
 
 async def test_retrieval_is_deterministic_and_ordered(ingested, retriever):
-    first = await retriever.retrieve("What are the attendance rules?")
-    second = await retriever.retrieve("What are the attendance rules?")
+    first = await retriever.retrieve("What are the attendance rules?", audiences=EMPLOYEE_AUDIENCES)
+    second = await retriever.retrieve("What are the attendance rules?", audiences=EMPLOYEE_AUDIENCES)
     assert [(h.chunk.chunk_id, h.score) for h in first] == [(h.chunk.chunk_id, h.score) for h in second]
     keys = [(-h.score, h.chunk.policy_id, h.chunk.chunk_index) for h in first]
     assert keys == sorted(keys)
 
 
 async def test_retrieved_chunks_carry_metadata_but_no_embeddings(ingested, retriever):
-    hit = (await retriever.retrieve("How many sick leaves can I take?"))[0]
+    hit = (await retriever.retrieve("How many sick leaves can I take?", audiences=EMPLOYEE_AUDIENCES))[0]
     assert hit.chunk.chunk_id and hit.chunk.policy_id and hit.chunk.source_filename == "seed_policy_01.md"
     assert 0 < hit.score <= 1
     assert not hasattr(hit.chunk, "embedding")
 
 
 async def test_empty_index_returns_nothing(retriever):
-    assert await retriever.retrieve("How many sick leaves can I take?") == []
+    assert await retriever.retrieve("How many sick leaves can I take?", audiences=EMPLOYEE_AUDIENCES) == []
 
 
 def test_lexical_scoring_helpers():

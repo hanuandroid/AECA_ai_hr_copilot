@@ -14,11 +14,14 @@ from typing import Protocol
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.enums import PolicyStatus
+from app.models.enums import PolicyAudience, PolicyStatus
 from app.models.hr_policy import HRPolicy
 from app.models.policy_chunk import PolicyChunk
 from app.services.ai.embeddings import cosine_similarity
 from app.services.ai.rag.models import PolicyChunkData
+
+
+_KNOWN_AUDIENCES = frozenset(audience.value for audience in PolicyAudience)
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,9 +35,11 @@ class PolicyVectorStore(Protocol):
 
     async def upsert(self, policy_id: int, chunks: list[StoredChunk]) -> int: ...
 
-    async def similarity_search(self, query_embedding: list[float], top_k: int) -> list[tuple[PolicyChunkData, float]]: ...
+    async def similarity_search(
+        self, query_embedding: list[float], top_k: int, *, audiences: frozenset[str]
+    ) -> list[tuple[PolicyChunkData, float]]: ...
 
-    async def all_chunks(self) -> list[StoredChunk]: ...
+    async def all_chunks(self, *, audiences: frozenset[str]) -> list[StoredChunk]: ...
 
     async def delete_policy(self, policy_id: int) -> int: ...
 
@@ -76,24 +81,32 @@ class SQLitePolicyVectorStore:
         result = await self._db.execute(delete(PolicyChunk).where(PolicyChunk.policy_id == policy_id))
         return result.rowcount or 0
 
-    async def all_chunks(self) -> list[StoredChunk]:
-        """Retrievable chunks: only those of policies that are PUBLISHED right now. Status is checked at read time, so
-        a policy archived, rejected or never published is not served even before the next ingestion run."""
+    async def all_chunks(self, *, audiences: frozenset[str]) -> list[StoredChunk]:
+        """Retrievable chunks: only those of policies that are PUBLISHED right now AND whose audience is in
+        `audiences` (RBAC step 7; required, no default). Status and audience are read from hr_policies at query time,
+        so an archived, unpublished or reclassified policy is not served even before the next ingestion run, and
+        chunks outside the caller's audiences never reach scoring (they cannot influence IDF or thresholds)."""
+        allowed = sorted(audience for audience in audiences if audience in _KNOWN_AUDIENCES)
+        if not allowed:
+            return []
         rows = (
             await self._db.execute(
                 select(PolicyChunk)
                 .join(HRPolicy, HRPolicy.id == PolicyChunk.policy_id)
                 .where(PolicyChunk.embedding_model == self.embedding_model,
-                       HRPolicy.status == PolicyStatus.PUBLISHED.value)
+                       HRPolicy.status == PolicyStatus.PUBLISHED.value,
+                       HRPolicy.audience.in_(allowed))
                 .order_by(PolicyChunk.policy_id.asc(), PolicyChunk.chunk_index.asc())
             )
         ).scalars().all()
         return [StoredChunk(chunk=_to_data(row), embedding=list(row.embedding)) for row in rows]
 
-    async def similarity_search(self, query_embedding: list[float], top_k: int) -> list[tuple[PolicyChunkData, float]]:
+    async def similarity_search(
+        self, query_embedding: list[float], top_k: int, *, audiences: frozenset[str]
+    ) -> list[tuple[PolicyChunkData, float]]:
         scored = [
             (stored.chunk, cosine_similarity(query_embedding, stored.embedding))
-            for stored in await self.all_chunks()
+            for stored in await self.all_chunks(audiences=audiences)
             if len(stored.embedding) == len(query_embedding)
         ]
         scored.sort(key=lambda item: (-item[1], item[0].policy_id, item[0].chunk_index))

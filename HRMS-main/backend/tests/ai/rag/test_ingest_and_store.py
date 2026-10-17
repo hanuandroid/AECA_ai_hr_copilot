@@ -9,7 +9,7 @@ from app.models.policy_chunk import PolicyChunk
 from app.services.ai.embeddings import FakeEmbeddingProvider
 from app.services.ai.rag.ingest import ingest_policies
 from app.services.ai.rag.vector_store import SQLitePolicyVectorStore
-from tests.ai.rag.conftest import CHUNK_OVERLAP, CHUNK_SIZE, add_policy_file
+from tests.ai.rag.conftest import CHUNK_OVERLAP, CHUNK_SIZE, EMPLOYEE_AUDIENCES, add_policy_file
 from tests.support.data import TEST_POLICIES
 
 
@@ -73,7 +73,7 @@ async def test_new_upload_is_indexed(db, embedder, ingested):
 
 async def test_store_is_scoped_to_one_embedding_model(db, ingested):
     other = FakeEmbeddingProvider(dimension=64)
-    assert await SQLitePolicyVectorStore(db, other.model_id).all_chunks() == []
+    assert await SQLitePolicyVectorStore(db, other.model_id).all_chunks(audiences=EMPLOYEE_AUDIENCES) == []
     report = await _ingest(db, other)  # a model change re-indexes everything
     assert report.indexed == ingested.documents
     assert {r.embedding_model for r in await _chunk_rows(db)} == {other.model_id}
@@ -82,14 +82,14 @@ async def test_store_is_scoped_to_one_embedding_model(db, ingested):
 async def test_similarity_search_and_delete(db, embedder, ingested):
     store = SQLitePolicyVectorStore(db, embedder.model_id)
     query = await embedder.embed_query("sick leave days per year")
-    first = await store.similarity_search(query, top_k=3)
+    first = await store.similarity_search(query, top_k=3, audiences=EMPLOYEE_AUDIENCES)
     assert len(first) == 3
-    assert first == await store.similarity_search(query, top_k=3)  # deterministic
+    assert first == await store.similarity_search(query, top_k=3, audiences=EMPLOYEE_AUDIENCES)  # deterministic
     assert [score for _, score in first] == sorted((score for _, score in first), reverse=True)
     leave_id = first[0][0].policy_id
     assert await store.delete_policy(leave_id) > 0
     await db.commit()
-    assert all(c.policy_id != leave_id for c, _ in await store.similarity_search(query, top_k=50))
+    assert all(c.policy_id != leave_id for c, _ in await store.similarity_search(query, top_k=50, audiences=EMPLOYEE_AUDIENCES))
 
 
 async def test_migration_downgrade_and_upgrade(tmp_path):

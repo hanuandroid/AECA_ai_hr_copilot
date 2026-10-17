@@ -81,3 +81,12 @@ class ContentAudience(str, enum.Enum):
 
     ORG = "ORG"  # everyone; only ADMIN may publish it
     TEAM = "TEAM"  # team_manager_id, that person's direct reports, and admins
+
+
+class PolicyAudience(str, enum.Enum):
+    """Who may read a published HR policy (RBAC step 7, decision 3; migration 0023). Nested: each level includes the
+    roles above it. Any other stored value is treated as unreadable (fail closed)."""
+
+    ALL = "ALL"  # every active employee
+    MANAGERS = "MANAGERS"  # managers and admins
+    ADMINS = "ADMINS"  # admins only

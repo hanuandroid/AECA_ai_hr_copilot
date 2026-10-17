@@ -46,7 +46,7 @@ class ConversationalCopilot:
         else:
             conversation = await self._conversations.get_user_conversation(ctx, conversation_id)
         bind_conversation(conversation.public_id)  # only after the owner check (or creation for this user)
-        context = await self._conversations.get_recent_context(conversation)
+        context = await self._conversations.get_recent_context(conversation, ctx)
 
         request_id = current_request_id() or uuid.uuid4().hex
         timer = Timer()
@@ -73,7 +73,7 @@ class ConversationalCopilot:
         await self._conversations.set_resolved_content(user_message, turn.resolved_question)
         await self._conversations.append_message(conversation, ASSISTANT, response.message, request_id=request_id,
                                                  route="+".join(response.routes), status=response.status,
-                                                 error_code=response.code)
+                                                 error_code=response.code, source_policy_ids=_cited_policies(response))
         response_chars, response_digest = text_fingerprint(response.message)
         record(AuditEventType.CHAT_RESPONSE, _CHAT_STATUS.get(response.status, AuditStatus.SUCCESS),
                route="+".join(response.routes), duration_ms=timer.ms, intents=response.intents, routes=response.routes,
@@ -89,6 +89,18 @@ _CHAT_STATUS = {
     "clarification_required": AuditStatus.CLARIFICATION_REQUIRED,
     "confirmation_required": AuditStatus.CONFIRMATION_REQUIRED,
 }
+
+
+def _cited_policies(response: Any) -> list[int]:
+    """Policy ids cited by the POLICY parts of this reply (RBAC step 7: replay re-checks their audience)."""
+    cited: list[int] = []
+    for part in response.parts:
+        sources = (part.data or {}).get("sources") if part.route == "POLICY" else None
+        for source in sources or []:
+            policy_id = source.get("policy_id") if isinstance(source, dict) else None
+            if isinstance(policy_id, int):
+                cited.append(policy_id)
+    return cited
 
 
 def _routes(state: Any) -> str | None:

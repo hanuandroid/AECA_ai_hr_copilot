@@ -24,6 +24,7 @@ CHUNK_SIZE = 800
 CHUNK_OVERLAP = 120
 TOP_K = 4
 MIN_SCORE = 0.35
+EMPLOYEE_AUDIENCES = frozenset({"ALL"})  # RBAC step 7: what an EMPLOYEE may retrieve
 
 
 class CountingFactory:

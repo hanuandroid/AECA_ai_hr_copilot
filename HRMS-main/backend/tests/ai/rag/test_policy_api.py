@@ -19,7 +19,8 @@ async def test_policy_answer_with_sources(client, auth, ingested, override_rag, 
     body = data(response)
     assert body["answer"] == SICK and body["grounded"] is True
     assert body["sources"][0]["title"] == "Leave Policy"
-    assert set(body["sources"][0]) == {"chunk_id", "title", "category", "filename", "section"}
+    # policy_id added in RBAC step 7 (replay re-checks audiences); still no paths, checksums, uploader ids or embeddings.
+    assert set(body["sources"][0]) == {"policy_id", "chunk_id", "title", "category", "filename", "section"}
     assert llm_factory.calls == 1
 
 

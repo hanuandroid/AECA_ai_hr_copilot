@@ -31,6 +31,9 @@ DATASET = BACKEND / "evals" / "datasets" / "policy_retrieval_v1.json"
 POLICY_DIR = BACKEND / "data" / "policies"
 DEFAULT_RESULTS = BACKEND / "evals" / "results"
 THRESHOLDS = [round(0.20 + 0.025 * step, 3) for step in range(21)]  # 0.200 .. 0.700
+# Offline retrieval-quality tooling over the whole demo corpus (every policy is ALL), not a user path. RBAC step 7
+# requires audiences on every retrieval, so the full set is passed explicitly here.
+CALIBRATION_AUDIENCES = frozenset({"ALL", "MANAGERS", "ADMINS"})
 
 
 class CalibrationRefused(RuntimeError):
@@ -99,8 +102,9 @@ class InMemoryStore:
         self.embedding_model = embedding_model
         self._stored = stored
 
-    async def all_chunks(self):
-        return list(self._stored)
+    async def all_chunks(self, *, audiences: frozenset[str]):
+        # The calibration corpus is the demo policy set, which is entirely audience ALL (RBAC step 7).
+        return list(self._stored) if "ALL" in audiences else []
 
 
 class CachingEmbedder:
@@ -152,12 +156,12 @@ async def run_cases(data: dict, embedder, *, top_k: int, chunk_size: int, chunk_
     outcomes = []
     for case in data["cases"]:
         with full_ranking():  # threshold-free pass: every chunk, no relative cutoff
-            ranked = await PolicyRetriever(store, cached, top_k=len(chunks), min_score=0.0).retrieve(case["question"])
+            ranked = await PolicyRetriever(store, cached, top_k=len(chunks), min_score=0.0).retrieve(case["question"], audiences=CALIBRATION_AUDIENCES)
         ranked_titles = list(dict.fromkeys(item.chunk.policy_title for item in ranked))
         expected_rank = next((i for i, title in enumerate(ranked_titles, start=1) if title in case["expected_titles"]), None)
         by_threshold = {}
         for threshold in THRESHOLDS:
-            results = await PolicyRetriever(store, cached, top_k=top_k, min_score=threshold).retrieve(case["question"])
+            results = await PolicyRetriever(store, cached, top_k=top_k, min_score=threshold).retrieve(case["question"], audiences=CALIBRATION_AUDIENCES)
             by_threshold[threshold] = [item.chunk.policy_title for item in results]
         outcomes.append(CaseOutcome(case["id"], case["split"], case["answerable"], bool(case.get("hard_negative")),
                                     ranked[0].score if ranked else 0.0, expected_rank, by_threshold))

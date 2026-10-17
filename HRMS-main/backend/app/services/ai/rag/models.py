@@ -57,6 +57,7 @@ class PolicyLLMOutput(BaseModel):
 
 
 class PolicySource(BaseModel):
+    policy_id: int  # RBAC step 7: recorded with the conversation reply so replay can re-check the reader's audience
     chunk_id: str
     title: str
     category: str

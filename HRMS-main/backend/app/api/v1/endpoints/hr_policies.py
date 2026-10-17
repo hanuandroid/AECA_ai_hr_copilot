@@ -6,7 +6,7 @@ from uuid import uuid4
 import structlog
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -17,6 +17,7 @@ from app.models.enums import PolicyStatus, Role
 from app.models.hr_policy import HRPolicy
 from app.models.hr_policy_event import HRPolicyEvent
 from app.services.auth import get_current_user, require_roles
+from app.services.policy_audience import readable_audiences, resolve_upload_audience
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -27,6 +28,8 @@ ALLOWED_POLICY_EXTENSIONS = {".txt", ".md", ".pdf"}
 # listed to everyone, downloadable by everyone and indexed for Policy RAG; drafts are visible to ADMINs and their
 # submitter only (anyone else gets the same 404 as an unknown id). Publishing a title archives its previous published
 # version. Every transition is recorded in the append-only hr_policy_events table.
+# RBAC step 7 (decision 3): a PUBLISHED policy is listed and downloadable only for its audience (ALL / MANAGERS /
+# ADMINS, app/services/policy_audience.py); others get the unknown-id 404. Submitters keep seeing their own uploads.
 POLICY_NOT_FOUND = "Policy not found"
 
 
@@ -37,15 +40,19 @@ def _utcnow() -> datetime:
 def _visibility_filter(user: Employee):
     if user.role == Role.ADMIN:
         return None
-    published = HRPolicy.status == PolicyStatus.PUBLISHED.value
+    published = and_(HRPolicy.status == PolicyStatus.PUBLISHED.value,
+                     HRPolicy.audience.in_(sorted(readable_audiences(user.role))))
     if user.role == Role.MANAGER:
         return or_(published, HRPolicy.uploaded_by == user.id)
     return published
 
 
 def _is_visible(policy: HRPolicy, user: Employee) -> bool:
-    return (user.role == Role.ADMIN or policy.status == PolicyStatus.PUBLISHED.value
-            or (user.role == Role.MANAGER and policy.uploaded_by == user.id))
+    if user.role == Role.ADMIN:
+        return True
+    if user.role == Role.MANAGER and policy.uploaded_by == user.id:
+        return True
+    return policy.status == PolicyStatus.PUBLISHED.value and policy.audience in readable_audiences(user.role)
 
 
 def _policy_payload(row: HRPolicy) -> dict:
@@ -60,6 +67,7 @@ def _policy_payload(row: HRPolicy) -> dict:
         "uploaded_by": row.uploaded_by,
         "checksum": row.checksum,
         "status": row.status,
+        "audience": row.audience,
         "version": row.version,
         "reviewed_by": row.reviewed_by,
         "reviewed_at": row.reviewed_at.isoformat() if row.reviewed_at else None,
@@ -129,9 +137,11 @@ async def upload_policy_document(
     title: str = Form(min_length=3, max_length=220),
     category: str = Form(min_length=2, max_length=60),
     file: UploadFile = File(...),
+    audience: str | None = Form(default=None, max_length=20),
     current_user: Employee = Depends(require_roles(Role.ADMIN, Role.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
+    policy_audience = resolve_upload_audience(current_user.role, audience)  # before anything is stored
     upload_dir = Path(settings.policy_upload_dir)
     upload_dir.mkdir(parents=True, exist_ok=True)
 
@@ -176,6 +186,7 @@ async def upload_policy_document(
         uploaded_by=current_user.id,
         checksum=checksum,
         status=PolicyStatus.SUBMITTED.value,
+        audience=policy_audience,
         version=(latest_version or 0) + 1,
     )
     db.add(policy)

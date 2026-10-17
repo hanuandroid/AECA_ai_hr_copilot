@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.models.hr_policy import HRPolicy
 from app.models.policy_chunk import PolicyChunk
 from app.services.ai.rag.ingest import ingest_policies
-from tests.ai.rag.conftest import CHUNK_OVERLAP, CHUNK_SIZE
+from tests.ai.rag.conftest import CHUNK_OVERLAP, CHUNK_SIZE, EMPLOYEE_AUDIENCES
 from tests.support.http import data
 
 QUESTION = "How many days per week may I work from the moon base?"
@@ -43,7 +43,7 @@ async def test_submitted_draft_is_never_indexed_or_retrieved(client, auth, db, e
     draft = await _upload(client, auth, "manager")
     report = await _ingest(db, embedder)
     assert await _indexed(db, draft["id"]) == 0
-    assert draft["id"] not in _retrieved_ids(await retriever.retrieve(QUESTION))
+    assert draft["id"] not in _retrieved_ids(await retriever.retrieve(QUESTION, audiences=EMPLOYEE_AUDIENCES))
     published = (await db.execute(select(HRPolicy.id).where(HRPolicy.status == "PUBLISHED"))).scalars().all()
     assert report.documents + len(report.failed_policy_ids) == len(published)
 
@@ -53,22 +53,22 @@ async def test_published_submission_is_indexed_after_ingestion(client, auth, db,
     await client.post(f"/api/v1/hr-policies/{draft['id']}/publish", headers=await auth("admin"))
     await _ingest(db, embedder)
     assert await _indexed(db, draft["id"]) > 0
-    assert draft["id"] in _retrieved_ids(await retriever.retrieve(QUESTION))
+    assert draft["id"] in _retrieved_ids(await retriever.retrieve(QUESTION, audiences=EMPLOYEE_AUDIENCES))
 
 
 async def test_archived_version_stops_being_retrieved_before_reindex(client, auth, db, embedder, retriever):
     v1 = await _upload(client, auth, "admin")
     await _ingest(db, embedder)
-    assert v1["id"] in _retrieved_ids(await retriever.retrieve(QUESTION))
+    assert v1["id"] in _retrieved_ids(await retriever.retrieve(QUESTION, audiences=EMPLOYEE_AUDIENCES))
 
     v2 = await _upload(client, auth, "admin", body=b"# Moon base work\n\nMoon base work is limited to one day per week.")
     db.expire_all()
-    results = _retrieved_ids(await retriever.retrieve(QUESTION))  # no re-ingestion yet
+    results = _retrieved_ids(await retriever.retrieve(QUESTION, audiences=EMPLOYEE_AUDIENCES))  # no re-ingestion yet
     assert v1["id"] not in results
 
     await _ingest(db, embedder)
     assert await _indexed(db, v1["id"]) == 0  # stale chunks removed by ingestion
-    assert v2["id"] in _retrieved_ids(await retriever.retrieve(QUESTION))
+    assert v2["id"] in _retrieved_ids(await retriever.retrieve(QUESTION, audiences=EMPLOYEE_AUDIENCES))
 
 
 async def test_stale_chunks_of_a_draft_are_never_served(client, auth, db, embedder, retriever):
@@ -79,7 +79,7 @@ async def test_stale_chunks_of_a_draft_are_never_served(client, auth, db, embedd
     await db.execute(update(HRPolicy).where(HRPolicy.id == published["id"]).values(status="SUBMITTED"))
     await db.commit()
     assert await _indexed(db, published["id"]) > 0
-    assert published["id"] not in _retrieved_ids(await retriever.retrieve(QUESTION))
+    assert published["id"] not in _retrieved_ids(await retriever.retrieve(QUESTION, audiences=EMPLOYEE_AUDIENCES))
 
 
 async def test_rejected_submission_is_not_indexed(client, auth, db, embedder):
