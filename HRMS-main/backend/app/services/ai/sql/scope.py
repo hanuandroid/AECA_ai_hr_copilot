@@ -6,7 +6,9 @@ After pass-1 validation, EVERY base table reference is replaced by a backend-bui
 
 - SELF: ids = {caller}; TEAM: ids = caller + direct reports (employees.manager_id); ORG: no WHERE.
 - tickets: rows raised by an in-scope employee OR assigned to the caller.
-- catalog/payroll(ORG only): column projection only.
+- catalog/payroll(ORG only): column projection only; except under SELF scope, where a catalog with a `self_link`
+  (projects, skills) keeps only rows linked to the caller's own assignments, via that assignment table's own scope
+  wrapper (RBAC step 8: an EMPLOYEE gets no organisation catalogue the business API does not give them).
 The ids come from AIUserContext (DB), never from the SQL, prompt or LLM. `my_team` is injected as
 a backend CTE. Then LIMIT is enforced, the final SQL is regenerated from the AST, re-parsed and
 verified again (every base table must sit inside exactly the expected wrapper).
@@ -75,8 +77,17 @@ def enforce_scope(validated: ValidatedQuery, ctx: AIUserContext, *, max_rows: in
     final_sql = tree.sql(dialect=DIALECT, comments=False)
     verify_final_sql(final_sql, ctx, validated.scope, max_rows=max_rows, max_joins=max_joins)
     return ExecutableQuery(
-        sql=final_sql, params={ME_PARAM: ctx.employee_id}, scope=validated.scope, tables=validated.tables, row_limit=max_rows
+        sql=final_sql, params={ME_PARAM: ctx.employee_id}, scope=validated.scope,
+        tables=validated.tables | link_tables(validated.tables, validated.scope), row_limit=max_rows,
     )
+
+
+def link_tables(tables: frozenset[str], scope: DataScope) -> frozenset[str]:
+    """Assignment tables read by SELF-scoped catalog wrappers (step 8); the executor's authorizer must allow them.
+    They are registered, scoped tables, so only the caller's own allow-listed columns become readable."""
+    if scope.level != ScopeLevel.SELF:
+        return frozenset()
+    return frozenset(TABLES[t].self_link[0] for t in tables if t in TABLES and TABLES[t].self_link is not None)
 
 
 def apply_row_limit(tree: exp.Expression, max_rows: int) -> None:
@@ -134,7 +145,13 @@ def verify_final_sql(sql: str, ctx: AIUserContext, scope: DataScope, *, max_rows
 
 def _predicate(table: str, scope: DataScope, ctx: AIUserContext) -> str | None:
     policy = TABLES[table]
-    if policy.kind == TableKind.CATALOG or scope.level == ScopeLevel.ORG:
+    if policy.kind == TableKind.CATALOG:
+        if policy.self_link is None or scope.level != ScopeLevel.SELF:
+            return None
+        link_table, link_column = policy.self_link
+        # The nested reference is the link table's own canonical wrapper, so verify_final_sql proves it like any other.
+        return f'"id" IN (SELECT "{link_column}" FROM ({wrapper_sql(link_table, scope, ctx)}) AS "own_link")'
+    if scope.level == ScopeLevel.ORG:
         return None
     ids = ", ".join(str(int(i)) for i in sorted(scope.employee_ids or {ctx.employee_id}))
     if table == "tickets":

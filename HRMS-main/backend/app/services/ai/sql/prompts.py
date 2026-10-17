@@ -35,7 +35,7 @@ _SCOPE_RULES = {
         "Access scope: SELF. You may only query the current user's own records. Every employee-owned table in every "
         "SELECT must be restricted to the user, e.g. employees.id = :me, <table>.employee_id = :me "
         "(tickets: employee_id = :me OR assignee_id = :me), or employees.manager_id = :me for people reporting to the "
-        "user. Catalog tables (departments, skills, projects) are unrestricted."
+        "user. departments is unrestricted; skills and projects only contain the user's own skills and projects."
     ),
     ScopeLevel.TEAM: (
         "Access scope: TEAM (the user plus their direct reports). Every employee-owned table in every SELECT must be "

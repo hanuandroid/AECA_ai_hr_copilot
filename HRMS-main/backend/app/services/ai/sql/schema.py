@@ -35,6 +35,10 @@ class TablePolicy:
     allowed_columns: tuple[str, ...]
     owner_columns: tuple[str, ...] = ()  # columns holding the owning employee id
     description: str = ""
+    # RBAC step 8 (AI parity): (assignment table, its column referencing this catalog's id). Under SELF scope the
+    # catalog is limited to rows linked to the caller's own assignments, matching the business API: an EMPLOYEE sees
+    # only their own projects (GET /employees/{own id}) and no organisation catalogue.
+    self_link: tuple[str, str] | None = None
 
 
 TABLES: dict[str, TablePolicy] = {
@@ -85,10 +89,12 @@ TABLES: dict[str, TablePolicy] = {
             description="level: BEGINNER|INTERMEDIATE|EXPERT; skill_id -> skills.id",
         ),
         TablePolicy("departments", TableKind.CATALOG, ("id", "name", "location"), description="Departments"),
-        TablePolicy("skills", TableKind.CATALOG, ("id", "name", "normalized_name"), description="Skill catalog"),
+        TablePolicy("skills", TableKind.CATALOG, ("id", "name", "normalized_name"), description="Skill catalog",
+                    self_link=("employee_skills", "skill_id")),
         TablePolicy(
             "projects", TableKind.CATALOG, ("id", "name", "description", "status"),
             description="Project catalog; status: ONGOING|COMPLETED|ON_HOLD|PLANNED",
+            self_link=("employee_projects", "project_id"),
         ),
         TablePolicy(
             "payroll_records", TableKind.PAYROLL, ("id", "employee_id", "month", "gross", "net"),

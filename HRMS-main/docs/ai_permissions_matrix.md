@@ -128,9 +128,9 @@ Rows are limited by the Phase 2 SQL capability (`SQL_READ_SELF/TEAM/ORG`): EMPLO
 |---|---|---|---|---|
 | `employees` | id, name, email, department_id, manager_id, role, status, joining_date, occupancy | SELF | TEAM | ALL |
 | `departments` | id, name, location | ALL (catalog) | ALL | ALL |
-| `skills` | id, name, normalized_name | ALL (catalog) | ALL | ALL |
+| `skills` | id, name, normalized_name | **own skills only** (RBAC step 8: rows linked through the caller's `employee_skills`) | ALL | ALL |
 | `employee_skills` | id, employee_id, skill_id, level | SELF | TEAM | ALL |
-| `projects` | id, name, description, status | ALL (catalog) | ALL | ALL |
+| `projects` | id, name, description, status | **own projects only** (RBAC step 8: rows linked through the caller's `employee_projects`; the API gives employees no catalogue) | ALL | ALL |
 | `employee_projects` | id, employee_id, project_id, role_on_project | SELF | TEAM | ALL |
 | `job_history` | id, employee_id, designation, business_unit, department, start_date, end_date, is_current | SELF | TEAM | ALL |
 | `leave_balances` | id, employee_id, leave_type, total, used, remaining | SELF | TEAM | ALL |
@@ -166,8 +166,8 @@ Code source of truth: `backend/app/services/ai/actions/registry.py` (`ACTION_REG
 | LEAVE_REJECT | POST `/api/v1/leaves/requests/{id}/reject` | anyone except self | direct reports | — | same |
 | TICKET_CREATE | POST `/api/v1/tickets` | self | self | self | caller |
 | TICKET_ASSIGN | POST `/api/v1/tickets/{id}/assign` | any ticket | team-raised tickets | — | ticket by id/title, plus assignee (ACTIVE, within HR read scope) |
-| TICKET_STATUS_UPDATE | POST `/api/v1/tickets/{id}/status` | any ticket | team-raised tickets | — (D7) | ticket by id/title; status ∈ OPEN/IN_PROGRESS/RESOLVED |
-| ANNOUNCEMENT_CREATE | POST `/api/v1/announcements` | ✓ | ✓ | — | — |
+| TICKET_STATUS_UPDATE | POST `/api/v1/tickets/{id}/status` | any ticket | team-raised tickets | — (D7, exception E1: also the employee assignee) | ticket by id/title; status ∈ OPEN/IN_PROGRESS/RESOLVED |
+| ANNOUNCEMENT_CREATE | POST `/api/v1/announcements` | ✓ (audience ORG) | ✓ (audience TEAM) | — | — (audience from the grant, never from the model) |
 | PROJECT_ASSIGN | POST `/api/v1/employees/{id}/projects` | anyone | team | — | employee (ACTIVE) + project from the catalog |
 | PROJECT_CREATE | POST `/api/v1/employees/projects/catalog` | ✓ | — (API is ADMIN-only too since RBAC step 6) | — | — |
 | EMPLOYEE_DEACTIVATE | DELETE `/api/v1/employees/{id}` | anyone except self | — | — | employee |
@@ -177,6 +177,56 @@ Every action requires confirmation (D6): a server-side, single-use token bound t
 **Changes vs the Phase 0 design below:**
 - Read-only tools such as `get_my_leave_balance` and `list_pending_leaves` are not part of the Action Agent. Reads go through the SQL agent (Phase 4), so the registry contains only mutations.
 - Phase 0 named the confirmation table `ai_pending_actions`; it is implemented under that name in migration 0018.
+
+### 3.0a RBAC step 8: AI parity with the business API (2026-10-17)
+
+Evidence: `tests/ai/actions/test_action_parity.py` executes every row below twice (business API over HTTP with the
+role's token; Copilot propose + confirm), and asserts the D7 invariant: **Copilot allowed ⇒ API allowed**, with every
+stricter row naming an exception. Writable fields per action are the typed params models (`actions/models.py`,
+`extra="forbid"`); identity, role, audience, team and owner fields can never come from the model.
+
+| Action | Roles that can execute (Copilot) | API rule (after RBAC steps 2–7) | Parity |
+|---|---|---|---|
+| LEAVE_CREATE | E, M, A (self) | self | equal |
+| LEAVE_APPROVE / LEAVE_REJECT | M (direct reports), A (anyone but self) | same | equal |
+| TICKET_CREATE | E, M, A (self) | self | equal |
+| TICKET_ASSIGN | M (team-raised ticket; assignee self/report), A | M: tickets raised by self/report **or assigned to self**; assignee self/report | stricter (E2) |
+| TICKET_STATUS_UPDATE | M (team-raised), A | A any; M in S-01a scope; **EMPLOYEE current assignee** | stricter (E1, E2) |
+| ANNOUNCEMENT_CREATE | M (TEAM), A (ORG) | same (step 6) | equal |
+| PROJECT_ASSIGN | M (self/reports), A (anyone) | same | equal |
+| PROJECT_CREATE | A | A (step 6) | equal |
+| EMPLOYEE_DEACTIVATE | A (anyone but self) | A, never self, last-active-admin guard (step 4) | equal (guard enforced by the API at execution) |
+| project status, poll, policy, role/salary/bank/PAN/password/payslip changes | **no Copilot action** | — | n/a (`test_read_path_parity.py` pins that no action reaches the step 4 routes) |
+
+**Intentional exceptions (Copilot stricter than the API, D7):**
+- **E1 (approved 2026-10-17):** the API lets an EMPLOYEE who is the current ticket assignee change status (step 5);
+  the Copilot denies ticket-status changes to every EMPLOYEE, including the assignee and the ticket creator.
+- **E2:** the Copilot's MANAGER ticket scope is owner-based (tickets raised by the manager or a direct report); the API
+  also allows a manager to assign or re-status a ticket merely assigned to them.
+
+**Confirmation-time re-authorization** (`test_confirmation_parity.py`, plus single-use / user-bound / TTL tests in
+`test_action_flow.py` and `test_action_api.py`): the confirm endpoint rebuilds `AIUserContext` from the database,
+`ActionAgentService.confirm` re-runs the capability and target check with it, and the business endpoint re-checks
+with the user's token. Verified: role change (→ `AI_PERMISSION_DENIED`, record DENIED), deactivation (→ inactive
+error), target or ticket owner leaving the team (denied), assignee leaving the team (API refuses → FAILED), admin
+demoted before confirming (denied), target state changed (API refuses → FAILED), and the same over HTTP. Nothing is
+written in any of these cases. Audience reclassification of policies affects reads only (step 7 tests); an admin
+demoted before confirming an ORG announcement is refused by the API (step 6 test).
+
+**Non-mutating reads.** SQL agent (scope-wrapped tables; announcements, polls, poll responses, HR policies, documents and
+attendance are denied tables), restricted skill search (step 3), Policy RAG + replay (step 7), `GET /chat/permissions`
+(UX metadata). **Fixed in step 8:** under SELF scope `projects` and `skills` were unrestricted catalogs, so an
+EMPLOYEE could list the whole project catalogue and every skill name, which the API never shows them; they are now
+limited to the caller's own linked rows (verified by the final-SQL verifier and the executor's authorizer). Directory
+parity: every employee row the SQL agent returns is readable by the same user through `GET /employees/{id}`.
+Limitation: an EMPLOYEE query that reads `projects`/`skills` inside a CTE exceeds the existing subquery-depth guard and
+is refused (fail closed; the guard was not relaxed).
+
+**Assignment deviation (approved 2026-10-17).** The assignment brief (role table) lists a "general policy/project
+catalog" for employees, but the business API restricts the catalogue to MANAGER/ADMIN and D7 forbids the Copilot from
+being broader. Decision: keep the restriction in both paths. An EMPLOYEE asking "Which projects are ongoing?" gets
+only their own ongoing projects. Assignment eval case `asg-sql-01` was updated accordingly (its `note` records the old
+expectation: both ongoing catalogue projects).
 
 ### 3.1 Phase 0 design (historical)
 
