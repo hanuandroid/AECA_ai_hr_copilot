@@ -184,7 +184,8 @@ export type Birthday = {
 export type TeamCalendarItem = {
   employee_id: number;
   employee_name: string;
-  employee_role: string;
+  // S-06: returned to ADMIN viewers only. Managers get self + direct reports, employees only themselves (backend-scoped).
+  employee_role?: string;
   markers: Record<string, "LEAVE" | "WFH">;
 };
 

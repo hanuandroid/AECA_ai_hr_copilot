@@ -55,8 +55,8 @@ All production-hardening documents are in `docs/production-hardening/`.
 **Approved and done:** everything in §2.
 
 **RBAC remediation plan: complete (Steps 0–10).** Nothing further is approved. Open items needing decisions:
-S-06 (team-calendar scope), S-07 (migration rollback below 0016), S-04 (test gaps), the employee-PAYSLIP document
-question, and the release gates in `release-readiness.md` §6.
+S-07 (migration rollback below 0016), S-04 (test gaps), the employee-PAYSLIP document question, and the release gates
+in `release-readiness.md` §6. S-06 (team-calendar scope) was decided and fixed on 2026-10-17 (commit after `3c1f31b`).
 
 **Approved scope with nothing left to implement:** Phase 3 offline workstreams 3.3, 3.6, 3.8 and 3.9. If you resume, stay within them:
 - **3.3:** re-run `python -m evals.rag_calibration` whenever the policy corpus or dataset changes. Don't change `AI_RAG_MIN_SCORE` without approval.
@@ -85,7 +85,7 @@ question, and the release gates in `release-readiness.md` §6.
 
 | Area | Blocker |
 |---|---|
-| Security | B-17 (JWT in `localStorage`, no revocation; a password change does not revoke existing tokens). S-02, S-03 and S-05 fixed (RBAC Steps 4, 6 and 8). S-06 team-calendar scope open (decision) |
+| Security | B-17 (JWT in `localStorage`, no revocation; a password change does not revoke existing tokens). S-02, S-03, S-05 fixed (RBAC Steps 4, 6, 8) and S-06 fixed (team calendar, 2026-10-17) |
 | Dependencies | `braces` GHSA-vfj7 (build-time; no patched release) has a PROPOSED exception, so the CI gate fails. Next's postcss is fixed by an override (remove it on `next@16`) |
 | AI evaluation | No live-model results with either provider (no key). OpenAI provider added 2026-10-16 and verified with mocked clients only (`docs/ai-provider-setup.md`); OpenAI governance decisions 7–11 open (`data-processing.md` §5). Retrieval calibration is a proposal on a small demo dataset |
 | Operations | CI never ran on GitHub. No TLS proxy, alerting or backup schedule. Single worker / single instance only |

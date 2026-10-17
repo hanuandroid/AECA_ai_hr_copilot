@@ -73,7 +73,7 @@ the role gate (validation or state, e.g. a fixture that is already published). R
 | `POST` | `/api/v1/polls` | auth | deny | ok | ok |  |
 | `POST` | `/api/v1/polls/{poll_id}/vote` | auth | ok | ok | ok |  |
 | `GET` | `/api/v1/polls/{poll_id}/results` | auth | ok | ok | ok |  |
-| `GET` | `/api/v1/calendar/team` | auth | ok | ok | ok |  |
+| `GET` | `/api/v1/calendar/team` | auth | ok | ok | ok | S-06: rows scoped (ADMIN all active; MANAGER self + active direct reports; EMPLOYEE self); tests/rbac/test_team_calendar_scope.py |
 | `GET` | `/api/v1/calendar/holidays` | auth | ok | ok | ok |  |
 | `GET` | `/api/v1/calendar/birthdays` | auth | ok | ok | ok |  |
 | `GET` | `/api/v1/org/tree` | auth | ok | ok | ok |  |
@@ -119,7 +119,7 @@ the role gate (validation or state, e.g. a fixture that is already published). R
 | `/hr-policies*` | publication workflow; ALL/MANAGERS/ADMINS audience | `characterization/test_hr_policy_publication.py`, `characterization/test_hr_policies.py`, `rbac/test_policy_audience.py` | AUTO |
 | `/attendance/*`, `/finance/*` | every query filtered by `employee_id == current_user.id` | code read 2026-10-17 (`attendance.py`, `finance.py`); role gate in the route suite | MANUAL (S-04: no dedicated tests) |
 | `GET /org/tree` | active employees only; id, name, role, manager_id | code read 2026-10-17 (`org.py`) | MANUAL (S-04) |
-| `GET /calendar/team` | **ADMIN and MANAGER: every employee; EMPLOYEE: own department (self if none)**; names, roles, approved-leave and WFH markers | code read 2026-10-17 (`team_calendar.py`) | MANUAL; **finding S-06** (wider than decision 1's manager scope; needs a product decision) |
+| `GET /calendar/team` | active employees only; ADMIN: everyone; MANAGER: self + active direct reports; EMPLOYEE: self; markers only for people in scope (approved `LEAVE`, `WFH`); `employee_role` ADMIN-only | `rbac/test_team_calendar_scope.py` (28 tests, incl. forged params/claims, reporting-line, department and status changes) | AUTO (S-06 fixed 2026-10-17) |
 | `GET /calendar/birthdays`, `/calendar/holidays` | birthdays: name, department, next date (no birth year); includes inactive employees | code read 2026-10-17 | MANUAL (S-04) |
 | `/chat`, `/chat/policy`, `/chat/sql`, `/chat/actions*`, `/chat/conversations*`, `/chat/permissions` | AI authorization boundary, per-role API tests, conversation ownership, policy audiences, action parity, confirmation re-check | `tests/ai/**`, e.g. `actions/test_action_api.py`, `actions/test_action_parity.py`, `actions/test_confirmation_parity.py`, `rag/test_policy_audience_rag.py`, `conversation/test_policy_replay.py`, `sql/test_read_path_parity.py` | AUTO (offline, scripted models) |
 | `/ai/audit*` | non-admins: own events only; metrics ADMIN | `tests/ai/audit/test_audit_api.py` | AUTO |
@@ -142,7 +142,7 @@ Playwright; Phase 3 workstream 3.7 not approved). The backend column is what act
 | `/finance`, `/attendance`, `/leaves` | ✓ | ✓ | ✓ | self-only endpoints |
 | `/announcements`, `/polls` | ✓ | ✓ | ✓ | audience-filtered lists (step 6) |
 | `/hr-policies` | ✓ | ✓ | ✓ | audience-filtered list and download (step 7) |
-| `/team-calendar` | ✓ | ✓ | ✓ | `GET /calendar/team` (see S-06) |
+| `/team-calendar` | ✓ | ✓ | ✓ | `GET /calendar/team` (rows scoped per role, S-06 fixed) |
 | `/tickets` | ✓ | ✓ | ✓ | scoped ticket list (S-01a) |
 | `/organization` | ✓ | ✓ | ✓ | `GET /org/tree` (limited chart) |
 | `/employees` | — | ✓ | ✓ | `GET /employees` (EMPLOYEE 403) |

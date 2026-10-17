@@ -4,8 +4,8 @@
 are covered by `ai_permissions_matrix.md`). The complete, generated list of all 79 registered method + path pairs, with
 per-role outcomes and verification status, is `page-endpoint-inventory.md` (source of truth for route coverage).
 **Method:** code reading of every handler, plus the automated tests named in the Evidence column.
-**Status:** NOT YET PRODUCTION READY. S-02, S-03 and S-05 are fixed (RBAC Steps 4, 6, 8); S-04 (test gaps) and S-06
-(team calendar scope) are open.
+**Status:** NOT YET PRODUCTION READY. S-02, S-03 and S-05 are fixed (RBAC Steps 4, 6, 8); S-06 fixed (team calendar); S-04 (test gaps) and S-07
+(migration rollback, `release-readiness.md`) are open.
 
 Legend:
 - **Role gate:** `any` means any authenticated ACTIVE user. Inactive users are rejected for every route (403 `USER_INACTIVE`, Phase 1).
@@ -77,7 +77,7 @@ Legend:
 | `GET /polls/{id}/results` | any | Aggregates only (unchanged); a TEAM poll's results only for that team and admins, otherwise the unknown-id 404 | `rbac/test_content_audience.py` |
 | `GET /attendance/me`, `/today`, `POST /clock-in`, `/clock-out` | any | Self | code |
 | `GET /finance/payroll/me`, `/statutory/me`, `/profile/me` | any | Self | code |
-| `GET /calendar/team` | any | **Corrected 2026-10-17 (step 10 code read):** MANAGER and ADMIN: every employee; EMPLOYEE: own department (self if none). Names, roles, approved-leave **and WFH** markers. Wider than decision 1's manager scope: finding **S-06** | code (MANUAL) |
+| `GET /calendar/team` | any | **S-06 fixed 2026-10-17 (approved rules):** active employees only. ADMIN: everyone; MANAGER: self + active direct reports (`manager_id`, one level); EMPLOYEE: self. Departments play no part. Markers only for people in scope: `LEAVE` (approved only; never type, reason or pending) and `WFH`. `employee_role` returned to ADMIN only. Scoped in SQL on every request | `rbac/test_team_calendar_scope.py` |
 | `GET /calendar/holidays`, `/calendar/birthdays` | any | Holidays; birthdays: name, department, next date without year (includes inactive employees) | code (MANUAL) |
 | `GET /org/tree` | any | **RBAC step 2:** active employees only; id, name, role, manager_id | `rbac/test_directory_scope.py` |
 
@@ -238,4 +238,4 @@ UX only; the backend remains the authorization boundary for every API call a pag
 | S-03 | Announcements, polls and catalogue are organisation-wide for any manager | Low to Medium (business) | **Fixed (RBAC step 6, 2026-10-17)**, §3 |
 | S-04 | Polls, attendance, finance, calendar and org tree have no dedicated characterization tests | Low (test gap) | Proposed |
 | S-05 | Copilot SQL agent let an EMPLOYEE read the whole project catalogue and every skill name (`projects`/`skills` were unrestricted catalogs); the API shows employees only their own projects | Low (business data, no sensitive fields) | **Fixed (RBAC step 8, 2026-10-17)**: own linked rows only under SELF scope; approved deviation from the assignment's employee "project catalog" (eval `asg-sql-01` updated); `ai_permissions_matrix.md` §3.0a |
-| S-06 | `GET /calendar/team` shows MANAGER (and ADMIN) every employee's name, role and approved-leave/WFH days, and EMPLOYEE their whole department; decision 1 limits managers to self + direct reports for general employee details and does not mention the calendar | Low to Medium (availability data, no sensitive fields) | **Open: product decision needed** (keep org/department-wide availability, or scope to self + reports). Not changed in step 10 (documentation and verification only) |
+| S-06 | `GET /calendar/team` showed MANAGER/ADMIN every employee (inactive included) and EMPLOYEE their whole department, with roles and leave/WFH days | Low to Medium (availability data) | **Fixed (2026-10-17, approved rules)**: ADMIN all active; MANAGER self + active direct reports; EMPLOYEE self; role ADMIN-only; `rbac/test_team_calendar_scope.py` |

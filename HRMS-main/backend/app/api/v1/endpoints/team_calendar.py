@@ -2,7 +2,7 @@ from calendar import monthrange
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import and_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.response import success_response
@@ -10,7 +10,7 @@ from app.db.session import get_db
 from app.models.attendance_log import AttendanceLog
 from app.models.department import Department
 from app.models.employee import Employee
-from app.models.enums import LeaveRequestStatus, Role
+from app.models.enums import EmployeeStatus, LeaveRequestStatus, Role
 from app.models.holiday import Holiday
 from app.models.leave_request import LeaveRequest
 from app.services.auth import get_current_user
@@ -21,6 +21,20 @@ router = APIRouter()
 def _month_bounds(year: int, month: int) -> tuple[date, date]:
     last_day = monthrange(year, month)[1]
     return date(year, month, 1), date(year, month, last_day)
+
+
+def _calendar_scope(viewer: Employee):
+    """S-06 (approved 2026-10-17): who appears on the team calendar. Active employees only. ADMIN: everyone; MANAGER:
+    self + direct reports (employees.manager_id == viewer, one level, the same relationship as the directory); anyone
+    else: self only (fail closed). Role and status come from the database (get_current_user), never from the request or
+    JWT claims, and the rule is evaluated on every request, so reporting-line, department and status changes apply at
+    once. Departments play no part."""
+    active = Employee.status == EmployeeStatus.ACTIVE
+    if viewer.role == Role.ADMIN:
+        return active
+    if viewer.role == Role.MANAGER:
+        return and_(active, or_(Employee.id == viewer.id, Employee.manager_id == viewer.id))
+    return and_(active, Employee.id == viewer.id)
 
 
 def _birthday_occurrence(dob: date, year: int) -> date:
@@ -39,13 +53,8 @@ async def get_team_calendar(
 ):
     start_date, end_date = _month_bounds(year, month)
 
-    if current_user.role in {Role.ADMIN, Role.MANAGER}:
-        employees_q = select(Employee).order_by(Employee.name.asc())
-    else:
-        if current_user.department_id is None:
-            employees_q = select(Employee).where(Employee.id == current_user.id)
-        else:
-            employees_q = select(Employee).where(Employee.department_id == current_user.department_id).order_by(Employee.name.asc())
+    # The employee set is scoped in SQL first; leave and WFH markers are then read only for these ids.
+    employees_q = select(Employee).where(_calendar_scope(current_user)).order_by(Employee.name.asc(), Employee.id.asc())
 
     employees = (await db.execute(employees_q)).scalars().all()
     employee_ids = [employee.id for employee in employees]
@@ -84,11 +93,13 @@ async def get_team_calendar(
         days.append({"date": cursor.isoformat(), "day": cursor.day, "weekday": cursor.strftime("%a")})
         cursor += timedelta(days=1)
 
+    # Markers are "LEAVE" (approved leave only; never type, reason or pending) or "WFH". The role is ADMIN-only (S-06).
+    include_role = current_user.role == Role.ADMIN
     items = [
         {
             "employee_id": employee.id,
             "employee_name": employee.name,
-            "employee_role": employee.role.value,
+            **({"employee_role": employee.role.value} if include_role else {}),
             "markers": markers_by_employee.get(employee.id, {}),
         }
         for employee in employees
