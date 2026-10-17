@@ -56,3 +56,5 @@
 **Follow-up S-06 (approved 2026-10-17, after Step 10):** team calendar scoped per the approved rules: active employees only; ADMIN everyone, MANAGER self + active direct reports, EMPLOYEE self; markers only for people in scope (approved leave, WFH); role ADMIN-only. Tests `tests/rbac/test_team_calendar_scope.py`; `authorization-matrix.md` S-06. **done**
 
 **Follow-up S-04 (2026-10-17):** object-scope test gaps closed, test-only (no implementation defect found): `tests/rbac/test_self_service_scope.py` (attendance, finance, holidays, birthday fields); polls, team calendar and org tree were already covered (steps 6, S-06, 2). New open question S-08 (birthdays list inactive employees). **done**
+
+**Follow-up S-08 (approved 2026-10-17):** birthdays list active employees only (query filter on `employees.status`); every role keeps access; fields unchanged (name, department, next date without year). Tests in `tests/rbac/test_self_service_scope.py`. **done**

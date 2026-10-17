@@ -55,8 +55,8 @@ All production-hardening documents are in `docs/production-hardening/`.
 **Approved and done:** everything in §2.
 
 **RBAC remediation plan: complete (Steps 0–10).** Nothing further is approved. Open items needing decisions:
-S-07 (migration rollback below 0016), S-08 (birthdays list inactive employees), the employee-PAYSLIP document question, and the release gates
-in `release-readiness.md` §6. S-06 (team-calendar scope) was decided and fixed on 2026-10-17 (`f271471`); S-04 test gaps closed the same day.
+S-07 (migration rollback below 0016), the employee-PAYSLIP document question, and the release gates
+in `release-readiness.md` §6. S-06 (team-calendar scope) was decided and fixed on 2026-10-17 (`f271471`); S-04 test gaps closed (`6b2d970`) and S-08 fixed (birthdays: active employees only) the same day.
 
 **Approved scope with nothing left to implement:** Phase 3 offline workstreams 3.3, 3.6, 3.8 and 3.9. If you resume, stay within them:
 - **3.3:** re-run `python -m evals.rag_calibration` whenever the policy corpus or dataset changes. Don't change `AI_RAG_MIN_SCORE` without approval.

@@ -75,7 +75,7 @@ the role gate (validation or state, e.g. a fixture that is already published). R
 | `GET` | `/api/v1/polls/{poll_id}/results` | auth | ok | ok | ok |  |
 | `GET` | `/api/v1/calendar/team` | auth | ok | ok | ok | S-06: rows scoped (ADMIN all active; MANAGER self + active direct reports; EMPLOYEE self); tests/rbac/test_team_calendar_scope.py |
 | `GET` | `/api/v1/calendar/holidays` | auth | ok | ok | ok |  |
-| `GET` | `/api/v1/calendar/birthdays` | auth | ok | ok | ok |  |
+| `GET` | `/api/v1/calendar/birthdays` | auth | ok | ok | ok | S-08: active employees only; name, team, next date (no year); tests/rbac/test_self_service_scope.py |
 | `GET` | `/api/v1/org/tree` | auth | ok | ok | ok |  |
 | `GET` | `/api/v1/tickets` | auth | ok | ok | ok |  |
 | `POST` | `/api/v1/tickets` | auth | ok | ok | ok |  |
@@ -120,7 +120,7 @@ the role gate (validation or state, e.g. a fixture that is already published). R
 | `/attendance/*`, `/finance/*` | self-only for every role (ADMIN included): every query filtered by the caller's id; forged ids and role claims ignored; clock-in/out never touch another person's row | `rbac/test_self_service_scope.py` (S-04, 2026-10-17; mutation-checked) | AUTO |
 | `GET /org/tree` | active employees only; id, name, role, manager_id; no hidden manager referenced | `rbac/test_directory_scope.py` (step 2) | AUTO (S-04: already covered) |
 | `GET /calendar/team` | active employees only; ADMIN: everyone; MANAGER: self + active direct reports; EMPLOYEE: self; markers only for people in scope (approved `LEAVE`, `WFH`); `employee_role` ADMIN-only | `rbac/test_team_calendar_scope.py` (28 tests, incl. forged params/claims, reporting-line, department and status changes) | AUTO (S-06 fixed 2026-10-17) |
-| `GET /calendar/birthdays`, `/calendar/holidays` | holidays identical for every role; birthdays: name, department, next date only (no year, ids or DOB); population includes inactive employees (**S-08, open question**, not pinned) | `rbac/test_self_service_scope.py` | AUTO (fields); population MANUAL |
+| `GET /calendar/birthdays`, `/calendar/holidays` | holidays identical for every role; birthdays: **active employees only** (S-08 fixed 2026-10-17), name, department, next date only (no year, ids or DOB) | `rbac/test_self_service_scope.py` (incl. forged params/claims and status changes; mutation-checked) | AUTO |
 | `/chat`, `/chat/policy`, `/chat/sql`, `/chat/actions*`, `/chat/conversations*`, `/chat/permissions` | AI authorization boundary, per-role API tests, conversation ownership, policy audiences, action parity, confirmation re-check | `tests/ai/**`, e.g. `actions/test_action_api.py`, `actions/test_action_parity.py`, `actions/test_confirmation_parity.py`, `rag/test_policy_audience_rag.py`, `conversation/test_policy_replay.py`, `sql/test_read_path_parity.py` | AUTO (offline, scripted models) |
 | `/ai/audit*` | non-admins: own events only; metrics ADMIN | `tests/ai/audit/test_audit_api.py` | AUTO |
 

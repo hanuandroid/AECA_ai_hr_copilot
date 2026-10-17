@@ -131,10 +131,12 @@ async def get_birthdays(
     _ = current_user
     today = date.today()
 
+    # S-08 (approved 2026-10-17): every role may read birthdays, but only of ACTIVE employees (former employees are
+    # excluded in the query). Fields stay name / team / next date, never the year, id or full date of birth.
     birthdays_result = await db.execute(
         select(Employee, Department.name)
         .outerjoin(Department, Department.id == Employee.department_id)
-        .where(Employee.date_of_birth.is_not(None))
+        .where(Employee.date_of_birth.is_not(None), Employee.status == EmployeeStatus.ACTIVE)
     )
 
     upcoming = []

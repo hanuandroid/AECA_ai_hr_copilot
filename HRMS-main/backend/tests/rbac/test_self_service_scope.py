@@ -6,7 +6,8 @@ Approved rules (authorization-matrix.md §1, page-endpoint-inventory.md §1.1):
 - `/calendar/holidays`: the same list for every role. `/calendar/birthdays`: every role, fields name / team / next date
   only (no birth year, no ids, no DOB) - decision 1 keeps birthdays available to all roles.
 - Anonymous: 401. Inactive token: 403 USER_INACTIVE.
-Not pinned here (open policy question, see the S-04 report): whether birthdays should list inactive employees.
+- `/calendar/birthdays` lists ACTIVE employees only (S-08, approved 2026-10-17): former employees are excluded in the
+  query, for every role, whatever the query parameters or token claims.
 The org chart (`/org/tree`) is covered by tests/rbac/test_directory_scope.py; the team calendar by
 tests/rbac/test_team_calendar_scope.py.
 """
@@ -14,14 +15,15 @@ tests/rbac/test_team_calendar_scope.py.
 from datetime import date, time
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app.api.v1.endpoints.attendance import _local_now
 from app.core.security import create_access_token
 from app.models.attendance_log import AttendanceLog
-from app.models.enums import AttendanceStatus
+from app.models.employee import Employee
+from app.models.enums import AttendanceStatus, EmployeeStatus
 from app.models.payroll_record import PayrollRecord
-from tests.support.data import ADMIN, EMPLOYEE, EMPLOYEE_SENSITIVE, MANAGER, OUTSIDER
+from tests.support.data import ADMIN, EMPLOYEE, EMPLOYEE_SENSITIVE, INACTIVE, MANAGER, OUTSIDER
 from tests.support.http import data
 
 USERS = {"employee": EMPLOYEE.id, "manager": MANAGER.id, "admin": ADMIN.id, "outsider": OUTSIDER.id}
@@ -185,6 +187,67 @@ async def test_birthdays_expose_no_year_ids_or_dob(client, auth, db, user):
     assert dob not in response.text  # the full date of birth (with year) never appears
     employee = next(item for item in items if item["name"] == "Employee Test")
     assert employee["date"][5:] == dob[5:] and employee["date"][:4] != dob[:4]  # month-day only; year is the next occurrence
+
+
+# --- S-08: birthdays of active employees only ----------------------------------------------------------------------
+
+BIRTHDAYS = "/api/v1/calendar/birthdays"
+# Fixed past dates of birth with distinctive month-days; the response only ever carries the next occurrence.
+DOBS = {OUTSIDER.id: date(1985, 3, 15), INACTIVE.id: date(1988, 7, 4), MANAGER.id: date(1980, 11, 30)}
+
+
+@pytest.fixture
+async def birthdays(db):
+    for employee_id, dob in DOBS.items():
+        await db.execute(update(Employee).where(Employee.id == employee_id).values(date_of_birth=dob))
+    await db.commit()
+
+
+def _names(response) -> set[str]:
+    return {item["name"] for item in data(response)}
+
+
+@pytest.mark.parametrize("user", ["employee", "manager", "admin"])
+async def test_birthdays_list_active_employees_only(client, auth, birthdays, user):
+    response = await client.get(BIRTHDAYS, headers=await auth(user))
+    assert response.status_code == 200
+    names = _names(response)
+    assert {"Employee Test", "Outsider Test", "Manager Test"} <= names  # active people with a date of birth
+    assert "Inactive Test" not in names
+    assert not any(item["date"].endswith("-07-04") for item in data(response))  # not even the former employee's date
+    for leaked in ("1985", "1988", "1980", str(INACTIVE.id)):
+        assert f'"{leaked}' not in response.text and f"-{leaked}" not in response.text, leaked
+
+
+async def test_birthday_departments_are_unchanged(client, auth, db, birthdays):
+    items = {item["name"]: item for item in data(await client.get(BIRTHDAYS, headers=await auth("employee")))}
+    assert (items["Outsider Test"]["team"], items["Manager Test"]["team"]) == ("Engineering", "Finance")
+    assert items["Manager Test"]["date"][5:] == "11-30" and items["Outsider Test"]["date"][5:] == "03-15"
+    await db.execute(update(Employee).where(Employee.id == OUTSIDER.id).values(department_id=None))
+    await db.commit()
+    items = {item["name"]: item for item in data(await client.get(BIRTHDAYS, headers=await auth("employee")))}
+    assert items["Outsider Test"]["team"] == "Unassigned"
+
+
+@pytest.mark.parametrize("params", [{"include_inactive": "true"}, {"status": "INACTIVE"}, {"employee_id": INACTIVE.id},
+                                    {"limit": 500, "all": "1"}])
+async def test_query_parameters_cannot_bring_back_former_employees(client, auth, birthdays, params):
+    assert "Inactive Test" not in _names(await client.get(BIRTHDAYS, headers=await auth("admin"), params=params))
+
+
+async def test_forged_admin_claim_cannot_bring_back_former_employees(client, birthdays):
+    token = create_access_token(subject=str(EMPLOYEE.id), role="ADMIN")
+    assert "Inactive Test" not in _names(await client.get(BIRTHDAYS, headers={"Authorization": f"Bearer {token}"}))
+
+
+async def test_status_changes_apply_on_the_next_request(client, auth, db, birthdays):
+    headers = await auth("manager")
+    assert "Outsider Test" in _names(await client.get(BIRTHDAYS, headers=headers))
+    await db.execute(update(Employee).where(Employee.id == OUTSIDER.id).values(status=EmployeeStatus.INACTIVE))
+    await db.execute(update(Employee).where(Employee.id == INACTIVE.id).values(status=EmployeeStatus.ACTIVE))
+    await db.commit()
+    names = _names(await client.get(BIRTHDAYS, headers=headers))
+    assert "Outsider Test" not in names and "Inactive Test" in names
 
 
 # --- anonymous and inactive ---------------------------------------------------------------------------------------

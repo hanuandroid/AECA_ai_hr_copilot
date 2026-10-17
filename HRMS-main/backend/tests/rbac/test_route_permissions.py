@@ -176,7 +176,8 @@ CASES: list[Case] = [
     Case("GET", "/api/v1/calendar/team", "/api/v1/calendar/team?year=2026&month=10", (AUTH, OK, OK, OK),
          note="S-06: rows scoped (ADMIN all active; MANAGER self + active direct reports; EMPLOYEE self); tests/rbac/test_team_calendar_scope.py"),
     Case("GET", "/api/v1/calendar/holidays", "/api/v1/calendar/holidays", (AUTH, OK, OK, OK)),
-    Case("GET", "/api/v1/calendar/birthdays", "/api/v1/calendar/birthdays", (AUTH, OK, OK, OK)),
+    Case("GET", "/api/v1/calendar/birthdays", "/api/v1/calendar/birthdays", (AUTH, OK, OK, OK),
+         note="S-08: active employees only; name, team, next date (no year); tests/rbac/test_self_service_scope.py"),
     Case("GET", "/api/v1/org/tree", "/api/v1/org/tree", (AUTH, OK, OK, OK)),
     # --- tickets ------------------------------------------------------------------------------------------------------
     Case("GET", "/api/v1/tickets", "/api/v1/tickets", (AUTH, OK, OK, OK)),
