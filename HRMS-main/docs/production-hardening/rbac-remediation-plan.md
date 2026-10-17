@@ -58,3 +58,5 @@
 **Follow-up S-04 (2026-10-17):** object-scope test gaps closed, test-only (no implementation defect found): `tests/rbac/test_self_service_scope.py` (attendance, finance, holidays, birthday fields); polls, team calendar and org tree were already covered (steps 6, S-06, 2). New open question S-08 (birthdays list inactive employees). **done**
 
 **Follow-up S-08 (approved 2026-10-17):** birthdays list active employees only (query filter on `employees.status`); every role keeps access; fields unchanged (name, department, next date without year). Tests in `tests/rbac/test_self_service_scope.py`. **done**
+
+**Follow-up S-07 (approved 2026-10-17):** forward-only production migrations, restore-based rollback, start-up revision guard (`app/db/revision_guard.py`, wired in the `app/main.py` lifespan; `tests/test_revision_guard.py`). Historical migrations `0009`, `0012`, `0016` unchanged and documented as unsupported downgrades on SQLite; `0020`-`0023` downgrades development-only. Policy in `deployment-runbook.md` §4.1. Remaining: restore drill in the target environment. **done (mitigated)**

@@ -57,6 +57,8 @@ Cutover is a separate, deliberate operator step:
 
 The database stores **absolute file paths** for documents and photos, so the upload directories must be restored to the same configured paths (for example `/app/storage/...`).
 
+**Rollback policy (S-07, 2026-10-17):** a restore is the only supported rollback after a migration; never `alembic downgrade` production data. Restore the database, the matching previous images and the uploads to their original paths together; writes after the backup are lost. The API start-up guard refuses a database whose revision differs from the code (`deployment-runbook.md` §4.1).
+
 ## 5. Restore drill (2026-10-13, local, copy of the dev database)
 
 The drill ran in a throwaway container from the `hrms-main-api` image, against a copy of `storage/hrms.db` and the policy files placed in a scratch directory. The real dev DB checksum was unchanged afterwards.

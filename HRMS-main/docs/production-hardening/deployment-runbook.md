@@ -48,10 +48,33 @@ After the first deployment every user must log in again: access tokens now carry
 ## 4. Upgrade and rollback
 
 1. Take a backup (§5) and run `restore.py --verify-only` on it.
-2. Build the new images and run `alembic upgrade head` with `run --rm`.
+2. Build the new images and run `alembic upgrade head` with `run --rm` (the API refuses to start until the database
+   is at the new head: §4.1).
 3. Run `up -d`. Graceful shutdown waits up to 20 s for in-flight requests (`stop_grace_period` is 30 s).
 4. Run the stale-actions report (§6).
 5. **Rollback:** go back to the previous image tags. If a migration ran, restore the pre-upgrade backup (§5.2): migrations are not written to be reversible in production.
+
+### 4.1 Migration and recovery policy (S-07, approved 2026-10-17)
+
+- **Production is forward-only.** Never run `alembic downgrade` against production data. Corrections are made with a
+  new forward migration.
+- **Rollback = restore**, never downgrade: the verified pre-upgrade backup (step 1), the matching **previous image
+  tags**, and the uploaded files restored to their **original configured paths** (the database stores absolute paths).
+  Every write made after that backup is lost (RPO 24 h, `backup-restore.md`).
+- **Start-up revision guard** (`app/db/revision_guard.py`): the API refuses to start unless the database's Alembic
+  revision equals the code's single head. Older database: run `alembic upgrade head` with `run --rm`, then `up -d`.
+  Unknown or newer database: do not downgrade; start the matching previous image or restore the matching backup.
+  The guard is read-only (never migrates, stamps or creates a database), has no bypass setting, and fails closed on a
+  missing table, several recorded revisions or several code heads. It detects code/schema mismatches; it does **not**
+  replace backup verification or a restore drill.
+- **Downgrades are development-only.** On SQLite, downgrades from head down to `0016` work on disposable databases.
+  Below `0016` they are **unsupported**: `0016`, `0012` and `0009` cannot drop constraints on SQLite (left unchanged
+  on purpose), and a failed downgrade is not atomic (the recorded revision stays while earlier steps of that migration
+  are already applied). Downgrades `0020` to `0023` are development-only even where they work: they drop the
+  append-only AI audit trail (`0020`), the policy publication status (`0021`), content audiences (`0022`) and policy
+  audiences (`0023`), so older code would show restricted content.
+- **Not yet verified:** the restore procedure has only been drilled locally on a copy of the dev database
+  (`backup-restore.md` §5), not in the target environment. Only SQLite is supported and tested.
 
 ## 5. Backups and restore
 

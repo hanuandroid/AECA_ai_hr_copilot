@@ -124,8 +124,9 @@ Copy-Item backend/.env.example backend/.env
 Then run from repository root:
 
 ```bash
-docker-compose up -d --build
-docker-compose exec api alembic -c alembic.ini upgrade head
+docker-compose build
+docker-compose run --rm api alembic -c alembic.ini upgrade head   # the API refuses to start until the DB is at head
+docker-compose up -d
 docker-compose exec api python scripts/seed.py
 ```
 
@@ -204,7 +205,8 @@ docker-compose down
 Run migrations:
 
 ```bash
-docker-compose exec api alembic -c alembic.ini upgrade head
+docker-compose run --rm api alembic -c alembic.ini upgrade head
+docker-compose restart api   # the API refuses to start on an older database (start-up revision guard)
 ```
 
 Reseed data:
@@ -232,8 +234,9 @@ On macOS/Linux:
 ```bash
 docker-compose down
 rm -f backend/storage/hrms.db
-docker-compose up -d --build
-docker-compose exec api alembic -c alembic.ini upgrade head
+docker-compose build
+docker-compose run --rm api alembic -c alembic.ini upgrade head   # the API refuses to start until the DB is at head
+docker-compose up -d
 docker-compose exec api python scripts/seed.py
 ```
 
@@ -242,8 +245,9 @@ On PowerShell:
 ```powershell
 docker-compose down
 Remove-Item backend\storage\hrms.db -Force -ErrorAction SilentlyContinue
-docker-compose up -d --build
-docker-compose exec api alembic -c alembic.ini upgrade head
+docker-compose build
+docker-compose run --rm api alembic -c alembic.ini upgrade head   # the API refuses to start until the DB is at head
+docker-compose up -d
 docker-compose exec api python scripts/seed.py
 ```
 

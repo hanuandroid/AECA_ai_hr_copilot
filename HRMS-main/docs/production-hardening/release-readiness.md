@@ -64,7 +64,7 @@ Owner "TBD" means a named human owner is still required.
 | Requirement | Status | Remaining | Owner |
 |---|---|---|---|
 | Production containers (non-root, read-only, health, graceful stop) | LOCAL, re-run 2026-10-17 on fresh images: unsafe config refused (exit 3), API uid 10001, migrated a fresh volume to `0023`, read-only container health 200, spoofed Host 400 (web image: see §5a) | Deploy to target infrastructure | Ops |
-| Database and rollback | OPEN: SQLite only, single process. **S-07 (found 2026-10-17):** `alembic downgrade` below `0016` fails on SQLite (`0016` downgrade drops a constraint outside batch mode); downgrades `0023`→`0016` work. Protected migration, not changed | Approve a fix or document restore-from-backup as the only rollback below 0016; choose the production database | Ops / Eng |
+| Database and rollback | **S-07 mitigated 2026-10-17** (policy approved): forward-only production migrations; rollback = verified pre-upgrade backup + previous images + uploads; start-up revision guard refuses any code/schema mismatch (`tests/test_revision_guard.py`, 16 tests). Dev-only downgrades: head to `0016` work on SQLite; below `0016` unsupported (`0009`/`0012`/`0016` unchanged; not atomic on failure); `0020`-`0023` development-only (audit/authorization loss). SQLite only, single process | Restore drill in the target environment; choose the production database if not SQLite | Ops / Eng |
 | TLS reverse proxy | OPEN | Choose and configure | Ops |
 | Monitoring and alerts | PROPOSED (`monitoring-alerts.md`, 18 alerts) | Tooling, owners, on-call | Ops |
 | Runbook | PROPOSED (`deployment-runbook.md`) | Validate in the target environment | Ops |

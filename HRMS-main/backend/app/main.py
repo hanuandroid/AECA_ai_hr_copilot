@@ -11,6 +11,8 @@ from app.services.ai.actions.client import INTERNAL_BASE_URL
 from app.core.http_limits import RangeHeaderLimitMiddleware
 from app.core.logging import configure_logging
 from app.core.production_checks import assert_production_ready
+from app.db.revision_guard import assert_database_at_expected_revision
+from app.db.session import engine
 from app.services.ai.audit.middleware import AIAuditMiddleware
 from app.services.ai.audit.recorder import record_error
 from app.services.ai.errors import AIError, ai_error_response
@@ -20,6 +22,8 @@ from app.services.ai.errors import AIError, ai_error_response
 async def lifespan(_: FastAPI):
     configure_logging()
     assert_production_ready(settings)  # Phase 10: fail fast on unsafe production config (no-op outside production)
+    # S-07: refuse to serve unless the database is exactly at this code's migration head (read-only; never migrates).
+    await assert_database_at_expected_revision(engine)
     yield
 
 

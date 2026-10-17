@@ -55,8 +55,9 @@ All production-hardening documents are in `docs/production-hardening/`.
 **Approved and done:** everything in §2.
 
 **RBAC remediation plan: complete (Steps 0–10).** Nothing further is approved. Open items needing decisions:
-S-07 (migration rollback below 0016), the employee-PAYSLIP document question, and the release gates
-in `release-readiness.md` §6. S-06 (team-calendar scope) was decided and fixed on 2026-10-17 (`f271471`); S-04 test gaps closed (`6b2d970`) and S-08 fixed (birthdays: active employees only) the same day.
+the employee-PAYSLIP document question, and the release gates
+in `release-readiness.md` §6. S-06 (team-calendar scope) was decided and fixed on 2026-10-17 (`f271471`); S-04 test gaps closed (`6b2d970`) and S-08 fixed (birthdays: active employees only) the same day. S-07 mitigated 2026-10-17: forward-only migration
+policy and a start-up revision guard (restore not yet drilled in the target environment).
 
 **Approved scope with nothing left to implement:** Phase 3 offline workstreams 3.3, 3.6, 3.8 and 3.9. If you resume, stay within them:
 - **3.3:** re-run `python -m evals.rag_calibration` whenever the policy corpus or dataset changes. Don't change `AI_RAG_MIN_SCORE` without approval.
@@ -128,8 +129,9 @@ The virtual-environment route on a host Python 3.11 is not verified on the curre
 ```bash
 cd HRMS-main
 cp backend/.env.example backend/.env       # then fill values locally; never commit .env
-docker compose up -d --build
-docker compose exec api alembic -c alembic.ini upgrade head     # head: 0023_policy_audience
+docker compose build
+docker compose run --rm api alembic -c alembic.ini upgrade head  # head: 0023_policy_audience; the API refuses to start until then
+docker compose up -d
 docker compose exec api python scripts/seed.py                  # demo data only
 docker compose exec api python scripts/ingest_policies.py       # needs AI_ENABLED=true; downloads the embedding model once
 ```
@@ -137,8 +139,9 @@ docker compose exec api python scripts/ingest_policies.py       # needs AI_ENABL
 - Existing databases need `alembic upgrade head` for migrations **0021–0023**. 0021: existing policies become
   PUBLISHED version 1. 0022: existing announcements and polls become `ORG`. 0023: existing policies become audience
   `ALL`; replies stored earlier have no recorded citations and replay unchanged.
-- **Do not downgrade 0022/0023 on real data** without first removing TEAM content and restricted policies: the older
-  code shows them to everyone.
+- **Never downgrade real data** (S-07 policy, `deployment-runbook.md` §4.1): production is forward-only; rollback =
+  pre-upgrade backup + previous images + uploads restored. Downgrades below `0016` are unsupported on SQLite;
+  `0020`-`0023` are development-only. The API refuses to start if the database revision differs from the code's head.
 - Run `ingest_policies.py` again after an ADMIN publishes a policy.
 - The README uses `docker-compose` (v1 syntax); either form works.
 

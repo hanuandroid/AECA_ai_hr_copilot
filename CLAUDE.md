@@ -21,7 +21,8 @@ Assignment Phases 0–10 are complete. A separate **production-hardening program
   build PASS, offline evaluation 139/139, gitleaks PASS, Docker production smoke PASS. Live-model evaluation: NOT_RUN
   (the 10-check OpenAI smoke test in `0ca8326` is not that evaluation). Only SQLite is verified; downgrade below
   migration 0016 fails (S-07).
-- **Open decisions:** S-07; release gates in `release-readiness.md` §6. S-06 and S-08 fixed, S-04 closed 2026-10-17.
+- **Open decisions:** release gates in `release-readiness.md` §6. S-06 and S-08 fixed, S-04 closed, S-07 mitigated
+  2026-10-17 (forward-only migrations; the API refuses to start unless the DB is at the code's Alembic head).
 - **Blocked on approval:** live-model work (3.1/3.2/3.4/3.5), Playwright
   (3.7), the `braces` advisory exception (stays PROPOSED; CI gate fails by design), data-governance, retention and
   backup decisions. Never push, deploy or approve exceptions without approval.
@@ -74,8 +75,9 @@ Assignment Phases 0–10 are complete. A separate **production-hardening program
 
 ```bash
 # from HRMS-main/
-docker-compose up -d --build
-docker-compose exec api alembic -c alembic.ini upgrade head
+docker-compose build
+docker-compose run --rm api alembic -c alembic.ini upgrade head   # the API refuses to start until the DB is at head
+docker-compose up -d
 docker-compose exec api python scripts/seed.py
 cd frontend && npm run build                 # type-check frontend
 ```
