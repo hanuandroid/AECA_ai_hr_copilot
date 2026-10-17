@@ -1,8 +1,8 @@
 # Development handoff: continuing on another system
 
-**Date:** 2026-10-14 · **Release status: NOT YET PRODUCTION READY**
+**Date:** 2026-10-14, updated 2026-10-17 (RBAC Steps 1–7) · **Release status: NOT YET PRODUCTION READY**
 
-> ⚠ **Check what is on GitHub before relying on a clone.** On 2026-10-14 `origin/main` was pushed up to `c3d6928` (all hardening work through the Phase 3 offline workstreams). The handoff commits made after that (this file, `CLAUDE.md` status, version pins) stay **local until pushed or bundled** (§11). A fresh clone has only what is on GitHub.
+> ⚠ **Check what is on GitHub before relying on a clone.** `origin/main` is at `86001f5` (hardening through the Phase 3 offline workstreams and the 2026-10-14 handoff). The OpenAI provider, RBAC Steps 1–7 (migrations 0022 and 0023) and this update stay **local until pushed or bundled** (§11). A fresh clone has only what is on GitHub.
 
 ## 1. Project and architecture
 
@@ -36,12 +36,26 @@ Where to read more:
 | Hardening Phase 2: deployment, abuse controls, data lifecycle, CI | `phase-2-report.md`, `deployment-runbook.md`, `backup-restore.md`, `data-processing.md` | `2531d72` … `44882b8` (12 commits) |
 | Phase 2 closure (approved 2026-10-14) | `authorization-matrix.md`, this file | `6bcbc6d` (pytest 9), `bee1a3f` (postcss override), `16b06eb` (ADMIN-only policy publication), `0246c17` (matrix, admin self-actions) |
 | Phase 3, offline workstreams only | `rag-calibration.md`, `monitoring-alerts.md`, `release-readiness.md` | `9f48358` (3.3), `c875a06` (3.6), `c3d6928` (3.8 / 3.9) |
+| OpenAI provider (local) | `docs/ai-provider-setup.md`, `data-processing.md` §5 | `e3ec3d6`, `90e6582`, `0ca8326` (10-check smoke test on demo data; not the live-model evaluation) |
+| Harness isolation from developer OpenAI settings (local) | — | `b6cc526` |
+| RBAC remediation Plan Steps 1–7 (local) | `rbac-remediation-plan.md`, `authorization-matrix.md` | Step 1 `7713fb2` (route suite + plan), 2 `3afc246` (directory scope), 3 `9d5a7d3` (manager skill search), 4 `1d46662` (admin self-actions, password change; S-02 fixed), 5 `3e98c15` (ticket status), 6 `972e40b` (announcement/poll audience, project rules, migration 0022; S-03 fixed), 7 `c105746` (HR policy audiences, migration 0023) |
+
+**Step 7 in one paragraph.** Every HR policy has an audience (`ALL`, `MANAGERS` = managers and admins, `ADMINS`).
+Existing policies became `ALL`; any other value is rejected by a CHECK constraint and matches no reader. The business
+API filters the list, its total and downloads (hidden = unknown-id 404) and only lets an uploader choose an audience
+that includes them. Policy RAG indexes only known audiences and filters status and audience at retrieval time,
+before scoring, using the caller's audiences from the AI matrix (parity-tested with the API); citations come only
+from that filtered set. Conversation replies record the policies they cited, and replay and the follow-up context
+withhold a reply that cites a policy the reader can no longer read. Details: `authorization-matrix.md` §3a.
 
 All production-hardening documents are in `docs/production-hardening/`.
 
 ## 3. Current boundary and next approved tasks
 
 **Approved and done:** everything in §2.
+
+**Next (needs approval before starting):** RBAC Plan Step 8 (AI parity review), then Steps 9 and 10, one at a time
+(`rbac-remediation-plan.md`).
 
 **Approved scope with nothing left to implement:** Phase 3 offline workstreams 3.3, 3.6, 3.8 and 3.9. If you resume, stay within them:
 - **3.3:** re-run `python -m evals.rag_calibration` whenever the policy corpus or dataset changes. Don't change `AI_RAG_MIN_SCORE` without approval.
@@ -54,14 +68,13 @@ All production-hardening documents are in `docs/production-hardening/`.
 - live quality metrics (3.4);
 - live latency and cost (3.5);
 - Playwright browser tests (3.7);
-- any later programme phase;
-- S-02 / S-03 behaviour changes;
+- any later programme phase or RBAC step without its own approval;
 - Tailwind 4 or Next 16;
 - any push or deployment.
 
 **Decisions waiting on the project owner** (`release-readiness.md` §6 lists the release gates):
-1. **S-02 admin self-actions.** An ADMIN can demote themselves and leave zero active admins. Proposed controls are in `authorization-matrix.md` §2.
-2. **S-03 organisation-wide content.** Announcements, polls and the project catalogue need permissions decisions (`authorization-matrix.md` §3).
+1. ~~S-02 admin self-actions~~ and 2. ~~S-03 organisation-wide content~~: decided and fixed (RBAC Steps 4 and 6).
+   Open follow-ups recorded there: employee self-service PAYSLIP-type documents (§2) and the Step 6/7 interpretations.
 3. **braces advisory exception.** Name an owner and approver, or plan Tailwind 4. The CI dependency gate fails until then, by design.
 4. **Retrieval dataset.** HR review of the dataset, then acceptance targets, before any `AI_RAG_MIN_SCORE` change.
 5. **Data governance and lifecycle.** Data-processing decisions 1–3, retention periods, backup encryption, destination and off-host copies.
@@ -71,7 +84,7 @@ All production-hardening documents are in `docs/production-hardening/`.
 
 | Area | Blocker |
 |---|---|
-| Security | S-02, S-03 open; B-17 (JWT in `localStorage`, no revocation) |
+| Security | B-17 (JWT in `localStorage`, no revocation; a password change does not revoke existing tokens). S-02 and S-03 fixed (RBAC Steps 4 and 6). RBAC Steps 8–10 pending |
 | Dependencies | `braces` GHSA-vfj7 (build-time; no patched release) has a PROPOSED exception, so the CI gate fails. Next's postcss is fixed by an override (remove it on `next@16`) |
 | AI evaluation | No live-model results with either provider (no key). OpenAI provider added 2026-10-16 and verified with mocked clients only (`docs/ai-provider-setup.md`); OpenAI governance decisions 7–11 open (`data-processing.md` §5). Retrieval calibration is a proposal on a small demo dataset |
 | Operations | CI never ran on GitHub. No TLS proxy, alerting or backup schedule. Single worker / single instance only |
@@ -115,12 +128,16 @@ The virtual-environment route on a host Python 3.11 is not verified on the curre
 cd HRMS-main
 cp backend/.env.example backend/.env       # then fill values locally; never commit .env
 docker compose up -d --build
-docker compose exec api alembic -c alembic.ini upgrade head     # head: 0021_hr_policy_publication
+docker compose exec api alembic -c alembic.ini upgrade head     # head: 0023_policy_audience
 docker compose exec api python scripts/seed.py                  # demo data only
 docker compose exec api python scripts/ingest_policies.py       # needs AI_ENABLED=true; downloads the embedding model once
 ```
 
-- Existing databases need `alembic upgrade head` for migration **0021**. Existing policies become PUBLISHED version 1.
+- Existing databases need `alembic upgrade head` for migrations **0021–0023**. 0021: existing policies become
+  PUBLISHED version 1. 0022: existing announcements and polls become `ORG`. 0023: existing policies become audience
+  `ALL`; replies stored earlier have no recorded citations and replay unchanged.
+- **Do not downgrade 0022/0023 on real data** without first removing TEAM content and restricted policies: the older
+  code shows them to everyone.
 - Run `ingest_policies.py` again after an ADMIN publishes a policy.
 - The README uses `docker-compose` (v1 syntax); either form works.
 
@@ -151,21 +168,22 @@ docker build --target production -t hrms-web:ci --build-arg NEXT_PUBLIC_API_BASE
 
 Production configuration, smoke checks, backups and the verification checklist are in `docs/production-hardening/deployment-runbook.md`.
 
-## 10. Latest verified results (2026-10-14)
+## 10. Latest verified results (2026-10-17, after RBAC Step 7 `c105746`)
 
 | Check | Environment | Result |
 |---|---|---|
-| Backend tests | Clean `python:3.11` container (3.11.17), using the exact §6 container command, no `.env` | **1966 passed** |
+| Backend tests | Python 3.11.17 container (dev deps baked in), no `.env` | **2675 passed** |
 | Offline evals | same | 139/139; LIVE_MODEL_EVAL = NOT_RUN |
 | Advisory-gate tests (run from `backend/`) | same | 25 passed |
-| Frontend tests / tsc / build | Host Node 24.13 | 90 passed / 0 errors / PASS |
-| Docker production builds and smoke | `docker build --target production` | Both images build. Unsafe config refused (exit 3). API uid 10001, web uid 1000. API with throwaway secrets: migrated to `0021` (head), health 200, spoofed Host 400 |
+| Frontend tests / tsc / build | Host Node 24.13 | 108 passed / 0 errors / PASS |
+| Docker production builds and smoke | **not re-run since 2026-10-14** | then: both images built, unsafe config refused (exit 3), API uid 10001, web uid 1000, migrated to `0021` (then head), health 200, spoofed Host 400. Re-run before relying on it with 0022/0023 |
+| Database engines | — | SQLite only; no other engine or multi-instance deployment verified |
 | Retrieval calibration | fastembed 0.8.1 offline | proposal only (`rag-calibration.md`) |
 | Dependency gate | npm + pip audit | **FAIL by design** (`braces`, PROPOSED exception) |
 
 ## 11. Git state and transferring the work
 
-State when this file was written: branch `main` tracking `origin/main`. GitHub `main` is at `c3d6928` (pushed 2026-10-14, 12:14 IST, from this repository; not by Claude Code). The handoff commits after it are **local only** (4 commits ahead of `c3d6928`). Run `git status -sb` and `git log --oneline origin/main..main` for the current state.
+State when this file was last updated (2026-10-17): branch `main` tracking `origin/main`. GitHub `main` is at `86001f5` (pushed from this repository outside Claude Code). Everything after it is **local only**: 11 commits through `c105746` (OpenAI provider, harness isolation, RBAC Steps 1–7) plus this documentation commit. Run `git status -sb` and `git log --oneline origin/main..main` for the current state.
 
 **Option A (needs approval to push):** `git push origin main`, then clone or pull on the other computer.
 
@@ -183,7 +201,7 @@ git merge --ff-only bundle/main
 
 Bundle limitations:
 - It carries commits only. It does **not** carry ignored or untracked files: `.env`, `storage/` (local DB, uploads, model cache), `writing-block*.md`, the assignment brief and the phase prompt files.
-- The other clone must already contain the current `origin/main` (`c3d6928` or later). A bundle doesn't change GitHub.
+- The other clone must already contain the current `origin/main` (`86001f5` or later). A bundle doesn't change GitHub.
 
 **Files to copy manually if wanted (never commit them):**
 - `backend/.env`: recreate from the example instead of copying secrets where possible.
