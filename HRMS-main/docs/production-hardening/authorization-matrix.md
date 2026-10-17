@@ -4,8 +4,8 @@
 are covered by `ai_permissions_matrix.md`). The complete, generated list of all 79 registered method + path pairs, with
 per-role outcomes and verification status, is `page-endpoint-inventory.md` (source of truth for route coverage).
 **Method:** code reading of every handler, plus the automated tests named in the Evidence column.
-**Status:** NOT YET PRODUCTION READY. S-02, S-03 and S-05 are fixed (RBAC Steps 4, 6, 8); S-06 fixed (team calendar); S-04 (test gaps) and S-07
-(migration rollback, `release-readiness.md`) are open.
+**Status:** NOT YET PRODUCTION READY. S-02, S-03 and S-05 are fixed (RBAC Steps 4, 6, 8); S-06 fixed (team calendar); S-04 test gaps closed
+(2026-10-17). Open: S-07 (migration rollback, `release-readiness.md`) and S-08 (birthdays list inactive employees).
 
 Legend:
 - **Role gate:** `any` means any authenticated ACTIVE user. Inactive users are rejected for every route (403 `USER_INACTIVE`, Phase 1).
@@ -81,7 +81,7 @@ Legend:
 | `GET /calendar/holidays`, `/calendar/birthdays` | any | Holidays; birthdays: name, department, next date without year (includes inactive employees) | code (MANUAL) |
 | `GET /org/tree` | any | **RBAC step 2:** active employees only; id, name, role, manager_id | `rbac/test_directory_scope.py` |
 
-**Coverage gaps (no dedicated tests):** polls, attendance, finance, calendar and org tree are reviewed by code only. Their scopes are self-only or aggregate, but characterization tests are recommended (proposed, not added).
+**Coverage (S-04 closed 2026-10-17):** attendance, finance, holidays and birthday fields: `rbac/test_self_service_scope.py`; polls: `rbac/test_content_audience.py`; team calendar: `rbac/test_team_calendar_scope.py`; org tree: `rbac/test_directory_scope.py`. Open policy question S-08 (birthdays include inactive employees).
 
 ## 2. Admin self-actions (S-02)
 
@@ -236,6 +236,7 @@ UX only; the backend remains the authorization boundary for every API call a pag
 | S-01f | Managers could publish organisation-wide policies that feed Copilot answers | Medium | **Fixed** (approved policy): migration 0021, publication workflow, retrieval filter, tests |
 | S-02 | Admin self-actions without controls (self-demotion to zero admins; own payroll and bank changes; password change without re-authentication; own payslips) | Medium (last-admin lockout: availability; self-dealing: integrity) | **Fixed (RBAC step 4, 2026-10-16)**, §2; open: employee self-service PAYSLIP-type documents |
 | S-03 | Announcements, polls and catalogue are organisation-wide for any manager | Low to Medium (business) | **Fixed (RBAC step 6, 2026-10-17)**, §3 |
-| S-04 | Polls, attendance, finance, calendar and org tree have no dedicated characterization tests | Low (test gap) | Proposed |
+| S-04 | Polls, attendance, finance, calendar and org tree had no dedicated object-scope tests | Low (test gap) | **Closed 2026-10-17 (test-only, no defect found)**: attendance, finance, holidays and birthday fields in `rbac/test_self_service_scope.py` (32 tests); polls `rbac/test_content_audience.py` (step 6); team calendar `rbac/test_team_calendar_scope.py` (S-06); org chart `rbac/test_directory_scope.py` (step 2, already covered) |
 | S-05 | Copilot SQL agent let an EMPLOYEE read the whole project catalogue and every skill name (`projects`/`skills` were unrestricted catalogs); the API shows employees only their own projects | Low (business data, no sensitive fields) | **Fixed (RBAC step 8, 2026-10-17)**: own linked rows only under SELF scope; approved deviation from the assignment's employee "project catalog" (eval `asg-sql-01` updated); `ai_permissions_matrix.md` §3.0a |
 | S-06 | `GET /calendar/team` showed MANAGER/ADMIN every employee (inactive included) and EMPLOYEE their whole department, with roles and leave/WFH days | Low to Medium (availability data) | **Fixed (2026-10-17, approved rules)**: ADMIN all active; MANAGER self + active direct reports; EMPLOYEE self; role ADMIN-only; `rbac/test_team_calendar_scope.py` |
+| S-08 | `GET /calendar/birthdays` lists inactive (former) employees too (name, department, next date; no year). Decision 1 keeps birthdays available to all roles but does not say whether inactive people are included; the org chart and photos are active-only (X-4) | Low (privacy) | **Open: product decision needed**. Not pinned by any test |

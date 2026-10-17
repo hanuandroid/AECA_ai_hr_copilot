@@ -21,7 +21,7 @@ Assignment Phases 0–10 are complete. A separate **production-hardening program
   build PASS, offline evaluation 139/139, gitleaks PASS, Docker production smoke PASS. Live-model evaluation: NOT_RUN
   (the 10-check OpenAI smoke test in `0ca8326` is not that evaluation). Only SQLite is verified; downgrade below
   migration 0016 fails (S-07).
-- **Open decisions:** S-07, S-04 test gaps; release gates in `release-readiness.md` §6. S-06 (team calendar) fixed 2026-10-17.
+- **Open decisions:** S-07, S-08 (birthdays list inactive employees); release gates in `release-readiness.md` §6. S-06 fixed and S-04 closed 2026-10-17.
 - **Blocked on approval:** live-model work (3.1/3.2/3.4/3.5), Playwright
   (3.7), the `braces` advisory exception (stays PROPOSED; CI gate fails by design), data-governance, retention and
   backup decisions. Never push, deploy or approve exceptions without approval.
