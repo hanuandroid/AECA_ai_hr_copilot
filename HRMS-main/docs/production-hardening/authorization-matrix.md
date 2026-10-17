@@ -198,6 +198,34 @@ added for it. The upload response's version number can reveal that a same-title 
 (pre-existing behaviour for drafts too). Replies stored before migration 0023 have no recorded citations and are
 replayed unchanged. Verified on SQLite only. Downgrading 0023 makes restricted policies readable by everyone again.
 
+## 3b. Frontend page access (implemented 2026-10-17, RBAC step 9)
+
+UX only; the backend remains the authorization boundary for every API call a page makes. One map in
+`frontend/lib/permissions.ts`; each row mirrors the backend rule of the page's primary API.
+
+| Page | EMPLOYEE | MANAGER | ADMIN | Backend rule mirrored |
+|---|---|---|---|---|
+| `/dashboard`, `/copilot`, `/me`, `/me/documents`, `/finance`, `/attendance`, `/leaves`, `/announcements`, `/hr-policies`, `/polls`, `/team-calendar`, `/tickets` | ✓ | ✓ | ✓ | self-service or audience-filtered APIs |
+| `/organization` | ✓ | ✓ | ✓ | limited org chart (decision 1) |
+| `/employees`, `/employees/projects`, `/employees/payslips` | — | ✓ | ✓ | directory, project and payslip APIs are MANAGER/ADMIN (scoped) |
+| `/employees/new` (create and edit) | — | — | ✓ | `POST /employees`, `PUT /employees/{id}` are ADMIN |
+| `/admin/ai-audit`, `/admin/ai-usage` | — | — | ✓ | organisation-wide AI audit and metrics are ADMIN (`AUDIT_READ_ORG`) |
+
+- **Direct-URL guard:** `components/access/access-guard.tsx`, mounted once in `app/layout.tsx`. It reads the role
+  from the server profile (`GET /employees/me`), never from the `hrms_role` cookie. Restricted pages render nothing
+  while the role loads, then the page or an inline **Access denied** view (the page never mounts, so it makes no API
+  calls). If the role cannot be loaded the page is not shown (fail closed); a 401 is left to the page's existing
+  redirect to `/login`. Pages open to every role render immediately.
+- **Sidebar:** filtered through the same map; until the role is known it lists only pages open to every role.
+- **Middleware:** still a login check only (`hrms_auth` cookie); `/organization` was added (it was not covered).
+- **Unchanged:** the per-page redirects on the `/employees/*` pages stay as defence in depth; no backend change.
+- **Tests:** `frontend/tests/page-access.test.tsx` (map completeness over every `app/**/page.tsx`, role × page matrix,
+  prefix and unknown-role checks, guard denial / allow / loading / fail-closed / forged cookie / 401, sidebar per
+  role, middleware). Disabling the guard's role check fails 7 tests.
+- **Limits:** the guard caches the role per token for the browser session, so a role change applies after the next
+  sign-in or reload (the backend applies it immediately). Non-admins keep their backend right to read their own AI
+  audit events, but there is no non-admin page for it (as in the Phase 9 design).
+
 ## 4. Findings from this review
 
 | ID | Finding | Severity | Status |

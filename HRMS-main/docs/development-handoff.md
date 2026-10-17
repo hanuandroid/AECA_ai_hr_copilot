@@ -1,6 +1,6 @@
 # Development handoff: continuing on another system
 
-**Date:** 2026-10-14, updated 2026-10-17 (RBAC Steps 1–7) · **Release status: NOT YET PRODUCTION READY**
+**Date:** 2026-10-14, updated 2026-10-17 (RBAC Steps 1–9) · **Release status: NOT YET PRODUCTION READY**
 
 > ⚠ **Check what is on GitHub before relying on a clone.** `origin/main` is at `86001f5` (hardening through the Phase 3 offline workstreams and the 2026-10-14 handoff). The OpenAI provider, RBAC Steps 1–7 (migrations 0022 and 0023) and this update stay **local until pushed or bundled** (§11). A fresh clone has only what is on GitHub.
 
@@ -38,7 +38,7 @@ Where to read more:
 | Phase 3, offline workstreams only | `rag-calibration.md`, `monitoring-alerts.md`, `release-readiness.md` | `9f48358` (3.3), `c875a06` (3.6), `c3d6928` (3.8 / 3.9) |
 | OpenAI provider (local) | `docs/ai-provider-setup.md`, `data-processing.md` §5 | `e3ec3d6`, `90e6582`, `0ca8326` (10-check smoke test on demo data; not the live-model evaluation) |
 | Harness isolation from developer OpenAI settings (local) | — | `b6cc526` |
-| RBAC remediation Plan Steps 1–7 (local) | `rbac-remediation-plan.md`, `authorization-matrix.md` | Step 1 `7713fb2` (route suite + plan), 2 `3afc246` (directory scope), 3 `9d5a7d3` (manager skill search), 4 `1d46662` (admin self-actions, password change; S-02 fixed), 5 `3e98c15` (ticket status), 6 `972e40b` (announcement/poll audience, project rules, migration 0022; S-03 fixed), 7 `c105746` (HR policy audiences, migration 0023) |
+| RBAC remediation Plan Steps 1–7 (local) | `rbac-remediation-plan.md`, `authorization-matrix.md` | Step 1 `7713fb2` (route suite + plan), 2 `3afc246` (directory scope), 3 `9d5a7d3` (manager skill search), 4 `1d46662` (admin self-actions, password change; S-02 fixed), 5 `3e98c15` (ticket status), 6 `972e40b` (announcement/poll audience, project rules, migration 0022; S-03 fixed), 7 `c105746` (HR policy audiences, migration 0023), docs reconciliation `f2cf1c1`, 8 `9c45c61` (AI parity: action table, exceptions E1/E2, employee SQL catalogs own-rows only, approved `asg-sql-01` deviation), 9 = the commit after `9c45c61` (frontend permission map, page guard, sidebar; `authorization-matrix.md` §3b) |
 
 **Step 7 in one paragraph.** Every HR policy has an audience (`ALL`, `MANAGERS` = managers and admins, `ADMINS`).
 Existing policies became `ALL`; any other value is rejected by a CHECK constraint and matches no reader. The business
@@ -54,8 +54,8 @@ All production-hardening documents are in `docs/production-hardening/`.
 
 **Approved and done:** everything in §2.
 
-**Next (needs approval before starting):** RBAC Plan Step 8 (AI parity review), then Steps 9 and 10, one at a time
-(`rbac-remediation-plan.md`).
+**Next (needs approval before starting):** RBAC Plan Step 10 (documentation inventory and full verification run;
+`rbac-remediation-plan.md`).
 
 **Approved scope with nothing left to implement:** Phase 3 offline workstreams 3.3, 3.6, 3.8 and 3.9. If you resume, stay within them:
 - **3.3:** re-run `python -m evals.rag_calibration` whenever the policy corpus or dataset changes. Don't change `AI_RAG_MIN_SCORE` without approval.
@@ -84,7 +84,7 @@ All production-hardening documents are in `docs/production-hardening/`.
 
 | Area | Blocker |
 |---|---|
-| Security | B-17 (JWT in `localStorage`, no revocation; a password change does not revoke existing tokens). S-02 and S-03 fixed (RBAC Steps 4 and 6). RBAC Steps 8–10 pending |
+| Security | B-17 (JWT in `localStorage`, no revocation; a password change does not revoke existing tokens). S-02, S-03 and S-05 fixed (RBAC Steps 4, 6 and 8). RBAC Step 10 pending |
 | Dependencies | `braces` GHSA-vfj7 (build-time; no patched release) has a PROPOSED exception, so the CI gate fails. Next's postcss is fixed by an override (remove it on `next@16`) |
 | AI evaluation | No live-model results with either provider (no key). OpenAI provider added 2026-10-16 and verified with mocked clients only (`docs/ai-provider-setup.md`); OpenAI governance decisions 7–11 open (`data-processing.md` §5). Retrieval calibration is a proposal on a small demo dataset |
 | Operations | CI never ran on GitHub. No TLS proxy, alerting or backup schedule. Single worker / single instance only |
@@ -168,14 +168,14 @@ docker build --target production -t hrms-web:ci --build-arg NEXT_PUBLIC_API_BASE
 
 Production configuration, smoke checks, backups and the verification checklist are in `docs/production-hardening/deployment-runbook.md`.
 
-## 10. Latest verified results (2026-10-17, after RBAC Step 7 `c105746`)
+## 10. Latest verified results (2026-10-17, after RBAC Step 9)
 
 | Check | Environment | Result |
 |---|---|---|
-| Backend tests | Python 3.11.17 container (dev deps baked in), no `.env` | **2675 passed** |
+| Backend tests | Python 3.11.17 container (dev deps baked in), no `.env` | **2778 passed** |
 | Offline evals | same | 139/139; LIVE_MODEL_EVAL = NOT_RUN |
 | Advisory-gate tests (run from `backend/`) | same | 25 passed |
-| Frontend tests / tsc / build | Host Node 24.13 | 108 passed / 0 errors / PASS |
+| Frontend tests / tsc / build | Host Node 24.13 | 152 passed / 0 errors / PASS |
 | Docker production builds and smoke | **not re-run since 2026-10-14** | then: both images built, unsafe config refused (exit 3), API uid 10001, web uid 1000, migrated to `0021` (then head), health 200, spoofed Host 400. Re-run before relying on it with 0022/0023 |
 | Database engines | — | SQLite only; no other engine or multi-instance deployment verified |
 | Retrieval calibration | fastembed 0.8.1 offline | proposal only (`rag-calibration.md`) |
@@ -183,7 +183,7 @@ Production configuration, smoke checks, backups and the verification checklist a
 
 ## 11. Git state and transferring the work
 
-State when this file was last updated (2026-10-17): branch `main` tracking `origin/main`. GitHub `main` is at `86001f5` (pushed from this repository outside Claude Code). Everything after it is **local only**: 11 commits through `c105746` (OpenAI provider, harness isolation, RBAC Steps 1–7) plus this documentation commit. Run `git status -sb` and `git log --oneline origin/main..main` for the current state.
+State when this file was last updated (2026-10-17): branch `main` tracking `origin/main`. GitHub `main` is at `86001f5` (pushed from this repository outside Claude Code). Everything after it is **local only**: the OpenAI provider, harness isolation, RBAC Steps 1–9 and the documentation reconciliation (14 commits including the Step 9 commit). Run `git status -sb` and `git log --oneline origin/main..main` for the current state.
 
 **Option A (needs approval to push):** `git push origin main`, then clone or pull on the other computer.
 

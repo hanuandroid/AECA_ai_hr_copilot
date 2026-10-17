@@ -4,6 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bell, CalendarClock, CalendarDays, CalendarPlus2, CircleDollarSign, FileText, LayoutDashboard, ScrollText, Sparkles, Ticket, UserCircle2, Users, Vote } from "lucide-react";
+import { useViewerRole } from "@/components/access/access-guard";
+import { canAccess, isOpenToEveryRole } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -23,7 +25,10 @@ const navItems = [
 ];
 
 export function Sidebar() {
-  const pathname = usePathname();
+  const pathname = usePathname() || "";
+  // RBAC step 9: one permission map (lib/permissions.ts). Until the server role is known, only shared pages are listed.
+  const role = useViewerRole();
+  const visibleItems = navItems.filter((item) => (role ? canAccess(role, item.href) : isOpenToEveryRole(item.href)));
 
   return (
     <aside className="hidden w-72 border-r border-slate-900/80 bg-gradient-to-b from-[#0f1b33] via-[#0c1730] to-[#081121] md:block">
@@ -40,7 +45,7 @@ export function Sidebar() {
         </div>
       </div>
       <nav className="space-y-1 px-3 py-4">
-        {navItems.map((item) => (
+        {visibleItems.map((item) => (
           <Link
             key={item.label}
             href={item.href}

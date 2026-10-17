@@ -17,6 +17,7 @@ export function middleware(request: NextRequest) {
   const isHRPoliciesRoute = pathname.startsWith("/hr-policies");
   const isCopilotRoute = pathname.startsWith("/copilot");
   const isAdminRoute = pathname.startsWith("/admin");
+  const isOrganizationRoute = pathname.startsWith("/organization");
   const isLoginRoute = pathname === "/login";
 
   if (
@@ -32,7 +33,8 @@ export function middleware(request: NextRequest) {
       isTeamCalendarRoute ||
       isTicketsRoute ||
       isCopilotRoute ||
-      isAdminRoute) &&
+      isAdminRoute ||
+      isOrganizationRoute) &&
     !authCookie
   ) {
     return NextResponse.redirect(new URL("/login", request.url));
@@ -61,5 +63,6 @@ export const config = {
     "/tickets/:path*",
     "/copilot/:path*",
     "/admin/:path*",
+    "/organization/:path*",
   ],
 };

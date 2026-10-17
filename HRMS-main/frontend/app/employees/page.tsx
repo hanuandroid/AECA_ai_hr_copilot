@@ -137,7 +137,8 @@ function EmployeesPageContent() {
       const role = profileResult.body.data.role;
       setName(profileResult.body.data.name);
       setViewerRole(role);
-      // RBAC Decision 1: no employee directory for EMPLOYEE (the API returns 403). Route guards come in step 9.
+      // RBAC Decision 1: no employee directory for EMPLOYEE (the API returns 403). The step 9 AccessGuard shows the
+      // access-denied view first; this stays as defence in depth.
       if (role !== "ADMIN" && role !== "MANAGER") {
         setEmployees([]);
         setTotal(0);
