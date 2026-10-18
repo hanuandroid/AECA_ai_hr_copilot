@@ -28,7 +28,7 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
 | AIS-02 | No central provider boundary: user text and history leave unminimised; no operation allowlist | 2 | every model call passes one policy in `audit/provider.observe`; unknown operation fails closed; credentials never sent; identifiers replaced before sending and restored only in the same request's output; counts (never values) audited | per-operation payload tests for `/chat` and the 3 direct endpoints | DONE (phase 2) |
 | AIS-03 | Narrow detection (no email, separated phone, Aadhaar); no Unicode normalisation | 3 | NFKC + format-character stripping on every question; extended patterns with a measured synthetic false-positive / false-negative corpus | table-driven corpus tests | DONE (phase 3) |
 | AIS-04 | Regex refusal rules run on `/chat` only | — | — | — | NOT PLANNED: stricter direct-endpoint refusals change their error contract; the deterministic controls behind them (SQL validator, scope, registry, confirmation, RAG guard) are the boundary and are tested per endpoint |
-| AIS-05 | Anthropic endpoint not pinned (OpenAI is) | 4 | Anthropic client pinned to the public API URL; `ANTHROPIC_BASE_URL` ignored | provider tests | OPEN |
+| AIS-05 | Anthropic endpoint not pinned (OpenAI is) | 4 | Anthropic client pinned to the public API URL; `ANTHROPIC_BASE_URL` ignored | provider tests | DONE (phase 4) |
 | AIS-06 | Anthropic server-side fallback beta on by default | 4 | existing configuration preserved; decision recorded | — | BLOCKED (G-05) |
 | AIS-07 | Log-privacy tests inspect only `ai.audit` lines | 5 | full stdout/stderr of whole requests (success and error paths) free of synthetic PII, tokens, prompts | capsys/capfd tests | OPEN |
 | AIS-08 | Storage privacy not pinned by tests (conversation rows, pending-action summary, terminal records) | 5 | tests pin what is stored; no business payload altered | storage tests | OPEN |
@@ -126,3 +126,17 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
 - **Executed 2026-10-18:** focused 550 + corpus 43 passed; full backend **2982 passed**; offline evals **139/139**;
   gate tests **25**.
 - **Remaining:** names and free text (G-01/G-02); other national formats beyond the corpus are untested.
+
+### Phase 4 — AIS-05 Provider endpoint pinning · DONE (AIS-06 BLOCKED on G-05)
+
+- **Expected behaviour:** neither real provider can be redirected by an environment variable; a misconfigured provider
+  never falls back to the other real provider; the server-side fallback setting is unchanged until G-05 is decided.
+- **Revalidation:** with the installed SDK (anthropic 1.9.0) an unpinned `AsyncAnthropic` client followed
+  `ANTHROPIC_BASE_URL=https://attacker.example` (observed in the test container, synthetic key, no request made).
+- **Change:** `llm/anthropic_provider.py` — `ANTHROPIC_API_BASE_URL = "https://api.anthropic.com"` passed as
+  `base_url`. Register (`data-processing.md` §4) updated.
+- **Tests (`tests/ai/rag/test_providers_rag.py`):** main and fast clients stay on the pinned URL with a hostile
+  `ANTHROPIC_BASE_URL`; fallback beta only as configured (main on by default, fast never, off when disabled); a
+  misconfigured OpenAI or Anthropic selection fails closed instead of using the other provider's key.
+- **Executed 2026-10-18:** provider suites 110 passed; full backend **2985 passed**; offline evals **139/139**; gate
+  tests **25**.

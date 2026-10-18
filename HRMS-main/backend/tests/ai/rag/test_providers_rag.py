@@ -9,9 +9,9 @@ from pydantic import BaseModel
 from app.core.config import Settings
 from app.services.ai.embeddings import FakeEmbeddingProvider, FastEmbedEmbeddingProvider
 from app.services.ai.errors import AIEmbeddingError, AIInvalidOutputError, AIProviderError, AIUnavailableError
-from app.services.ai.llm.anthropic_provider import FALLBACK_BETA, AnthropicLLMProvider
+from app.services.ai.llm.anthropic_provider import ANTHROPIC_API_BASE_URL, FALLBACK_BETA, AnthropicLLMProvider
 from app.services.ai.llm.base import LLMMessage
-from app.services.ai.providers import build_embedding_provider, build_llm_provider
+from app.services.ai.providers import build_embedding_provider, build_fast_llm_provider, build_llm_provider
 
 
 class Answer(BaseModel):
@@ -140,6 +140,32 @@ def test_factory_requires_api_key_and_hides_it(monkeypatch):
                                       ai_llm_model="claude-sonnet-5-5"))
     assert isinstance(llm, AnthropicLLMProvider) and llm.model == "claude-sonnet-5-5"
     assert "sk-ant-secret-value" not in repr(vars(llm))
+
+
+def test_real_client_is_pinned_to_the_public_endpoint(monkeypatch):
+    """AIS-05: an environment override cannot redirect HR data (no request is made here)."""
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://attacker.example")
+    for build in (build_llm_provider, build_fast_llm_provider):
+        llm = build(Settings(_env_file=None, ai_llm_provider="anthropic", anthropic_api_key="synthetic-test-key"))
+        assert str(llm._client.base_url).rstrip("/") == ANTHROPIC_API_BASE_URL
+
+
+def test_server_side_fallback_follows_configuration_only():
+    """AIS-06 is gated (G-05): the existing default is preserved; the fast model never sends the beta."""
+    assert Settings(_env_file=None).ai_llm_server_fallbacks is True
+    main = build_llm_provider(Settings(_env_file=None, ai_llm_provider="anthropic", anthropic_api_key="k"))
+    fast = build_fast_llm_provider(Settings(_env_file=None, ai_llm_provider="anthropic", anthropic_api_key="k"))
+    off = build_llm_provider(Settings(_env_file=None, ai_llm_provider="anthropic", anthropic_api_key="k",
+                                      ai_llm_server_fallbacks=False))
+    assert (main._server_fallbacks, fast._server_fallbacks, off._server_fallbacks) == (True, False, False)
+
+
+def test_a_misconfigured_provider_never_falls_back_to_another_real_provider():
+    for config in (Settings(_env_file=None, ai_llm_provider="openai", anthropic_api_key="k", openai_api_key=None),
+                   Settings(_env_file=None, ai_llm_provider="anthropic", anthropic_api_key=None, openai_api_key="k",
+                            ai_openai_model="gpt-test")):
+        with pytest.raises(AIUnavailableError):
+            build_llm_provider(config)
 
 
 # --- fastembed (injected model; the real one is never loaded in tests) -------------

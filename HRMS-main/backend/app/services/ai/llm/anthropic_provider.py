@@ -20,6 +20,9 @@ from app.services.ai.llm.base import LLMMessage, LLMResponse, StructuredT, repor
 logger = structlog.get_logger()
 
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
+# AIS-05: pinned like the OpenAI endpoint, so an ANTHROPIC_BASE_URL environment variable cannot silently redirect HR
+# data elsewhere. Changing the endpoint (e.g. a regional or proxy endpoint) is a code change that needs approval.
+ANTHROPIC_API_BASE_URL = "https://api.anthropic.com"
 
 
 class AnthropicLLMProvider:
@@ -47,7 +50,8 @@ class AnthropicLLMProvider:
         if client is None:
             import anthropic  # lazy: keep the SDK out of processes that never call the LLM
 
-            client = anthropic.AsyncAnthropic(api_key=api_key, timeout=timeout_seconds, max_retries=2)
+            client = anthropic.AsyncAnthropic(api_key=api_key, base_url=ANTHROPIC_API_BASE_URL, timeout=timeout_seconds,
+                                              max_retries=2)
         self._client = client
 
     async def generate(

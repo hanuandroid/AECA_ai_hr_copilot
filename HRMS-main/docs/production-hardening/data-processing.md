@@ -67,6 +67,8 @@ number into a question, it reaches the provider. Optional pre-provider redaction
 | Conversations | redacted text, owner-only | Stored in the app DB (retention: see deployment runbook, provisional 90 days) |
 | OpenAI `store` | `false` on every request (`openai_provider.py`) | Responses are not kept for later retrieval through the API. Does **not** by itself establish Zero Data Retention; abuse-monitoring retention and training use depend on the organisation/project settings and contract (decision 8) |
 | OpenAI endpoint | pinned to `https://api.openai.com/v1` | An `OPENAI_BASE_URL` environment variable cannot silently redirect HR data |
+| Anthropic endpoint | pinned to `https://api.anthropic.com` (AIS-05, 2026-10-18) | An `ANTHROPIC_BASE_URL` environment variable cannot silently redirect HR data (verified: the unpinned SDK 1.9.0 client followed it) |
+| Anthropic server-side fallback | `AI_LLM_SERVER_FALLBACKS=true` (unchanged; never sent by the fast model) | Whether it is acceptable under the provider terms is gate G-05 in `ai-security-remediation-progress.md` |
 
 Failure behaviour: without a key, or when the provider fails, the Copilot returns `AI_UNAVAILABLE` / `AI_PROVIDER_ERROR`.
 Deterministic refusals and the RAG "insufficient evidence" path still work.
