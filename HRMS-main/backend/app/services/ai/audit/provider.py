@@ -130,7 +130,8 @@ def _token(value: object) -> str:
 
 
 def observe(llm: Any, operation: str) -> Any:
-    """Wrap a provider once; idempotent."""
-    if getattr(llm, "observed", False):
+    """Wrap a provider once; idempotent. Only a real ObservedLLMProvider counts as wrapped (review I2: an object that
+    merely claims `observed` would otherwise skip the provider boundary and the request budget)."""
+    if isinstance(llm, ObservedLLMProvider):
         return llm
     return ObservedLLMProvider(llm, operation)

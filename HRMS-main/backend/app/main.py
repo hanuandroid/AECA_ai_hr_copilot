@@ -1,8 +1,12 @@
 from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.v1.router import api_router
@@ -55,6 +59,18 @@ def _ai_error_handler(_request, exc: AIError):
 
 
 app.add_exception_handler(AIError, _ai_error_handler)
+
+
+# AIS-12 review (L1): FastAPI's default 422 body includes each error's `input`, which for POST /chat/actions/confirm can
+# be the step-up password. On AI paths the inputs (and ctx) are dropped; every other path keeps the default handler.
+async def _validation_error_handler(request: Request, exc: RequestValidationError):
+    if not request.url.path.startswith(AIRequestBudgetMiddleware.PREFIXES):
+        return await request_validation_exception_handler(request, exc)
+    errors = [{key: value for key, value in error.items() if key not in ("input", "ctx")} for error in exc.errors()]
+    return JSONResponse(status_code=422, content=jsonable_encoder({"detail": errors}))
+
+
+app.add_exception_handler(RequestValidationError, _validation_error_handler)
 @app.get("/health")
 async def root_health():
     return {"success": True, "data": {"status": "ok"}, "error": None}

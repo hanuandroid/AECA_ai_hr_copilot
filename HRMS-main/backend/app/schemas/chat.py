@@ -32,8 +32,8 @@ class ActionConfirmRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     confirmation_id: str = Field(min_length=1, max_length=300)
-    # AIS-12: only for step-up actions (deactivation, announcements): the user's current password, re-entered. No
-    # length constraint here, so a validation error can never echo it back; the service checks it.
+    # AIS-12: only for step-up actions (deactivation, announcements): the user's current password, re-entered. The
+    # service checks its length; 422 responses on AI paths never echo request inputs (app/main.py).
     password: str | None = None
 
 

@@ -59,6 +59,7 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
 | G-07 | Verified model pricing and per-user cost budget | Finance | AIS-11 |
 | G-08 | Monitoring/alerting tooling, owners, channels (`monitoring-alerts.md`) | Ops | AIS-15 |
 | G-10 | Refusal-rule tuning: 6 of 18 benign sensitive-keyword policy questions are refused by the deterministic rules (AIS-16). Loosening a refusal rule weakens a control | Security + product | false-refusal reduction |
+| G-11 | Step-up (password re-entry) on the business endpoints for deactivation and announcements, so a stolen token cannot perform them outside the Copilot either (review M1). Changes existing business endpoints and their UI | Security + product (+ rule 7 approval) | stolen-token protection for high-impact actions |
 | G-09 | Conversation storage minimisation of contact data (would change what users see when replaying their own history) | Product + DPO | further storage redaction |
 
 ## 3. Phase log
@@ -188,7 +189,9 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
 
 - **Expected behaviour:** `EMPLOYEE_DEACTIVATE` and `ANNOUNCEMENT_CREATE` (org-wide or team reach; account lock-out)
   need the confirming user's own password in addition to the single-use confirmation, so a stolen session token alone
-  (e.g. via XSS, AIS-20) cannot confirm them. Order on confirm: record checks (owner, unused, unexpired, binding) →
+  cannot confirm them **through the Copilot**. **Correction (independent review M1, Phase 10):** this does not stop a
+  token thief, who can call `DELETE /api/v1/employees/{id}` or `POST /api/v1/announcements` directly without a
+  password; step-up on the business endpoints is a business-endpoint change (rule 7) — gate G-11. Order on confirm: record checks (owner, unused, unexpired, binding) →
   capability/target re-authorization → password (throttled per user before hashing) → atomic claim → audit → execute.
   A refused password (403 `AI_STEP_UP_FAILED`, never 401 — the session is valid) or throttle (429
   `AI_STEP_UP_THROTTLED`) leaves the confirmation PENDING and executes nothing. All other actions are unchanged.
@@ -256,3 +259,30 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
 - **Not done (gated):** scheduling itself (no scheduler exists in the deployment; ops decision G-08); approval of the
   periods (G-03); erasure on request or on exit and audit archival (G-04); clearing free text in action records (G-02).
 - **Executed 2026-10-18:** retention 15 passed; full backend **3034 passed**; offline evals **139/139**; gates **25**.
+
+### Phase 10 — Full regression and independent review · DONE
+
+- **Cumulative scope `f8c551a..HEAD`:** AI services, the AI chat endpoint, `config.py`, `main.py` (one middleware, one
+  AI-path validation handler), `schemas/chat.py`, tests, docs, frontend Copilot components. **No** migrations,
+  business endpoints, `services/auth.py`, models or dependency files changed. No test skipped, xfailed or deselected.
+- **gitleaks (full history):** 3 findings — the synthetic JWT-shaped canaries added by AIS-02/AIS-07 tests
+  (decode to `{"alg":"HS256"}` / `{"sub":"test"|"canary"}` / fake signatures). History is not rewritten; the three
+  exact fingerprints were added to `.gitleaksignore` with the reason, following the existing reviewed precedent —
+  **reviewer confirmation requested**. Rescan: no leaks.
+- **Independent review** (read-only security-review agent over the cumulative diff): no CRITICAL/HIGH. Actions:
+  - **M1** step-up protects the Copilot path only (a token thief can call the business endpoints directly) —
+    CONFIRMED; tracker and `ai_permissions_matrix.md` corrected; business-endpoint step-up is gate **G-11**.
+  - **L1** FastAPI's default 422 echoed request inputs, including a step-up password — reproduced (2/2 bodies);
+    fixed: `main._validation_error_handler` drops `input`/`ctx` on AI paths only (business paths keep the default,
+    pinned by a test).
+  - **L2** step-up shared the sign-in limiter's key space — fixed: dedicated `limits.step_up_limiter` (reset by the
+    test harness like the others).
+  - **L3** the request budget is unbounded outside AI paths — test added: every route depending on
+    `get_ai_user_context` / `enforce_ai_limits` is inside the middleware prefixes.
+  - **I1** the classifier turned limit/timeout/policy errors into `AI_CLASSIFICATION_FAILED` — fixed: re-raised with
+    their own codes (still fail closed).
+  - **I2** `observe()` trusted an `observed` attribute — fixed: `isinstance(ObservedLLMProvider)`.
+  - **I3** NFKC + Cf removal also strips ZWJ/ZWNJ in some Indic/Persian spellings (stricter only) — accepted, noted.
+  - **I4** audit shows how many identifiers a turn contained (counts, ADMIN-only) — accepted, noted.
+- **Executed 2026-10-18:** review-fix suites 302 passed; full backend **3042 passed**; offline evals **139/139**; gates
+  **25**; frontend **185 passed**, `tsc` 0 errors, `next build` compiled (no frontend change since).

@@ -27,7 +27,15 @@ from dataclasses import dataclass
 import structlog
 
 from app.services.ai.audit.provider import observe
-from app.services.ai.errors import AIClassificationError, AIInvalidOutputError, AIProviderError, AIUnavailableError
+from app.services.ai.errors import (
+    AIClassificationError,
+    AIInvalidOutputError,
+    AIProviderError,
+    AIProviderPolicyError,
+    AIRequestLimitError,
+    AIRequestTimeoutError,
+    AIUnavailableError,
+)
 from app.services.ai.llm.base import LLMMessage, LLMProvider
 from app.services.ai.orchestration.followup import (
     CONFIRM_IN_CHAT_MESSAGE,
@@ -335,8 +343,8 @@ class RouterClassifier:
                 RouterClassification,
                 system=ROUTER_SYSTEM_PROMPT,
             )
-        except AIUnavailableError:
-            raise
+        except (AIUnavailableError, AIRequestLimitError, AIRequestTimeoutError, AIProviderPolicyError):
+            raise  # fail closed with the real code (AIS-10 / AIS-02), not as a classification failure
         except (AIInvalidOutputError, AIProviderError) as exc:
             logger.warning("ai.router.classification_failed", error=type(exc).__name__)
             raise AIClassificationError() from exc

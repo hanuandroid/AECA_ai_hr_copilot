@@ -122,3 +122,31 @@ async def test_announcements_require_step_up_too(client, auth, override_actions,
     done = data(await client.post(CONFIRM, json={"confirmation_id": proposed["confirmation_id"], "password": PASSWORD},
                                   headers=headers))
     assert done["status"] == "completed"
+
+
+# --- review fixes (L1, L2) ------------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("body", [{"password": "Synthetic-Probe-Pass-9"},
+                                  {"confirmation_id": "x" * 30, "password": 987654},
+                                  {"confirmation_id": "x" * 30, "password": "Synthetic-Probe-Pass-9", "role": "ADMIN"}])
+async def test_validation_errors_on_ai_paths_never_echo_the_password(client, auth, body):
+    response = await client.post(CONFIRM, json=body, headers=await auth("admin"))
+    assert response.status_code == 422 and response.json()["detail"]  # still a normal, located validation error
+    assert "Synthetic-Probe-Pass-9" not in response.text and "987654" not in response.text
+    assert all("input" not in error for error in response.json()["detail"])
+
+
+async def test_business_validation_errors_keep_the_framework_default(client, auth):
+    response = await client.post("/api/v1/tickets", json={"title": 12345}, headers=await auth("employee"))
+    assert response.status_code == 422 and any("input" in error for error in response.json()["detail"])
+
+
+async def test_sign_in_throttling_cannot_exhaust_step_up(client, auth, override_actions, db, monkeypatch):
+    """A sign-in key shaped like a step-up key ({ip}|{identifier} = "ai-step-up|<id>") lives in another limiter."""
+    from app.core.rate_limit import login_limiter
+    monkeypatch.setattr(settings, "auth_login_rate_limit_per_minute", 1)
+    headers, confirmation_id = await _propose_deactivation(client, auth, override_actions)
+    assert login_limiter.allow(f"ai-step-up|{ADMIN.id}", 1) and not login_limiter.allow(f"ai-step-up|{ADMIN.id}", 1)
+    done = data(await client.post(CONFIRM, json={"confirmation_id": confirmation_id, "password": PASSWORD},
+                                  headers=headers))
+    assert done["status"] == "completed"

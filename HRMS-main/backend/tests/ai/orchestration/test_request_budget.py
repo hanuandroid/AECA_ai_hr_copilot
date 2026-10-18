@@ -125,3 +125,30 @@ async def test_a_slow_model_hits_the_deadline_and_no_action_is_prepared(client, 
     assert response.status_code == 504 and response.json()["error"]["code"] == "AI_REQUEST_TIMEOUT"
     assert time.monotonic() - started < 2 and llm.cancelled == 1
     assert (await db.execute(select(func.count(AIPendingAction.id)))).scalar_one() == 0
+
+
+# --- review fixes (L3, I1) ------------------------------------------------------------------------------------------
+
+def _dependency_calls(dependant):
+    for dependency in dependant.dependencies:
+        yield dependency.call
+        yield from _dependency_calls(dependency)
+
+
+def test_every_ai_route_is_inside_the_budget_middleware_prefixes():
+    """The budget fails open outside a request scope (scripts, evals); every AI HTTP route must therefore be covered."""
+    from app.main import app
+    from app.services.ai.authorization import get_ai_user_context
+    from app.services.ai.limits import AIRequestBudgetMiddleware, enforce_ai_limits
+
+    ai_routes = [route.path for route in app.routes if getattr(route, "dependant", None) is not None
+                 and {get_ai_user_context, enforce_ai_limits} & set(_dependency_calls(route.dependant))]
+    assert len(ai_routes) >= 8
+    assert all(path.startswith(AIRequestBudgetMiddleware.PREFIXES) for path in ai_routes), ai_routes
+
+
+async def test_a_classifier_timeout_keeps_its_own_error_code(client, auth, install_real, monkeypatch):
+    monkeypatch.setattr(settings, "ai_request_deadline_seconds", 0.2)
+    install_real(SlowLLM({RouterClassification: classification("SQL")}, delay=3))
+    response = await client.post(CHAT, json={"message": UNCLASSIFIABLE}, headers=await auth("employee"))
+    assert response.status_code == 504 and response.json()["error"]["code"] == "AI_REQUEST_TIMEOUT"

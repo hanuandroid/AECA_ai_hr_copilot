@@ -102,11 +102,12 @@ async def reset_database(template: Path) -> None:
 @pytest.fixture(autouse=True)
 async def fresh_db(template_db: Path) -> AsyncIterator[None]:
     from app.core.rate_limit import login_limiter
-    from app.services.ai.limits import ai_request_limiter, llm_slots
+    from app.services.ai.limits import ai_request_limiter, llm_slots, step_up_limiter
 
     await reset_database(template_db)
     login_limiter.reset()
     ai_request_limiter.reset()
+    step_up_limiter.reset()
     llm_slots.reset()
     yield
     await engine.dispose()

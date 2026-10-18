@@ -38,6 +38,8 @@ from app.services.ai.errors import (
 logger = structlog.get_logger()
 
 ai_request_limiter = SlidingWindowLimiter()
+# AIS-12 review (L2): its own instance, so step-up keys can never collide with sign-in keys (`{ip}|{identifier}`).
+step_up_limiter = SlidingWindowLimiter()
 
 
 async def usage_today(db: AsyncSession, employee_id: int) -> tuple[int, float]:

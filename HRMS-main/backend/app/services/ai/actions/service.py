@@ -29,7 +29,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.rate_limit import login_limiter
 from app.core.security import verify_password
 from app.db.session import get_db
 from app.models.employee import Employee
@@ -54,6 +53,7 @@ from app.services.ai.errors import (
     AIStepUpFailedError,
     AIStepUpThrottledError,
 )
+from app.services.ai.limits import step_up_limiter
 from app.services.ai.llm.base import LLMMessage, LLMProvider
 from app.services.ai.providers import get_llm_provider
 from app.services.ai.redaction import redact
@@ -238,9 +238,9 @@ class ActionAgentService:
     # --- helpers ------------------------------------------------------------------------------
 
     async def _verify_step_up(self, employee_id: int, password: object) -> None:
-        """The confirming user re-enters their own password. Throttled per user (login limiter, before any hashing);
+        """The confirming user re-enters their own password. Throttled per user (own limiter, before any hashing);
         the password is never logged, stored or audited."""
-        if not login_limiter.allow(f"ai-step-up|{employee_id}", settings.auth_login_rate_limit_per_minute):
+        if not step_up_limiter.allow(f"ai-step-up|{employee_id}", settings.auth_login_rate_limit_per_minute):
             raise AIStepUpThrottledError()
         hashed = (await self._db.execute(select(Employee.hashed_password).where(Employee.id == employee_id))).scalar_one_or_none()
         if (not isinstance(password, str) or not password or len(password) > MAX_STEP_UP_PASSWORD_CHARS

@@ -93,3 +93,12 @@ async def test_unregistered_operation_never_reaches_the_provider():
     with pytest.raises(AIProviderPolicyError):
         await observe(echo, "unregistered_op").generate_structured(user("hi"), RouterClassification)
     assert echo.seen == []
+
+
+async def test_an_object_that_only_claims_to_be_observed_is_still_wrapped():
+    """Review I2: the boundary cannot be skipped by an `observed` attribute."""
+    echo = Echo()
+    echo.observed = True
+    with pytest.raises(AIProviderPolicyError):
+        await observe(echo, "unregistered_op").generate_structured(user("hi"), RouterClassification)
+    assert echo.seen == []
