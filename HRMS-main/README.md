@@ -182,6 +182,16 @@ Provider selection (Anthropic or OpenAI), setup, mocked tests and the approved s
 With `ENVIRONMENT=production` the API refuses to start with the default `JWT_SECRET_KEY`, fake AI providers, or a
 missing key or model for the selected provider (`ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` + `AI_OPENAI_MODEL`).
 
+### Password step-up for high-impact admin operations (G-11)
+
+`STEP_UP_ENFORCEMENT` = `off` | **`log`** (default and approved) | `enforce` (not approved, not enabled). Creating,
+deactivating or reactivating an employee, changing an employee's password, role, email, bank or PAN details, and
+posting an announcement or poll to the whole organisation need the administrator's current password in the
+`X-Step-Up-Password` header; the admin UI asks for it in a dialog. In `log` mode a missing or wrong password is only
+logged (`auth.step_up.not_satisfied`), never blocked. The value is read at startup (recreate the API container after
+changing it). Operator details, rollback and header-logging requirements:
+[`deployment-runbook.md`](docs/production-hardening/deployment-runbook.md) §2.1.
+
 ## Common Commands
 
 Start services:

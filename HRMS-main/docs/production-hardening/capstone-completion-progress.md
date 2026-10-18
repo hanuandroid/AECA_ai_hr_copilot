@@ -24,7 +24,7 @@ not committed). Treat the code and freshly observed results as authoritative; th
 | 0 | Preflight, baseline, this tracker | DONE | (this commit) |
 | 1 | Reconcile status documents (README, phase-status, ai_eval_results, CLAUDE.md, handoff) | PENDING | |
 | 2 | Architecture doc corrections + deliverable map | DONE | see log |
-| 3 | G-11 operator documentation | PENDING | |
+| 3 | G-11 operator documentation | DONE | see log |
 | 4 | Live evaluation runner: OpenAI selection + answer-level scoring (offline tests only; never executed live) | PENDING | |
 | 5 | `docs/demo-script.md` | PENDING | |
 | 6 | Step-up failure-mode tests on every protected page | PENDING | |
@@ -59,3 +59,18 @@ not committed). Treat the code and freshly observed results as authoritative; th
 - `README.md`: requirement → package / endpoint / tests table in the AI Copilot section.
 - Check: every path named in §2, §2.1 and the README table exists (`ls`); remaining mentions of old names are only
   in the mapping table and the sections marked historical.
+
+### Phase 3 — G-11 operator documentation · DONE (2026-10-19)
+
+- `docs/production-hardening/deployment-runbook.md` §2.1 (new): the three modes, the default and approved `log`, the
+  covered operations with their log `operation` names, what is not covered (salary, PF/ESI, DOB, policy publication,
+  payslips: open scope decision), precedence (process env > `.env` file > code default), lower-case values only
+  (other values stop startup), read-once-at-startup with the exact recreate command, a command that prints only the
+  mode, rollback to `log`, throttling coupling to `AUTH_LOGIN_RATE_LIMIT_PER_MINUTE`, header hygiene (unverified: no
+  proxy chosen), and the readiness blockers.
+- `backend/production.env.example`: explicit `STEP_UP_ENFORCEMENT=log` with comments; `backend/.env.example`:
+  commented entry. `monitoring-alerts.md`: proposed alert A19 and `X-Step-Up-Password` added to the never-forward rule.
+  `README.md`: short G-11 section linking the runbook.
+- Facts checked against code: `config.py` (`Literal["off","log","enforce"] = "log"`, pydantic-settings env > `.env`),
+  `step_up.py` (log event fields, codes), endpoint operation names, `rate_limit.py` (limit ≤ 0 disables).
+  `STEP_UP_ENFORCEMENT` itself was not changed anywhere.

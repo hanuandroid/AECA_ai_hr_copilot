@@ -27,6 +27,46 @@
 
 The API **refuses to start** in production on any of these: a default or short JWT secret, a missing or reused fingerprint key, wildcard hosts or origins, more than one worker, tracing variables without approval, or AI enabled without a key. The error names the settings and never their values.
 
+### 2.1 Password step-up on high-impact operations (G-11)
+
+Some admin operations need the caller's **current password** in the `X-Step-Up-Password` request header, so a stolen
+access token alone cannot perform them. Code: `backend/app/services/step_up.py`; tests:
+`backend/tests/rbac/test_step_up_api.py`; design and review: `ai-security-remediation-progress.md` §5–6.
+
+| `STEP_UP_ENFORCEMENT` | Behaviour |
+|---|---|
+| `off` | No check. |
+| **`log`** (code default; the approved setting) | The password is checked when sent, and every unsatisfied attempt is logged as `auth.step_up.not_satisfied` with `operation`, `employee_id`, `outcome` (`MISSING`, `INVALID` or `THROTTLED`) and `mode`. **Nothing is blocked.** |
+| `enforce` (**not approved, not enabled**) | Refuses before any change: 403 `STEP_UP_REQUIRED` (no password), 403 `STEP_UP_FAILED` (wrong), 429 `STEP_UP_THROTTLED` (too many attempts). |
+
+Operations covered (`operation` value in the log): create employee (`employee.create`); deactivate
+(`employee.deactivate`) and reactivate (`employee.reactivate`) an employee; an employee update that actually changes the
+password, role, email, bank or PAN details (`employee.update_sensitive`; unchanged values and other fields need
+nothing); an announcement or poll for the whole organisation (`announcement.create_org`, `poll.create_org`; TEAM
+posts need nothing). Salary, PF/ESI numbers, date of birth, HR policy publication and payslip uploads are **not**
+covered (open scope decision). The admin UI asks for the password in a dialog for exactly these operations; the
+Copilot forwards the password it already verified for its two step-up actions.
+
+- **Precedence:** a process environment variable wins over the API's `.env` file, which wins over the code default
+  (`log`). In this stack the value comes from the `API_ENV_FILE` (`env_file:` in `docker-compose.prod.yml`). Only the
+  lower-case values above are accepted; anything else stops the API at startup (fails closed, but it is an outage).
+- **Applying a change:** the value is read once at startup. `docker compose restart` does not re-read `env_file`;
+  recreate the container: `docker compose -f docker-compose.prod.yml up -d --force-recreate api`.
+- **Checking the current mode without printing secrets:**
+  `docker compose -f docker-compose.prod.yml exec api python -c "from app.core.config import settings; print(settings.step_up_enforcement)"`
+  prints only the mode. The `mode=` field of `auth.step_up.not_satisfied` log lines shows it too.
+- **Rollback:** if enforcement blocks a legitimate client, set `STEP_UP_ENFORCEMENT=log` in the env file and recreate
+  the API container. No data migration is involved.
+- **Throttling:** per user, in memory (single worker), using `AUTH_LOGIN_RATE_LIMIT_PER_MINUTE` (default 10).
+  Setting that to `0` also disables step-up throttling.
+- **Header hygiene (required before `enforce`):** the header carries a password. The reverse proxy, access logs,
+  monitoring, APM and error reporting must never record request headers, or must drop `X-Step-Up-Password` and
+  `Authorization` explicitly. The application never logs it. No proxy has been chosen yet, so this is **unverified**.
+- **Known limits before `enforce`:** API clients outside this repository (scripts, integrations) are unknown and must
+  send the header; no observation period in `log` mode has happened yet; no alert exists for repeated
+  `INVALID`/`THROTTLED` outcomes (`monitoring-alerts.md` A19, proposed). Enforcement-readiness review (2026-10-19):
+  NOT VERIFIABLE until those are resolved.
+
 ## 3. First deployment
 
 ```bash

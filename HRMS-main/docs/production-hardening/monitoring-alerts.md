@@ -39,6 +39,7 @@ Severity: **P1** = page now (availability, integrity or security impact); **P2**
 | A16 | Policy index stale | `hr_policy.status_changed` (PUBLISHED or ARCHIVED) with no ingestion run afterwards | Over 1 h | P3 | Run `scripts/ingest_policies.py`. Retrieval already filters non-published policies |
 | A17 | Disk | Volume `api_storage` usage | 80% or more | P2 | Check backups, uploads and the model cache |
 | A18 | TLS certificate | Proxy certificate expiry | Under 21 days | P2 | Proxy operator |
+| A19 | Password step-up refusals (G-11) | `auth.step_up.not_satisfied` by `operation` and `outcome` | Any `THROTTLED`; 5 or more `INVALID` for one `employee_id` in 10 min. In `log` mode also report `MISSING` counts per operation (the enforcement-readiness signal) | P2 | deployment-runbook §2.1. Possible stolen session; consider global sign-out for the account |
 
 ## 3. Dashboards (proposed)
 
@@ -50,7 +51,7 @@ Severity: **P1** = page now (availability, integrity or security impact); **P2**
 ## 4. Requirements for the chosen tooling
 
 - Ingest JSON logs without parsing message text. Alert on `event` names and fields only.
-- **Never index or forward** request bodies, prompts or Authorization headers. Logs are already redacted; keep it that way at the collector (no body capture at the proxy).
+- **Never index or forward** request bodies, prompts, `Authorization` or `X-Step-Up-Password` headers (the latter carries a password; G-11). Logs are already redacted; keep it that way at the collector (no body capture at the proxy).
 - Restrict log access to the operations and security roles. Retention follows the approved audit and retention policy (open decision).
 - Alerts must link to the runbook sections above, and each must have a named owner.
 
