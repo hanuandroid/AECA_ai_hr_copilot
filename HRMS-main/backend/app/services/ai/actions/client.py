@@ -31,6 +31,7 @@ from app.services.ai.actions.models import (
 from app.services.ai.actions.registry import ACTION_REGISTRY
 from app.services.ai.errors import AIActionOutcomeUnknownError, AIBackendUnavailableError
 from app.services.ai.guards import assert_route_allowed, strip_sensitive_fields
+from app.services.step_up import STEP_UP_HEADER
 
 logger = structlog.get_logger()
 INTERNAL_BASE_URL = "http://hrms.internal"
@@ -51,6 +52,7 @@ class HRMSActionClient:
         self._app = app
         self._token = access_token
         self._timeout = timeout_seconds
+        self._step_up_password: str | None = None
 
     # --- typed commands (one per registered action) ---------------------------------------------
 
@@ -84,9 +86,19 @@ class HRMSActionClient:
     async def deactivate_employee(self, employee_id: int) -> ApiOutcome:
         return await self._send(ActionName.EMPLOYEE_DEACTIVATE, {"employee_id": employee_id}, None)
 
-    async def execute(self, prepared: PreparedAction) -> ApiOutcome:
-        """Dispatch a confirmed action to its typed command (payload re-validated by the params model)."""
+    async def execute(self, prepared: PreparedAction, *, step_up_password: str | None = None) -> ApiOutcome:
+        """Dispatch a confirmed action to its typed command (payload re-validated by the params model).
+
+        G-11: for a step-up action, the password the confirm request already verified is sent as the step-up header of
+        this one in-process call, then dropped; it is never stored, logged or audited."""
         spec = ACTION_REGISTRY[prepared.action]
+        self._step_up_password = step_up_password if spec.step_up else None
+        try:
+            return await self._dispatch(spec, prepared)
+        finally:
+            self._step_up_password = None
+
+    async def _dispatch(self, spec, prepared: PreparedAction) -> ApiOutcome:
         body = spec.params_model.model_validate(prepared.body or {})
         path = prepared.path_params
         dispatch = {
@@ -116,8 +128,11 @@ class HRMSActionClient:
             async with httpx.AsyncClient(transport=transport, base_url=INTERNAL_BASE_URL, timeout=self._timeout) as client:
                 # httpx timeouts are not applied by the in-process ASGITransport, so the deadline is enforced here
                 # (production hardening B-10). On expiry the outcome is UNKNOWN: the handler may have committed.
+                headers = {"Authorization": f"Bearer {self._token}"}
+                if self._step_up_password:
+                    headers[STEP_UP_HEADER] = self._step_up_password
                 response = await asyncio.wait_for(
-                    client.request(spec.method, path, json=body, headers={"Authorization": f"Bearer {self._token}"}),
+                    client.request(spec.method, path, json=body, headers=headers),
                     timeout=self._timeout,
                 )
         except TimeoutError as exc:

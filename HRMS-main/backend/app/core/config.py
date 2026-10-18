@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     ai_max_model_calls_per_request: int = 8
     ai_request_deadline_seconds: float = 120.0
     auth_login_rate_limit_per_minute: int = 10  # per client IP + normalized account identifier; 0 disables
+    # G-11: password step-up on high-impact business endpoints (services/step_up.py). "log" = check and log, never block
+    # (initial rollout); "enforce" blocks; "off" skips. Switching to "enforce" needs approval and the admin UI prompt.
+    step_up_enforcement: Literal["off", "log", "enforce"] = "log"
     # Retention (production hardening B-14). PROVISIONAL planning defaults pending business/security/legal approval.
     ai_conversation_retention_days: int = 90  # by last activity (updated_at)
     ai_pending_action_retention_days: int = 30  # after terminal state or expiry; EXECUTING/UNKNOWN are never purged

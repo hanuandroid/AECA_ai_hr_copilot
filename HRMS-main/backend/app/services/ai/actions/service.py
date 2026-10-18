@@ -29,7 +29,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.security import verify_password
 from app.db.session import get_db
 from app.models.employee import Employee
 from app.services.ai.actions.client import HRMSActionClient
@@ -53,11 +52,11 @@ from app.services.ai.errors import (
     AIStepUpFailedError,
     AIStepUpThrottledError,
 )
-from app.services.ai.limits import step_up_limiter
 from app.services.ai.llm.base import LLMMessage, LLMProvider
 from app.services.ai.providers import get_llm_provider
 from app.services.ai.redaction import redact
 from app.services.ai.validation import validate_question
+from app.services.step_up import StepUpResult, check_step_up
 
 logger = structlog.get_logger()
 
@@ -216,7 +215,10 @@ class ActionAgentService:
             await self._confirmations.release(record_id)
             raise
         try:
-            outcome = await self._client_factory(access_token).execute(prepared)
+            # G-11: the business endpoint asks for the same step-up; the password verified above is forwarded in-process
+            # as a request header for this one call only (never stored, logged or audited).
+            forwarded = step_up[1] if spec.step_up and isinstance(step_up[1], str) else None
+            outcome = await self._client_factory(access_token).execute(prepared, step_up_password=forwarded)
         except AIActionOutcomeUnknownError:
             # B-10: deadline exceeded. The business handler may have committed: record UNKNOWN, never retry.
             await self._confirmations.finish(record_id, "UNKNOWN", AIActionOutcomeUnknownError.code)
@@ -238,13 +240,13 @@ class ActionAgentService:
     # --- helpers ------------------------------------------------------------------------------
 
     async def _verify_step_up(self, employee_id: int, password: object) -> None:
-        """The confirming user re-enters their own password. Throttled per user (own limiter, before any hashing);
-        the password is never logged, stored or audited."""
-        if not step_up_limiter.allow(f"ai-step-up|{employee_id}", settings.auth_login_rate_limit_per_minute):
-            raise AIStepUpThrottledError()
+        """The confirming user re-enters their own password (shared check: services/step_up.py, throttled per user
+        before any hashing); the password is never logged, stored or audited."""
         hashed = (await self._db.execute(select(Employee.hashed_password).where(Employee.id == employee_id))).scalar_one_or_none()
-        if (not isinstance(password, str) or not password or len(password) > MAX_STEP_UP_PASSWORD_CHARS
-                or not hashed or not verify_password(password, hashed)):
+        result = check_step_up(employee_id, hashed, password, key_prefix="ai-step-up")
+        if result == StepUpResult.THROTTLED:
+            raise AIStepUpThrottledError()
+        if result != StepUpResult.OK:
             raise AIStepUpFailedError()
 
     @staticmethod
@@ -259,7 +261,6 @@ class ActionAgentService:
 
 _DENIAL_CODES = {"AI_PERMISSION_DENIED", "AI_USER_INACTIVE", "AI_TARGET_NOT_FOUND", "AI_CONFIRMATION_INVALID",
                  "AI_STEP_UP_FAILED", "AI_STEP_UP_THROTTLED"}
-MAX_STEP_UP_PASSWORD_CHARS = 128  # the account password policy's maximum length
 
 
 def _record_action_events(audit: ActionAuditRecord) -> None:

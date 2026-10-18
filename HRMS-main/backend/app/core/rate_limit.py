@@ -40,3 +40,6 @@ class SlidingWindowLimiter:
 
 
 login_limiter = SlidingWindowLimiter()
+# Password step-up attempts (AIS-12 Copilot, G-11 business API): their own instance, so step-up keys can never collide
+# with sign-in keys (`{ip}|{identifier}`).
+step_up_limiter = SlidingWindowLimiter()

@@ -59,7 +59,7 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
 | G-07 | Verified model pricing and per-user cost budget | Finance | AIS-11 |
 | G-08 | Monitoring/alerting tooling, owners, channels (`monitoring-alerts.md`) | Ops | AIS-15 |
 | G-10 | Refusal-rule tuning: 6 of 18 benign sensitive-keyword policy questions are refused by the deterministic rules (AIS-16). Loosening a refusal rule weakens a control | Security + product | false-refusal reduction |
-| G-11 | Step-up (password re-entry) on the business endpoints for deactivation and announcements, so a stolen token cannot perform them outside the Copilot either (review M1). Changes existing business endpoints and their UI | Security + product (+ rule 7 approval) | stolen-token protection for high-impact actions |
+| G-11 | Step-up on the high-impact business endpoints (review M1). **Implementation approved and done 2026-10-18 in `log` mode**; switching `STEP_UP_ENFORCEMENT` to `enforce` still needs explicit approval and the admin-UI password prompt | Security + product | stolen-token protection for high-impact actions |
 | G-09 | Conversation storage minimisation of contact data (would change what users see when replaying their own history) | Product + DPO | further storage redaction |
 
 ## 3. Phase log
@@ -320,3 +320,42 @@ gates in `release-readiness.md` §6 (PostgreSQL not verified, `braces` advisory 
 **Commits (local only, on `main`):** `3db7479` phase 0 · `4f43f1c` AIS-01 · `cde6ec6` AIS-02 · `be543d4` AIS-03 ·
 `c6500de` AIS-05 · `be41b8c` AIS-07/08 · `eefc1d8` AIS-10 · `3550197` AIS-12 · `f3cdb59` AIS-14/16 · `18233fc` AIS-17 ·
 `fd18e8c` review fixes · `a608039` gitleaks allowlist · (this assessment). No migrations.
+
+## 5. G-11 — Step-up on high-impact business APIs (approved 2026-10-18) · IMPLEMENTED, `log` mode
+
+- **Threat:** a stolen ADMIN access token (15-minute life, revocable by global sign-out) could, without any password:
+  create an account with any role and a chosen password (standing access), reset another user's password, email or
+  role (takeover), change bank/PAN details, deactivate or reactivate accounts, and publish ORG-wide announcements/polls.
+- **Change:** `app/services/step_up.py` — `check_step_up` (shared with the Copilot: missing → no hashing and no attempt
+  counted; otherwise `core/rate_limit.step_up_limiter` per user BEFORE bcrypt; >128 chars refused) and
+  `enforce_step_up` (`STEP_UP_ENFORCEMENT`: `off` / **`log` (default)** / `enforce`; logs
+  `auth.step_up.not_satisfied` with operation, employee id and outcome only). Header `X-Step-Up-Password` (CORS already
+  allows all headers). Called after each endpoint's existing authorization and validation and before any mutation in:
+  `DELETE /employees/{id}`, `PATCH /employees/{id}/reactivate`, `POST /employees`, `PUT /employees/{id}` (only when the
+  password, role, email, bank or PAN fields actually change — unchanged resubmissions need nothing),
+  `POST /announcements` and `POST /polls` (ORG audience only). Codes in `enforce`: 403 `STEP_UP_REQUIRED`, 403
+  `STEP_UP_FAILED`, 429 `STEP_UP_THROTTLED`. Copilot: `actions/service` uses the shared check (key `ai-step-up|id`;
+  business key `api-step-up|id`) and forwards the verified password to `HRMSActionClient.execute(step_up_password=…)`,
+  which sends the header for that one in-process call and drops it. No migration, no new dependency.
+- **Tests:** `tests/rbac/test_step_up_api.py` (109): every protected operation × missing / empty / wrong / over-long
+  password refused in `enforce` with an unchanged business snapshot and no echo; correct password succeeds; throttling
+  (429) before hashing with nothing changed; unauthorized callers get byte-identical answers to `log` mode (authorization
+  first); 404/400 validation precedence kept; non-sensitive updates, unchanged resubmissions, TEAM announcements/polls
+  stay passwordless; `log` mode never blocks and logs the outcome; `off` skips; no password in stdout/stderr or any
+  response; the route-permission matrix rows of all six routes hold under `enforce` with the password.
+  `tests/ai/actions/test_step_up.py` (+3): Copilot deactivation and ORG announcement complete under `enforce`; no
+  password in the pending action, audit rows or output; negative control — if forwarding were removed the business API
+  alone refuses (reported to the Copilot as the existing generic `FORBIDDEN`) and nothing changes.
+- **Rollout risks / prerequisites before `enforce` (approval required):**
+  1. the admin UI does not send `X-Step-Up-Password` yet (employee create/edit, deactivate/reactivate, ORG
+     announcement/poll forms): enforcing first would block administrators; `log` mode shows how often each operation
+     would be refused (`auth.step_up.not_satisfied`);
+  2. any other API client (scripts, integrations) must add the header;
+  3. reverse proxies must not log request headers (the password travels in one);
+  4. `current_salary_usd` is not in the step-up field set (the approved scope named password, role, email, bank, PAN);
+  5. all six endpoints' refusals in `log` mode are only logs, not audit events (business endpoints have no audit trail).
+- **Executed 2026-10-18:** `tests/rbac/test_step_up_api.py` 109 passed; actions + rbac suites 1018 passed (one expectation
+  corrected: the Copilot reports business 403s as the existing generic `FORBIDDEN`); full backend **3154 passed**, 0
+  skipped; offline evals **139/139**; gate tests **25**; frontend **185 passed**, `tsc` 0 errors (no frontend change;
+  `next build` not re-run); gitleaks on the new files: only the already-allowlisted lines 129/131 of
+  `test_step_up.py`. `STEP_UP_ENFORCEMENT` stays `log`.

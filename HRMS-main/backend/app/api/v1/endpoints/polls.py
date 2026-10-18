@@ -1,16 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.response import error_response, success_response
 from app.db.session import get_db
 from app.models.employee import Employee
-from app.models.enums import Role
+from app.models.enums import ContentAudience, Role
 from app.models.poll import Poll
 from app.models.poll_response import PollResponse
 from app.schemas.poll import PollCreate, PollVote
 from app.services.auth import get_current_user
 from app.services.content_audience import resolve_audience, visible_to
+from app.services.step_up import STEP_UP_HEADER, enforce_step_up
 
 router = APIRouter()
 
@@ -59,6 +60,7 @@ async def create_poll(
     payload: PollCreate,
     current_user: Employee = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    step_up_password: str | None = Header(default=None, alias=STEP_UP_HEADER),
 ):
     if current_user.role not in {Role.ADMIN, Role.MANAGER}:
         raise HTTPException(
@@ -74,6 +76,8 @@ async def create_poll(
         )
 
     audience, team_manager_id = resolve_audience(current_user, payload.audience)
+    if audience == ContentAudience.ORG:  # G-11: organisation-wide reach needs password step-up (TEAM does not)
+        enforce_step_up(current_user, step_up_password, "poll.create_org")
     poll = Poll(question=payload.question.strip(), options=cleaned_options, created_by=current_user.id,
                 audience=audience, team_manager_id=team_manager_id)
     db.add(poll)

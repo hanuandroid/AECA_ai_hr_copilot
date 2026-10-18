@@ -6,7 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import structlog
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib.pagesizes import A4
@@ -40,6 +40,7 @@ from app.schemas.employee import (
 )
 from app.services import skill_search
 from app.services.auth import get_current_user, require_roles
+from app.services.step_up import STEP_UP_HEADER, enforce_step_up
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -98,6 +99,27 @@ SELF_SENSITIVE_FIELDS = frozenset({
     "current_salary_usd", "bank_name", "bank_account_number", "bank_account_name", "bank_branch", "bank_ifsc",
     "pan_number", "pan_name", "pan_dob",
 })
+# G-11: an update that changes the password, role, email, bank or PAN details needs password step-up (a stolen
+# administrator token could otherwise take over or redirect another account). Values are compared after the same
+# normalisation the handler applies, so re-submitting unchanged values does not ask for a password.
+_STEP_UP_UPPER_FIELDS = ("bank_ifsc", "pan_number")
+_STEP_UP_TEXT_FIELDS = ("bank_name", "bank_account_number", "bank_account_name", "bank_branch", "pan_name")
+
+
+def _update_needs_step_up(employee: Employee, payload: "EmployeeAdminUpdate", new_role: Role | None) -> bool:
+    if payload.password is not None and payload.password.strip():
+        return True
+    if new_role is not None and new_role != employee.role:
+        return True
+    if payload.email is not None and payload.email.strip().lower() != (employee.email or "").lower():
+        return True
+    for field in _STEP_UP_UPPER_FIELDS + _STEP_UP_TEXT_FIELDS:
+        value = getattr(payload, field)
+        if value is not None:
+            normalized = value.strip().upper() if field in _STEP_UP_UPPER_FIELDS else value.strip()
+            if normalized != getattr(employee, field):
+                return True
+    return payload.pan_dob is not None and payload.pan_dob != employee.pan_dob
 
 
 def _forbid_self(code: str, message: str) -> HTTPException:
@@ -387,8 +409,9 @@ async def list_departments(
 @router.post("")
 async def create_employee(
     payload: EmployeeCreate,
-    _: Employee = Depends(require_roles(Role.ADMIN)),
+    current_user: Employee = Depends(require_roles(Role.ADMIN)),
     db: AsyncSession = Depends(get_db),
+    step_up_password: str | None = Header(default=None, alias=STEP_UP_HEADER),
 ):
     email = payload.email.strip().lower()
     existing = (
@@ -417,6 +440,9 @@ async def create_employee(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error_response("INVALID_ROLE", "role must be ADMIN, MANAGER, or EMPLOYEE"),
         ) from exc
+
+    # G-11: creating an account (any role, chosen password) is standing access; checked before anything changes.
+    enforce_step_up(current_user, step_up_password, "employee.create")
 
     if existing is not None and existing.status == EmployeeStatus.INACTIVE:
         employee = existing
@@ -1186,6 +1212,7 @@ async def deactivate_employee(
     employee_id: int,
     current_user: Employee = Depends(require_roles(Role.ADMIN)),
     db: AsyncSession = Depends(get_db),
+    step_up_password: str | None = Header(default=None, alias=STEP_UP_HEADER),
 ):
     employee = (await db.execute(select(Employee).where(Employee.id == employee_id))).scalar_one_or_none()
     if employee is None:
@@ -1203,6 +1230,7 @@ async def deactivate_employee(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error_response("ALREADY_INACTIVE", "Employee is already inactive"),
         )
+    enforce_step_up(current_user, step_up_password, "employee.deactivate")  # G-11: before any change
 
     if employee.role == Role.ADMIN:
         # RBAC step 4: never deactivate the last active administrator (atomic, race-safe guard).
@@ -1217,8 +1245,9 @@ async def deactivate_employee(
 @router.patch("/{employee_id}/reactivate")
 async def reactivate_employee(
     employee_id: int,
-    _: Employee = Depends(require_roles(Role.ADMIN)),
+    current_user: Employee = Depends(require_roles(Role.ADMIN)),
     db: AsyncSession = Depends(get_db),
+    step_up_password: str | None = Header(default=None, alias=STEP_UP_HEADER),
 ):
     employee = (await db.execute(select(Employee).where(Employee.id == employee_id))).scalar_one_or_none()
     if employee is None:
@@ -1231,6 +1260,7 @@ async def reactivate_employee(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error_response("ALREADY_ACTIVE", "Employee is already active"),
         )
+    enforce_step_up(current_user, step_up_password, "employee.reactivate")  # G-11: before any change
 
     employee.status = EmployeeStatus.ACTIVE
     await db.commit()
@@ -1550,6 +1580,7 @@ async def update_employee(
     payload: EmployeeAdminUpdate,
     current_user: Employee = Depends(require_roles(Role.ADMIN)),
     db: AsyncSession = Depends(get_db),
+    step_up_password: str | None = Header(default=None, alias=STEP_UP_HEADER),
 ):
     employee = (await db.execute(select(Employee).where(Employee.id == employee_id))).scalar_one_or_none()
     if employee is None:
@@ -1580,6 +1611,8 @@ async def update_employee(
             _reject_self_action(current_user, "SELF_PASSWORD_RESET")
             raise _forbid_self("SELF_PASSWORD_RESET_FORBIDDEN",
                                "Use POST /api/v1/auth/change-password to change your own password")
+    if _update_needs_step_up(employee, payload, new_role):
+        enforce_step_up(current_user, step_up_password, "employee.update_sensitive")  # G-11: before any change
 
     if payload.email is not None:
         normalized_email = payload.email.strip().lower()

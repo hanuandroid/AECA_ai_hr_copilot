@@ -150,3 +150,53 @@ async def test_sign_in_throttling_cannot_exhaust_step_up(client, auth, override_
     done = data(await client.post(CONFIRM, json={"confirmation_id": confirmation_id, "password": PASSWORD},
                                   headers=headers))
     assert done["status"] == "completed"
+
+
+# --- G-11: compatibility with business-API step-up (STEP_UP_ENFORCEMENT=enforce) ----------------------------------
+
+async def test_copilot_deactivation_still_works_when_the_api_enforces_step_up(client, auth, override_actions, db,
+                                                                              monkeypatch, capfd):
+    monkeypatch.setattr(settings, "step_up_enforcement", "enforce")
+    headers, confirmation_id = await _propose_deactivation(client, auth, override_actions)
+    capfd.readouterr()
+    done = data(await client.post(CONFIRM, json={"confirmation_id": confirmation_id, "password": PASSWORD},
+                                  headers=headers))
+    assert done["status"] == "completed" and await _outsider_status(db) == EmployeeStatus.INACTIVE
+    record = await _record(db)
+    rows = (await db.execute(select(AIAuditEvent))).scalars().all()
+    output = capfd.readouterr()
+    for stored in (record.payload_json, record.summary, *(row.metadata_json for row in rows), output.out, output.err):
+        assert PASSWORD not in stored
+    assert "auth.step_up.not_satisfied" not in output.out  # the forwarded password satisfied the API
+
+
+async def test_copilot_org_announcement_still_works_when_the_api_enforces_step_up(client, auth, override_actions,
+                                                                                  monkeypatch):
+    monkeypatch.setattr(settings, "step_up_enforcement", "enforce")
+    override_actions(ScriptedActionLLM(proposal("ANNOUNCEMENT_CREATE", arguments={"title": "Townhall",
+                                                                                  "body": "Townhall moved to 5 PM."})))
+    headers = await auth("admin")
+    proposed = data(await client.post(URL, json={"question": "announce it to everyone"}, headers=headers))
+    done = data(await client.post(CONFIRM, json={"confirmation_id": proposed["confirmation_id"], "password": PASSWORD},
+                                  headers=headers))
+    assert done["status"] == "completed"
+
+
+async def test_the_api_also_protects_the_copilot_path_on_its_own(client, auth, override_actions, db, monkeypatch):
+    """Negative control: if the Copilot ever stopped forwarding the verified password, the business endpoint itself
+    refuses and nothing changes (defence in depth, not reliance on the AI layer)."""
+    from app.services.ai.actions.client import HRMSActionClient
+
+    monkeypatch.setattr(settings, "step_up_enforcement", "enforce")
+    original = HRMSActionClient.execute
+
+    async def without_forwarding(self, prepared, *, step_up_password=None):
+        return await original(self, prepared, step_up_password=None)
+
+    monkeypatch.setattr(HRMSActionClient, "execute", without_forwarding)
+    headers, confirmation_id = await _propose_deactivation(client, auth, override_actions)
+    result = data(await client.post(CONFIRM, json={"confirmation_id": confirmation_id, "password": PASSWORD},
+                                    headers=headers))
+    # The action client reports every business 401/403 as a generic FORBIDDEN (existing contract, actions/client._outcome).
+    assert result["status"] == "failed" and result["error_code"] == "FORBIDDEN"
+    assert await _outsider_status(db) == EmployeeStatus.ACTIVE and (await _record(db)).status == "FAILED"

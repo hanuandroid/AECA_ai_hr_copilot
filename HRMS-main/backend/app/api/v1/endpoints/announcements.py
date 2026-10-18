@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,10 +6,11 @@ from app.core.response import error_response, success_response
 from app.db.session import get_db
 from app.models.announcement import Announcement
 from app.models.employee import Employee
-from app.models.enums import Role
+from app.models.enums import ContentAudience, Role
 from app.schemas.announcement import AnnouncementCreate
 from app.services.auth import get_current_user
 from app.services.content_audience import resolve_audience, visible_to
+from app.services.step_up import STEP_UP_HEADER, enforce_step_up
 
 router = APIRouter()
 
@@ -60,6 +61,7 @@ async def create_announcement(
     payload: AnnouncementCreate,
     current_user: Employee = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    step_up_password: str | None = Header(default=None, alias=STEP_UP_HEADER),
 ):
     if current_user.role not in {Role.ADMIN, Role.MANAGER}:
         raise HTTPException(
@@ -75,6 +77,8 @@ async def create_announcement(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error_response("INVALID_ANNOUNCEMENT", "title/body cannot be empty"),
         )
+    if audience == ContentAudience.ORG:  # G-11: organisation-wide reach needs password step-up (TEAM does not)
+        enforce_step_up(current_user, step_up_password, "announcement.create_org")
 
     announcement = Announcement(
         title=clean_title,

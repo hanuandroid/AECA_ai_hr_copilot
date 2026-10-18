@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.rate_limit import SlidingWindowLimiter
+from app.core.rate_limit import step_up_limiter as core_step_up_limiter
 from app.db.session import get_db
 from app.models.ai_audit_event import AIAuditEvent
 from app.services.ai.authorization import AIUserContext, get_ai_user_context
@@ -38,8 +39,8 @@ from app.services.ai.errors import (
 logger = structlog.get_logger()
 
 ai_request_limiter = SlidingWindowLimiter()
-# AIS-12 review (L2): its own instance, so step-up keys can never collide with sign-in keys (`{ip}|{identifier}`).
-step_up_limiter = SlidingWindowLimiter()
+# AIS-12 review (L2) / G-11: the step-up limiter is shared with the business API and lives in app/core/rate_limit.py.
+step_up_limiter = core_step_up_limiter
 
 
 async def usage_today(db: AsyncSession, employee_id: int) -> tuple[int, float]:
