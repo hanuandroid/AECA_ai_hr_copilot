@@ -302,6 +302,30 @@ describe("employee edit", () => {
   });
 });
 
+async function fillNewEmployee(user: ReturnType<typeof userEvent.setup>) {
+  const fill = async (placeholder: string, value: string) => user.type(screen.getByPlaceholderText(placeholder), value);
+  await fill("e.g. John Miller", "New Hire");
+  await fill("e.g. john@company.com", "new.hire@hrms-test.dev");
+  await fill("Minimum 8 characters", TEMP_PW);
+  await user.type(screen.getByLabelText("Select joining date"), "2026-10-01");
+  await user.type(screen.getByLabelText("Select date of birth"), "1996-06-06");
+  await fill("e.g. Software Engineer", "Engineer");
+  await fill("Local number", "9000000002");
+  await user.selectOptions(screen.getByDisplayValue("Select employment type"), "Full-Time");
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  await fill("e.g. 65000", "50000");
+  await fill("e.g. HDFC Bank", "Test Bank");
+  await fill("e.g. 123456789012", "000111222444");
+  await fill("As per bank records", "New Hire");
+  await fill("e.g. City Center", "Main");
+  await fill("e.g. HDFC0001234", "TEST0001234");
+  await fill("e.g. ABCDE1234F", "ABCDE1234Y");
+  await fill("As per PAN card", "New Hire");
+  await user.type(screen.getByLabelText("Select PAN DOB"), "1996-06-06");
+  await fill("Provident Fund UAN", "PFUAN456");
+  await fill("Employee State Insurance Number", "ESINO456");
+}
+
 describe("employee create", () => {
   it("always asks, keeps existing validation, and sends the header", async () => {
     const { calls } = formBackend();
@@ -310,27 +334,7 @@ describe("employee create", () => {
     await screen.findByPlaceholderText("e.g. John Miller");
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByText(/are required/)).toBeInTheDocument(); // existing validation still runs first
-    const fill = async (placeholder: string, value: string) => user.type(screen.getByPlaceholderText(placeholder), value);
-    await fill("e.g. John Miller", "New Hire");
-    await fill("e.g. john@company.com", "new.hire@hrms-test.dev");
-    await fill("Minimum 8 characters", TEMP_PW);
-    await user.type(screen.getByLabelText("Select joining date"), "2026-10-01");
-    await user.type(screen.getByLabelText("Select date of birth"), "1996-06-06");
-    await fill("e.g. Software Engineer", "Engineer");
-    await fill("Local number", "9000000002");
-    await user.selectOptions(screen.getByDisplayValue("Select employment type"), "Full-Time");
-    await user.click(screen.getByRole("button", { name: "Continue" }));
-    await fill("e.g. 65000", "50000");
-    await fill("e.g. HDFC Bank", "Test Bank");
-    await fill("e.g. 123456789012", "000111222444");
-    await fill("As per bank records", "New Hire");
-    await fill("e.g. City Center", "Main");
-    await fill("e.g. HDFC0001234", "TEST0001234");
-    await fill("e.g. ABCDE1234F", "ABCDE1234Y");
-    await fill("As per PAN card", "New Hire");
-    await user.type(screen.getByLabelText("Select PAN DOB"), "1996-06-06");
-    await fill("Provident Fund UAN", "PFUAN456");
-    await fill("Employee State Insurance Number", "ESINO456");
+    await fillNewEmployee(user);
     await user.click(screen.getByRole("button", { name: "Create Employee" }));
     expect(await screen.findByRole("dialog", { name: "Create employee account" })).toBeInTheDocument();
     expect(posts(calls)).toHaveLength(0);
@@ -338,6 +342,151 @@ describe("employee create", () => {
     await waitFor(() => expect(posts(calls)).toHaveLength(1));
     expect(posts(calls)[0].headers[HEADER]).toBe(PW);
     expect(posts(calls)[0].body).toMatchObject({ email: "new.hire@hrms-test.dev", password: TEMP_PW });
+    assertPasswordOnlyInHeader(calls);
+  });
+});
+
+// --- failure paths on every protected operation ----------------------------------------------------------------------
+
+type Reply = ReturnType<typeof ok>;
+const NETWORK_DOWN = { networkError: true } as unknown as Reply;
+
+/** Replies to the protected request in order; the last reply repeats. */
+function inOrder(replies: Reply[]) {
+  let index = 0;
+  return () => replies[Math.min(index++, replies.length - 1)];
+}
+
+const listed = (status: string) => ({ id: 7, name: "Riya Test", email: "riya@hrms-test.dev", department_id: null,
+                                      role: "EMPLOYEE", status, joining_date: "2026-01-01", has_profile_photo: false });
+
+type Operation = { method: string; dialog: string; open: (replies: Reply[]) => Promise<RecordedCall[]> };
+
+const OPERATIONS: Record<string, Operation> = {
+  "ORG announcement": {
+    method: "POST", dialog: "Post to everyone",
+    open: async (replies) => {
+      const { calls } = announcementBackend(...replies.map((reply) => () => reply));
+      await writeAnnouncement("ORG");
+      return calls;
+    },
+  },
+  "ORG poll": {
+    method: "POST", dialog: "Create a poll for everyone",
+    open: async (replies) => {
+      const { calls } = mockBackend({
+        "GET /api/v1/employees/me": admin,
+        "GET /api/v1/polls": () => ok({ items: [], meta: { total: 0, limit: 20, offset: 0 } }),
+        "POST /api/v1/polls": inOrder(replies),
+      });
+      render(<PollsPage />);
+      await screen.findByRole("combobox", { name: "Audience" });
+      await userEvent.type(screen.getByPlaceholderText("Question"), "Which venue for lunch?");
+      await userEvent.type(screen.getByPlaceholderText("Option A, Option B"), "Cafe, Garden");
+      await userEvent.click(screen.getByRole("button", { name: "Create" }));
+      return calls;
+    },
+  },
+  ...Object.fromEntries((["ACTIVE", "INACTIVE"] as const).map((status) => {
+    const deactivate = status === "ACTIVE";
+    return [deactivate ? "deactivation" : "reactivation", {
+      method: deactivate ? "DELETE" : "PATCH", dialog: deactivate ? "Deactivate employee" : "Reactivate employee",
+      open: async (replies: Reply[]) => {
+        const { calls } = mockBackend({
+          "GET /api/v1/employees/me": admin,
+          "GET /api/v1/employees/departments": () => ok([]),
+          "GET /api/v1/employees": () => ok({ items: [listed(status)], meta: { total: 1, limit: 10, offset: 0 } }),
+          "GET /api/v1/employees/7": () => ok(listed(status)),
+          [deactivate ? "DELETE /api/v1/employees/7" : "PATCH /api/v1/employees/7/reactivate"]: inOrder(replies),
+        });
+        render(<EmployeesPage />);
+        await userEvent.click(await screen.findByText("Riya Test"));
+        await userEvent.click(await screen.findByRole("button", { name: deactivate ? "Deactivate Employee" : "Reactivate Employee" }));
+        return calls;
+      },
+    }];
+  })),
+  "sensitive employee edit": {
+    method: "PUT", dialog: "Confirm sensitive changes",
+    open: async (replies) => {
+      const { calls } = mockBackend({
+        "GET /api/v1/employees/me": admin,
+        "GET /api/v1/employees/departments": () => ok([]),
+        "GET /api/v1/employees/7": () => ok(DETAILS),
+        "PUT /api/v1/employees/7": inOrder(replies),
+      });
+      await editAndSave(async (u) => {
+        await u.clear(screen.getByPlaceholderText("e.g. john@company.com"));
+        await u.type(screen.getByPlaceholderText("e.g. john@company.com"), "riya.moved@hrms-test.dev");
+      });
+      return calls;
+    },
+  },
+  "employee creation": {
+    method: "POST", dialog: "Create employee account",
+    open: async (replies) => {
+      const { calls } = mockBackend({
+        "GET /api/v1/employees/me": admin,
+        "GET /api/v1/employees/departments": () => ok([]),
+        "POST /api/v1/employees": inOrder(replies),
+      });
+      const user = userEvent.setup();
+      render(<NewEmployeePage />);
+      await screen.findByPlaceholderText("e.g. John Miller");
+      await fillNewEmployee(user);
+      await user.click(screen.getByRole("button", { name: "Create Employee" }));
+      return calls;
+    },
+  },
+};
+
+const SUCCESS = ok({ id: 7, status: "ACTIVE" });
+const sent = (calls: RecordedCall[], method: string) => calls.filter((call) => call.method === method && call.path !== "/api/v1/employees/me");
+
+describe.each(Object.entries(OPERATIONS))("%s: failure paths", (_name, operation) => {
+  it("a wrong password keeps the dialog open with a cleared field; only a new user attempt resends", async () => {
+    const calls = await operation.open([fail(403, "STEP_UP_FAILED"), SUCCESS]);
+    await confirmWith("Not-The-Password-1");
+    const dialog = await screen.findByRole("dialog", { name: operation.dialog });
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Your password could not be verified. Nothing was changed.");
+    expect(within(dialog).getByLabelText("Your password")).toHaveValue("");
+    expect(sent(calls, operation.method)).toHaveLength(1);
+    expect(screen.queryByText("server message must not be shown")).not.toBeInTheDocument();
+    await confirmWith(PW);
+    await waitFor(() => expect(sent(calls, operation.method)).toHaveLength(2));
+    expect(sent(calls, operation.method)[1].headers[HEADER]).toBe(PW);
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    assertPasswordOnlyInHeader(calls);
+  });
+
+  it("throttling is explained and nothing is retried automatically", async () => {
+    const calls = await operation.open([fail(429, "STEP_UP_THROTTLED")]);
+    await confirmWith(PW);
+    const dialog = await screen.findByRole("dialog", { name: operation.dialog });
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Too many password attempts. Wait a minute and try again.");
+    expect(within(dialog).getByLabelText("Your password")).toHaveValue("");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(sent(calls, operation.method)).toHaveLength(1);
+    assertPasswordOnlyInHeader(calls);
+  });
+
+  it("a network failure closes the dialog, says the outcome is unknown and never resubmits", async () => {
+    const calls = await operation.open([NETWORK_DOWN]);
+    await confirmWith(PW);
+    expect(await screen.findByText(/don't know whether this change was applied/)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(sent(calls, operation.method)).toHaveLength(1);
+    assertPasswordOnlyInHeader(calls);
+  });
+
+  it("Escape closes the dialog, sends nothing and drops what was typed", async () => {
+    const calls = await operation.open([SUCCESS]);
+    const dialog = await screen.findByRole("dialog", { name: operation.dialog });
+    await userEvent.type(within(dialog).getByLabelText("Your password"), PW);
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(sent(calls, operation.method)).toHaveLength(0);
     assertPasswordOnlyInHeader(calls);
   });
 });

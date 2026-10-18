@@ -27,7 +27,7 @@ not committed). Treat the code and freshly observed results as authoritative; th
 | 3 | G-11 operator documentation | DONE | see log |
 | 4 | Live evaluation runner: OpenAI selection + answer-level scoring (offline tests only; never executed live) | PENDING | |
 | 5 | `docs/demo-script.md` | PENDING | |
-| 6 | Step-up failure-mode tests on every protected page | PENDING | |
+| 6 | Step-up failure-mode tests on every protected page | DONE | see log |
 | 7 | Browser walkthrough evidence (or NOT_RUN checklist) | PENDING | |
 | 8 | Offline evaluation evidence refresh | PENDING | |
 | 9 | Harness and CI reproducibility | PENDING | |
@@ -74,3 +74,24 @@ not committed). Treat the code and freshly observed results as authoritative; th
 - Facts checked against code: `config.py` (`Literal["off","log","enforce"] = "log"`, pydantic-settings env > `.env`),
   `step_up.py` (log event fields, codes), endpoint operation names, `rate_limit.py` (limit ≤ 0 disables).
   `STEP_UP_ENFORCEMENT` itself was not changed anywhere.
+
+### Fresh baseline (run during Phases 0–3, 2026-10-19 01:01–01:08 IST)
+
+Throwaway `hrms-test-py311` container (Python 3.11.17, FastAPI 0.133.1), API keys blanked, started at `4e37fb8`
+(backend code identical to `29ca184`): backend **3154 passed**, 0 failed (344.7 s); offline evaluations
+**139/139** (policy 11, SQL 20, router 33, conversation 25, actions 20, assignment 30), `LIVE_MODEL_EVAL = NOT_RUN`;
+CI gate tests `.github/scripts` **25 passed**.
+
+### Phase 6 — Step-up failure-mode tests · DONE (2026-10-19)
+
+- `frontend/tests/step-up-admin.test.tsx`: new table-driven block runs four failure paths on **every** protected
+  operation (ORG announcement, ORG poll, deactivation, reactivation, sensitive employee edit, employee creation):
+  wrong password (dialog stays, field cleared, server text hidden, only a new user attempt resends, header on the
+  retry), throttling (message, nothing retried), network failure (dialog closes, "don't know whether this change was
+  applied", never resubmitted), Escape (closes, nothing sent, typed value dropped). Each ends with the existing
+  `assertPasswordOnlyInHeader` check (not in URLs, bodies, storage, cookies, console or DOM). The create-form filling
+  steps moved into `fillNewEmployee` (shared by the existing create test; its assertions unchanged).
+  ORG/TEAM, sensitive/non-sensitive and backend-fallback cases were already covered and are unchanged.
+- Results: focused file 53 passed (29 → 53); full frontend **238 passed** (16 files); `tsc` 0 errors; gitleaks
+  `--no-git` on the test file: no leaks. Deliberate regression (dialog no longer clears the password on submit):
+  13 tests failed, then the file was restored unchanged.
