@@ -1,6 +1,8 @@
 # AI Evaluation Results — NovaWorks PeopleOps Copilot
 
-Run date: 2026-10-03, on a Windows 11 host with Python 3.12.10 and Node 22.19.
+Run date of the tables below: 2026-10-03 (Windows 11 host, Python 3.12.10, Node 22.19), **historical**. A fresh
+offline run on 2026-10-19 (Python 3.11.17 container) gave the same 139/139; the test-suite counts in §3 are out of
+date (2026-10-19: backend 3154, frontend 238). Current figures: `production-hardening/capstone-completion-progress.md`.
 
 > **What these numbers mean.** Every result below is **offline and deterministic**. Model outputs are scripted
 > (generated SQL text, action proposals, routing classifications where rules can't decide), or are extracted from

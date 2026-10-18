@@ -22,7 +22,7 @@ not committed). Treat the code and freshly observed results as authoritative; th
 | Phase | Scope | Status | Commit |
 |---|---|---|---|
 | 0 | Preflight, baseline, this tracker | DONE | (this commit) |
-| 1 | Reconcile status documents (README, phase-status, ai_eval_results, CLAUDE.md, handoff) | PENDING | |
+| 1 | Reconcile status documents (README, phase-status, ai_eval_results, CLAUDE.md, handoff) | DONE | see log |
 | 2 | Architecture doc corrections + deliverable map | DONE | see log |
 | 3 | G-11 operator documentation | DONE | see log |
 | 4 | Live evaluation runner: OpenAI selection + answer-level scoring (offline tests only; never executed live) | PENDING | |
@@ -95,3 +95,15 @@ CI gate tests `.github/scripts` **25 passed**.
 - Results: focused file 53 passed (29 → 53); full frontend **238 passed** (16 files); `tsc` 0 errors; gitleaks
   `--no-git` on the test file: no leaks. Deliberate regression (dialog no longer clears the password on submit):
   13 tests failed, then the file was restored unchanged.
+
+### Phase 1 — Status documents reconciled · DONE (2026-10-19)
+
+- `README.md` (AI Copilot banner), `docs/phase-status.md` (top banner + an end-of-file entry for the work recorded
+  in other trackers since 2026-10-14), `docs/ai_eval_results.md` (header marks the 2026-10-03 tables historical),
+  `CLAUDE.md` (status bullets) and `docs/development-handoff.md` (dated note; §10 marked historical) now agree:
+  assignment complete; hardening, RBAC, AI security remediation and G-11 done locally; **NOT YET PRODUCTION READY**;
+  latest fresh results = the 2026-10-19 baseline above plus frontend 238 / `tsc` 0 at `5d4a20b`; live-model
+  evaluation, browser walkthrough and GitHub CI **not run**; local commits unpublished. This tracker is named as the
+  single source of current status so the other files do not need new numbers each time.
+- "Ready for final submission" (2026-10-03) removed from the README and the phase-status banner. Old counts (1685,
+  86, 2778, 152) remain only in dated historical entries. `ai_eval_results.md` §3 is replaced in Phase 8.

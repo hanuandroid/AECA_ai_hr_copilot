@@ -278,13 +278,14 @@ docker-compose exec api python scripts/seed.py
 
 ## AI Copilot
 
-Handoff status (2026-10-03): **Phase 10 COMPLETE. Ready for final submission.**
-- Verified offline: backend 1685 passed, frontend 86 passed, TypeScript 0 errors, `next build` PASS (23 routes),
-  evaluations 139/139.
-- Pending on the next machine: Docker validation (`docker-compose up`, migrate, seed, `ingest_policies.py`,
-  fastembed in the container).
-- Pending an API key: live-model evaluation (`python -m evals.run_evals --live`).
-- Separate decision: the npm security advisory for the pinned `next@15.5.2` (not upgraded).
+Status (2026-10-19): assignment Phases 0–10 complete; production hardening, RBAC remediation, the AI security
+remediation and G-11 password step-up done locally; the capstone completion programme is in progress
+([`capstone-completion-progress.md`](docs/production-hardening/capstone-completion-progress.md) is the current
+source of truth for status and evidence).
+- **Production readiness: NOT YET PRODUCTION READY** (release gates: `docs/production-hardening/release-readiness.md` §6).
+- **Latest fresh results:** backend 3154 passed, offline evaluations 139/139 (scripted model output), CI gate tests 25 passed (container run 2026-10-19 at `4e37fb8`); frontend 238 passed and TypeScript 0 errors (host run 2026-10-19 at `5d4a20b`).
+- **Not run yet:** live-model evaluation (needs approval for external calls and spending), browser walkthrough of the
+  demo, CI on GitHub. The local commits are not on GitHub until a push is approved.
 
 The NovaWorks PeopleOps Copilot adds AI to CB Nest without bypassing it:
 

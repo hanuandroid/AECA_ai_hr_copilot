@@ -17,10 +17,14 @@ Assignment Phases 0–10 are complete. A separate **production-hardening program
   OpenAI provider (`e3ec3d6`, `90e6582`, `0ca8326`) and the complete RBAC remediation plan, Steps 1–10
   (`HRMS-main/docs/production-hardening/rbac-remediation-plan.md`; Step 9 = `345ca96`). S-02, S-03 and S-05 fixed.
   Route and page coverage: `HRMS-main/docs/production-hardening/page-endpoint-inventory.md`.
-- **Verified 2026-10-17 (Step 10 full run):** backend 2778 tests, frontend 152 tests, TypeScript 0 errors, Next.js
-  build PASS, offline evaluation 139/139, gitleaks PASS, Docker production smoke PASS. Live-model evaluation: NOT_RUN
-  (the 10-check OpenAI smoke test in `0ca8326` is not that evaluation). Only SQLite is verified; downgrade below
-  migration 0016 fails (S-07).
+- **Also done locally (2026-10-18/19):** the AI security remediation (AIS-01..20;
+  `HRMS-main/docs/production-hardening/ai-security-remediation-progress.md`) and G-11 password step-up on high-impact
+  business APIs (`d570ab6`, `STEP_UP_ENFORCEMENT=log`; never switch to `enforce` without approval) with the admin UI
+  dialog (`29ca184`). Capstone completion programme in progress:
+  `HRMS-main/docs/production-hardening/capstone-completion-progress.md` (current status and evidence).
+- **Latest fresh results (2026-10-19):** backend 3154 passed, offline evaluations 139/139 (scripted model output), CI gate tests 25 passed (container run 2026-10-19 at `4e37fb8`); frontend 238 passed and TypeScript 0 errors (host run 2026-10-19 at `5d4a20b`). Earlier full runs (2026-10-17: 2778 backend, 152 frontend; Docker
+  production smoke PASS) are historical. Live-model evaluation: NOT_RUN (the 10-check OpenAI smoke test in `0ca8326`
+  is not that evaluation). Only SQLite is verified; downgrade below migration 0016 fails (S-07).
 - **Open decisions:** release gates in `release-readiness.md` §6. S-06 and S-08 fixed, S-04 closed, S-07 mitigated,
   B-17 revocation and global sign-out done (tokens still in `localStorage`; strict script CSP pending) 2026-10-17 (forward-only migrations; the API refuses to start unless the DB is at the code's Alembic head).
 - **Blocked on approval:** live-model work (3.1/3.2/3.4/3.5), Playwright

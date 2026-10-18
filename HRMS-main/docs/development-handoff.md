@@ -1,6 +1,10 @@
 # Development handoff: continuing on another system
 
-**Date:** 2026-10-14, updated 2026-10-17 (RBAC Steps 1–10 complete) · **Release status: NOT YET PRODUCTION READY**
+**Date:** 2026-10-14, updated 2026-10-17 (RBAC Steps 1–10 complete); status note 2026-10-19 · **Release status: NOT YET PRODUCTION READY**
+
+> **2026-10-19:** since this handoff was written, the AI security remediation (2026-10-18), G-11 password step-up
+> (`d570ab6`, `29ca184`) and the capstone completion programme were added locally. Current status, fresh results
+> and open gates: `docs/production-hardening/capstone-completion-progress.md`. §10 below is the 2026-10-17 run.
 
 > ⚠ **Check what is on GitHub before relying on a clone.** `origin/main` is at `86001f5` (hardening through the Phase 3 offline workstreams and the 2026-10-14 handoff). The OpenAI provider, RBAC Steps 1–7 (migrations 0022 and 0023) and this update stay **local until pushed or bundled** (§11). A fresh clone has only what is on GitHub.
 
@@ -172,7 +176,7 @@ docker build --target production -t hrms-web:ci --build-arg NEXT_PUBLIC_API_BASE
 
 Production configuration, smoke checks, backups and the verification checklist are in `docs/production-hardening/deployment-runbook.md`.
 
-## 10. Latest verified results (2026-10-17, RBAC Step 10 full run)
+## 10. Verified results of 2026-10-17 (RBAC Step 10 full run; historical; for current results see the capstone tracker)
 
 | Check | Environment | Result |
 |---|---|---|

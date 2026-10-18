@@ -1,12 +1,10 @@
 # Phase Status
 
-Handoff status (2026-10-03): **Phase 10 COMPLETE. Ready for final submission.**
-- Verified offline: backend 1685 passed, frontend 86 passed, TypeScript 0 errors, `next build` PASS (23 routes),
-  evaluations 139/139.
-- Pending on the next machine: Docker validation (`docker-compose up`, migrate, seed, `ingest_policies.py`,
-  fastembed in the container).
-- Pending an API key: live-model evaluation (`python -m evals.run_evals --live`).
-- Separate decision: the npm security advisory for the pinned `next@15.5.2` (not upgraded).
+Current status (2026-10-19): see the end of this file and
+[`production-hardening/capstone-completion-progress.md`](production-hardening/capstone-completion-progress.md).
+Release status: **NOT YET PRODUCTION READY**. Latest fresh results: backend 3154 passed, offline evaluations 139/139 (scripted model output), CI gate tests 25 passed (container run 2026-10-19 at `4e37fb8`); frontend 238 passed and TypeScript 0 errors (host run 2026-10-19 at `5d4a20b`). Live-model evaluation and a browser
+walkthrough have **not** been run. (The 2026-10-03 "ready for final submission" note, with 1685 backend and 86
+frontend tests, is historical.)
 
 ---
 
@@ -827,4 +825,11 @@ Production hardening programme (separate track; see docs/production-hardening/)
   proposal only, AI_RAG_MIN_SCORE unchanged), 3.6 offline red-team corpus (40 attacks x benign/hostile model),
   3.8 monitoring-alerts.md, 3.9 release-readiness.md. Live-model evaluation, live calibration and workstreams 3.1,
   3.2, 3.4, 3.5 and 3.7 are NOT started (blocked on approvals / API key).
+  Release status: NOT YET PRODUCTION READY.
+- Later work, recorded in its own trackers (all local until a push is approved):
+  - OpenAI provider (2026-10-16) and RBAC remediation Steps 1–10 (2026-10-17): `production-hardening/rbac-remediation-plan.md`,
+    `development-handoff.md` §2.
+  - AI security remediation AIS-01..AIS-20 (2026-10-18, phases 0–11) and G-11 password step-up on high-impact business
+    APIs (`d570ab6`, `log` mode) with the admin UI dialog (`29ca184`): `production-hardening/ai-security-remediation-progress.md`.
+  - Capstone completion programme (2026-10-19): `production-hardening/capstone-completion-progress.md`.
   Release status: NOT YET PRODUCTION READY.
