@@ -36,6 +36,14 @@ class AIInvalidOutputError(AIError):
     http_status = status.HTTP_502_BAD_GATEWAY
 
 
+class AIProviderPolicyError(AIError):
+    """The provider boundary refused to send a payload (unregistered operation, or preparing it failed)."""
+
+    code = "AI_PROVIDER_POLICY_BLOCKED"
+    message = "The AI assistant could not process this request safely."
+    http_status = status.HTTP_500_INTERNAL_SERVER_ERROR
+
+
 class AIInvalidRequestError(AIError):
     code = "AI_INVALID_REQUEST"
     message = "The request is not valid."

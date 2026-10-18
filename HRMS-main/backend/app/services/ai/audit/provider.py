@@ -15,6 +15,13 @@ from app.services.ai.audit.recorder import Timer, record
 from app.services.ai.errors import AIError
 from app.services.ai.limits import llm_slots
 from app.services.ai.llm.base import LLMMessage, LLMResponse, LLMUsage, StructuredT, usage_sink
+from app.services.ai.provider_policy import (
+    PROVIDER_OPERATIONS,
+    PreparedPayload,
+    prepare,
+    restore_structured,
+    restore_text,
+)
 
 
 def _pricing_table(provider: str | None, config: Settings) -> dict[str | None, tuple[float | None, float | None]]:
@@ -53,19 +60,35 @@ class ObservedLLMProvider:
         self.model = getattr(inner, "model", "unknown")
 
     def _meta(self, schema_name: str | None) -> dict[str, Any]:
-        return {"provider": _token(self.name), "model": _token(self.model), "operation": self._operation,
+        operation = self._operation if self._operation in PROVIDER_OPERATIONS else "unregistered"  # never free text
+        return {"provider": _token(self.name), "model": _token(self.model), "operation": operation,
                 "schema_name": schema_name}
 
+    # AIS-02: every call passes the provider boundary first (provider_policy.prepare); the inner provider only ever
+    # receives the prepared messages, and placeholders are restored in the output of the same call only.
+
     async def generate(self, messages: list[LLMMessage], **kwargs: Any) -> LLMResponse:
-        response = await self._call(lambda: self._inner.generate(messages, **kwargs), None)
-        return response
+        payload = self._prepare(messages, None)
+        response = await self._call(lambda: self._inner.generate(payload.messages, **kwargs), None, payload)
+        return response.model_copy(update={"text": restore_text(response.text, payload)})
 
     async def generate_structured(self, messages: list[LLMMessage], schema: type[StructuredT], **kwargs: Any) -> StructuredT:
-        return await self._call(lambda: self._inner.generate_structured(messages, schema, **kwargs), schema.__name__)
+        payload = self._prepare(messages, schema.__name__)
+        result = await self._call(lambda: self._inner.generate_structured(payload.messages, schema, **kwargs),
+                                  schema.__name__, payload)
+        return restore_structured(result, schema, payload)  # type: ignore[return-value]
 
-    async def _call(self, invoke, schema_name: str | None):
+    def _prepare(self, messages: list[LLMMessage], schema_name: str | None) -> PreparedPayload:
+        try:
+            return prepare(self._operation, messages)
+        except AIError as error:
+            record(AuditEventType.AI_PROVIDER_ERROR, AuditStatus.FAILED, error_code=error.code, **self._meta(schema_name))
+            raise
+
+    async def _call(self, invoke, schema_name: str | None, payload: PreparedPayload):
         meta = self._meta(schema_name)
-        record(AuditEventType.AI_PROVIDER_REQUEST, AuditStatus.STARTED, **meta)
+        record(AuditEventType.AI_PROVIDER_REQUEST, AuditStatus.STARTED, redacted_values=payload.total,
+               redacted_categories=sorted(payload.counts) or None, **meta)
         usage = LLMUsage()
         token = usage_sink.set(usage)
         timer = Timer()

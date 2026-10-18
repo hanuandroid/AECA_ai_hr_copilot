@@ -181,18 +181,18 @@ class Answer(BaseModel):
 
 
 async def test_observed_provider_records_latency_model_and_tokens(audit_scope):
-    llm = observe(FakeLLMProvider().add_text_rule("hi", "hello there"), "test_operation")
+    llm = observe(FakeLLMProvider().add_text_rule("hi", "hello there"), "policy_answer")
     await llm.generate([LLMMessage(role="user", content="hi")])
     request, response = audit_scope.events
     assert (request.event_type, response.event_type) == (AuditEventType.AI_PROVIDER_REQUEST, AuditEventType.AI_PROVIDER_RESPONSE)
     data = response.metadata
-    assert (data.provider, data.model, data.operation) == ("fake", "fake-llm", "test_operation")
+    assert (data.provider, data.model, data.operation) == ("fake", "fake-llm", "policy_answer")
     assert (data.input_tokens, data.output_tokens, data.total_tokens) == (1, 2, 3)
     assert data.estimated_cost_usd is None and response.duration_ms is not None
 
 
 async def test_provider_errors_are_observable_and_re_raised(audit_scope):
-    llm = observe(FakeLLMProvider(), "test_operation")
+    llm = observe(FakeLLMProvider(), "policy_answer")
     with pytest.raises(AIInvalidOutputError):
         await llm.generate_structured([LLMMessage(role="user", content="x")], Answer)
     assert audit_scope.events[-1].event_type == AuditEventType.AI_PROVIDER_ERROR

@@ -170,7 +170,7 @@ async def test_model_calls_are_bounded_process_wide(monkeypatch):
             from app.services.ai.llm.base import LLMResponse
             return LLMResponse(text="ok", model="fake-model")
 
-    await asyncio.gather(*(observe(SlowLLM(), "test").generate([]) for _ in range(6)))
+    await asyncio.gather(*(observe(SlowLLM(), "policy_answer").generate([]) for _ in range(6)))
     assert llm_slots.peak == 2 and llm_slots.in_flight == 0
 
 
@@ -190,10 +190,10 @@ async def test_waiting_longer_than_the_queue_timeout_fails_with_ai_busy(monkeypa
             from app.services.ai.llm.base import LLMResponse
             return LLMResponse(text="ok", model="fake-model")
 
-    first = asyncio.create_task(observe(BlockingLLM(), "test").generate([]))
+    first = asyncio.create_task(observe(BlockingLLM(), "policy_answer").generate([]))
     await asyncio.sleep(0.01)
     with pytest.raises(AIBusyError):
-        await observe(BlockingLLM(), "test").generate([])
+        await observe(BlockingLLM(), "policy_answer").generate([])
     release.set()
     await first
     assert llm_slots.in_flight == 0

@@ -25,7 +25,7 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
 | ID | Finding (revalidated against `f8c551a`) | Phase | Acceptance criteria | Verification | Status |
 |---|---|---|---|---|---|
 | AIS-01 | Single-value SQL answer ("The result is …") stored as assistant text and sent to the classifier model as history | 1 | SQL-derived values absent from every later provider payload; immediate answer and owner replay unchanged | two-turn HTTP tests with payload spy; negative control on the old code | DONE (phase 1) |
-| AIS-02 | No central provider boundary: user text and history leave unminimised; no operation allowlist | 2 | every model call passes one policy in `audit/provider.observe`; unknown operation fails closed; credentials never sent; identifiers replaced before sending and restored only in the same request's output; counts (never values) audited | per-operation payload tests for `/chat` and the 3 direct endpoints | OPEN |
+| AIS-02 | No central provider boundary: user text and history leave unminimised; no operation allowlist | 2 | every model call passes one policy in `audit/provider.observe`; unknown operation fails closed; credentials never sent; identifiers replaced before sending and restored only in the same request's output; counts (never values) audited | per-operation payload tests for `/chat` and the 3 direct endpoints | DONE (phase 2) |
 | AIS-03 | Narrow detection (no email, separated phone, Aadhaar); no Unicode normalisation | 3 | NFKC + format-character stripping on every question; extended patterns with a measured synthetic false-positive / false-negative corpus | table-driven corpus tests | OPEN |
 | AIS-04 | Regex refusal rules run on `/chat` only | — | — | — | NOT PLANNED: stricter direct-endpoint refusals change their error contract; the deterministic controls behind them (SQL validator, scope, registry, confirmation, RAG guard) are the boundary and are tested per endpoint |
 | AIS-05 | Anthropic endpoint not pinned (OpenAI is) | 4 | Anthropic client pinned to the public API URL; `ANTHROPIC_BASE_URL` ignored | provider tests | OPEN |
@@ -80,3 +80,27 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
   copy in `/tmp`) failed 3/3 with the values present in the classifier payload; full backend **2924 passed**; offline
   evals **139/139**; gate tests **25 passed**; `git diff --check` clean.
 - **Remaining:** the stored conversation still contains the value (owner-only replay; G-09).
+
+### Phase 2 — AIS-02 Central provider boundary · DONE
+
+- **Expected behaviour:** every model call passes one policy before the provider is called; an unregistered operation
+  never reaches a provider; credentials are never sent; recognisable identifiers leave only as per-call placeholders;
+  business values the user typed still reach the business API unchanged; the audit holds counts, not values.
+- **Change:** new `services/ai/provider_policy.py` (`PROVIDER_OPERATIONS`, `prepare`, `restore_structured`,
+  `restore_text`); `audit/provider.ObservedLLMProvider` prepares every call (`_prepare`) before the concurrency slot and
+  restores placeholders in that call's output; `errors.AIProviderPolicyError` (`AI_PROVIDER_POLICY_BLOCKED`, 500);
+  `audit/events.AuditMetadata.redacted_values` / `redacted_categories`; `redaction.py` patterns named for reuse (no
+  behaviour change). Phase 2 categories: CREDENTIAL (irreversible), PAN, IFSC, NUMBER (9–18 digits).
+- **Tests:** `tests/ai/test_provider_policy.py` (9: allowlist, stable placeholders, unchanged ordinary text,
+  neutralised placeholder-looking input, fail-closed preparation, re-validated restoration, provider never sees values);
+  `tests/ai/orchestration/test_provider_payloads.py` — payload spy moved BEHIND the boundary; `/chat/policy`,
+  `/chat/sql`, `/chat` router payloads free of synthetic PAN/account/JWT; action arguments restored into the pending
+  payload while the provider saw placeholders; audit counts without values; unregistered operation never called.
+- **Existing tests adjusted (not weakened):** `tests/ai/audit/test_audit_recorder.py` (2) and `tests/ai/test_limits.py`
+  (2) wrapped fakes with arbitrary operation names (`"test_operation"`, `"test"`); those now fail closed by design, so
+  they use the registered `"policy_answer"`. Their assertions are unchanged. (With the old names, `test_limits` waited
+  forever on a provider that the boundary never called: the cause of one hung run, killed after 49 minutes.)
+- **Executed 2026-10-18:** focused suites (policy 9, orchestration 273, audit 166, providers 15, OpenAI 42, hardening
+  187) — all passed after the fixes above; full backend **2938 passed**; offline evals **139/139**; gate tests **25**.
+- **Remaining:** names and free text are not recognisable (G-01/G-02); the model can mangle a placeholder (then the
+  placeholder text, not the value, reaches the business API).

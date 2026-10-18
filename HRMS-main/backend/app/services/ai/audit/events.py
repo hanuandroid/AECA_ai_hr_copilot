@@ -130,6 +130,8 @@ class AuditMetadata(BaseModel):
     output_tokens: int | None = None
     total_tokens: int | None = None
     estimated_cost_usd: float | None = None
+    redacted_values: int | None = None  # AIS-02: values removed at the provider boundary (count only)
+    redacted_categories: list[str] | None = None  # e.g. ["EMAIL", "PAN"]; never the values
 
     # policy
     grounded: bool | None = None
@@ -156,7 +158,7 @@ class AuditMetadata(BaseModel):
     def _tokens(cls, value: str | None) -> str | None:
         return None if value is None else _check_token(value)
 
-    @field_validator("intents", "routes", "tables")
+    @field_validator("intents", "routes", "tables", "redacted_categories")
     @classmethod
     def _token_lists(cls, value: list[str] | None) -> list[str] | None:
         if value is None:
@@ -166,7 +168,8 @@ class AuditMetadata(BaseModel):
         return [_check_token(item) for item in value]
 
     @field_validator("http_status", "parts", "message_chars", "response_chars", "input_tokens", "output_tokens",
-                     "total_tokens", "sources", "row_count", "target_employee_id", "resource_id", "confirmation_record_id")
+                     "total_tokens", "sources", "row_count", "target_employee_id", "resource_id", "confirmation_record_id",
+                     "redacted_values")
     @classmethod
     def _non_negative(cls, value: int | None) -> int | None:
         if value is not None and value < 0:

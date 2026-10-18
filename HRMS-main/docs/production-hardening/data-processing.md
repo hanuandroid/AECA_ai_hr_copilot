@@ -24,6 +24,14 @@ No API key is configured in this repository's environments today: **no live prov
 Every call goes through `services/ai/audit/provider.observe()`, which records provider, model, operation, latency
 and token counts, **never the content**.
 
+**Provider boundary (AIS-02, `services/ai/provider_policy.py`), applied inside `observe()` to every call below:** only
+the registered operations (`route_classification`, `policy_answer`, `sql`, `action_proposal`) may call a provider;
+credentials (JWT, bearer tokens, API keys) are removed; recognisable personal identifiers are replaced by per-call
+placeholders (`[PII_PAN_1]`) and the caller's own values are put back only into that call's output; preparation
+failures block the call (`AI_PROVIDER_POLICY_BLOCKED`). The audit records how many values of which category were
+removed, never the values. Names and free text are **not** recognisable by patterns and still reach the provider as
+typed: what may be sent remains decision §5 #1 / #7.
+
 | # | Operation (audit `operation`) | When | Sent to the provider | Personal data in the payload | Never sent |
 |---|---|---|---|---|---|
 | 1 | `route_classification` (fast model) | Only when deterministic routing rules find no signal | The user's current message. If the conversation has history: up to 6 recent messages / 2000 chars (user text and the stored, redacted assistant replies), delimited as untrusted data. The reply of any turn that used the SQL route is replaced by a fixed placeholder (R1, `conversation/service.py:_context_text`): a single-value SQL answer quotes the value ("The result is …") | Whatever the user typed (current and earlier user messages). Prior non-SQL assistant replies (policy answers, clarifications) | Identity, role, ids, tokens, DB rows, SQL result values from earlier turns |
