@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AudienceBadge, AudienceField, audienceError, audienceFor } from "@/components/content-audience";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import { useStepUp } from "@/components/security/step-up-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,7 @@ import { RichText } from "@/components/ui/rich-text";
 import { Announcement, ContentAudience, createAnnouncement, fetchAnnouncements, fetchProfile } from "@/lib/api";
 import { formatDateTimeDDMMYY } from "@/lib/date";
 import { endSession } from "@/lib/session";
+import { STEP_UP_NETWORK_MESSAGE, StepUpAttempt, audienceNeedsStepUp, stepUpFailure, stepUpMessage } from "@/lib/step-up";
 
 export default function AnnouncementsPage() {
   const [name, setName] = useState("User");
@@ -24,6 +26,7 @@ export default function AnnouncementsPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const stepUp = useStepUp();
   const router = useRouter();
 
   const token = useMemo(() => {
@@ -79,24 +82,43 @@ export default function AnnouncementsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!token) return;
-    setSubmitting(true);
+  // G-11: an announcement to everyone (ORG) needs the administrator's password; TEAM posts do not.
+  const post = async (
+    payload: { title: string; body: string; audience: ContentAudience },
+    stepUpPassword?: string,
+  ): Promise<StepUpAttempt> => {
+    if (!token) return { kind: "done" };
     setError("");
     try {
-      const result = await createAnnouncement(token, {
-        title: title.trim(),
-        body: body.trim(),
-        audience: audienceFor(role, audience),
-      });
+      const result = await createAnnouncement(token, payload, stepUpPassword);
+      const failure = result.ok ? null : stepUpFailure(result.body);
+      if (failure) return { kind: "retry", message: stepUpMessage(failure) };
       if (!result.ok) {
         setError(audienceError(result.status, "Failed to create announcement"));
-        return;
+        return { kind: "done" };
       }
       setTitle("");
       setBody("");
       await loadData();
+    } catch {
+      setError(STEP_UP_NETWORK_MESSAGE); // never resent automatically
+    }
+    return { kind: "done" };
+  };
+
+  const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!token) return;
+    const payload = { title: title.trim(), body: body.trim(), audience: audienceFor(role, audience) };
+    if (audienceNeedsStepUp(payload.audience)) {
+      stepUp.ask("Post to everyone", "This announcement will be visible to the whole organisation. Enter your password to post it.",
+                 (password) => post(payload, password));
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const attempt = await post(payload);
+      if (attempt.kind === "retry") setError(attempt.message);
     } finally {
       setSubmitting(false);
     }
@@ -172,6 +194,7 @@ export default function AnnouncementsPage() {
           </Card>
         </div>
       </section>
+      {stepUp.dialog}
     </main>
   );
 }

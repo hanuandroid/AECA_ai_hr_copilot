@@ -1,5 +1,13 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
+// G-11: high-impact admin operations carry the administrator's current password in this header (never in the URL or
+// body). Only the six functions below accept it; callers pass it straight from the step-up dialog and do not keep it.
+export const STEP_UP_HEADER = "X-Step-Up-Password";
+
+function withStepUp(headers: Record<string, string>, stepUpPassword?: string): Record<string, string> {
+  return stepUpPassword ? { ...headers, [STEP_UP_HEADER]: stepUpPassword } : headers;
+}
+
 export type LoginResponse = {
   success: boolean;
   data: {
@@ -441,14 +449,15 @@ export async function fetchEmployees(
 
 export async function createEmployee(
   token: string,
-  payload: EmployeeCreatePayload
+  payload: EmployeeCreatePayload,
+  stepUpPassword?: string
 ): Promise<ApiResult<ApiEnvelope<Employee> | { detail?: unknown }>> {
   const response = await fetch(`${API_BASE}/api/v1/employees`, {
     method: "POST",
-    headers: {
+    headers: withStepUp({
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
-    },
+    }, stepUpPassword),
     body: JSON.stringify(payload),
   });
 
@@ -462,14 +471,15 @@ export async function createEmployee(
 export async function updateEmployee(
   token: string,
   employeeId: number,
-  payload: EmployeeUpdatePayload
+  payload: EmployeeUpdatePayload,
+  stepUpPassword?: string
 ): Promise<ApiResult<ApiEnvelope<{ id: number; status: string }> | { detail?: unknown }>> {
   const response = await fetch(`${API_BASE}/api/v1/employees/${employeeId}`, {
     method: "PUT",
-    headers: {
+    headers: withStepUp({
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
-    },
+    }, stepUpPassword),
     body: JSON.stringify(payload),
   });
 
@@ -586,13 +596,14 @@ export async function removeEmployeeProject(
 
 export async function deactivateEmployee(
   token: string,
-  employeeId: number
+  employeeId: number,
+  stepUpPassword?: string
 ): Promise<ApiResult<ApiEnvelope<{ id: number; status: string }> | { detail?: unknown }>> {
   const response = await fetch(`${API_BASE}/api/v1/employees/${employeeId}`, {
     method: "DELETE",
-    headers: {
+    headers: withStepUp({
       Authorization: `Bearer ${token}`,
-    },
+    }, stepUpPassword),
   });
 
   return {
@@ -604,13 +615,14 @@ export async function deactivateEmployee(
 
 export async function reactivateEmployee(
   token: string,
-  employeeId: number
+  employeeId: number,
+  stepUpPassword?: string
 ): Promise<ApiResult<ApiEnvelope<{ id: number; status: string }> | { detail?: unknown }>> {
   const response = await fetch(`${API_BASE}/api/v1/employees/${employeeId}/reactivate`, {
     method: "PATCH",
-    headers: {
+    headers: withStepUp({
       Authorization: `Bearer ${token}`,
-    },
+    }, stepUpPassword),
   });
 
   return {
@@ -1108,14 +1120,15 @@ export async function fetchAnnouncements(
 
 export async function createAnnouncement(
   token: string,
-  payload: { title: string; body: string; audience?: ContentAudience }
+  payload: { title: string; body: string; audience?: ContentAudience },
+  stepUpPassword?: string
 ): Promise<ApiResult<ApiEnvelope<Announcement> | { detail?: unknown }>> {
   const response = await fetch(`${API_BASE}/api/v1/announcements`, {
     method: "POST",
-    headers: {
+    headers: withStepUp({
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
-    },
+    }, stepUpPassword),
     body: JSON.stringify(payload),
   });
   return {
@@ -1331,14 +1344,15 @@ export async function fetchPolls(
 
 export async function createPoll(
   token: string,
-  payload: { question: string; options: string[]; audience?: ContentAudience }
+  payload: { question: string; options: string[]; audience?: ContentAudience },
+  stepUpPassword?: string
 ): Promise<ApiResult<ApiEnvelope<Poll> | { detail?: unknown }>> {
   const response = await fetch(`${API_BASE}/api/v1/polls`, {
     method: "POST",
-    headers: {
+    headers: withStepUp({
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
-    },
+    }, stepUpPassword),
     body: JSON.stringify(payload),
   });
   return { ok: response.ok, status: response.status, body: await response.json() };

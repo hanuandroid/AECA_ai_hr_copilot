@@ -6,6 +6,7 @@ import { Pencil } from "lucide-react";
 
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import { useStepUp } from "@/components/security/step-up-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,6 +26,7 @@ import {
 } from "@/lib/api";
 import { formatDateDDMMYY } from "@/lib/date";
 import { endSession } from "@/lib/session";
+import { STEP_UP_NETWORK_MESSAGE, StepUpAttempt, stepUpFailure, stepUpMessage } from "@/lib/step-up";
 
 const DIRECTORY_NOT_AVAILABLE =
   "The employee directory is available to managers and admins. Your own details are on My Profile.";
@@ -55,6 +57,7 @@ function EmployeesPageContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const stepUp = useStepUp();
   const [deactivatingEmployee, setDeactivatingEmployee] = useState(false);
   const [reactivatingEmployee, setReactivatingEmployee] = useState(false);
   const router = useRouter();
@@ -200,20 +203,23 @@ function EmployeesPageContent() {
   const isAdmin = viewerRole === "ADMIN";
   const canEditJobTitle = viewerRole === "ADMIN" || viewerRole === "MANAGER";
 
-  const handleDeactivateEmployee = async (employeeId: number) => {
-    if (!token) return;
+  // G-11: needs the administrator's password (step-up dialog); a refused password keeps the dialog open.
+  const handleDeactivateEmployee = async (employeeId: number, stepUpPassword: string): Promise<StepUpAttempt> => {
+    if (!token) return { kind: "done" };
     setDeactivatingEmployee(true);
     setError("");
     setSuccess("");
     try {
-      const result = await deactivateEmployee(token, employeeId);
+      const result = await deactivateEmployee(token, employeeId, stepUpPassword);
       if (result.status === 401) {
         clearAuthAndRedirect();
-        return;
+        return { kind: "done" };
       }
+      const failure = result.ok ? null : stepUpFailure(result.body);
+      if (failure) return { kind: "retry", message: stepUpMessage(failure) };
       if (!result.ok || !("success" in result.body) || !result.body.success) {
         setError(extractErrorMessage(result.body, "Failed to deactivate employee"));
-        return;
+        return { kind: "done" };
       }
       setSelectedEmployee((current) =>
         current && current.id === employeeId ? { ...current, status: "INACTIVE" } : current
@@ -221,26 +227,30 @@ function EmployeesPageContent() {
       setSuccess("Employee deactivated.");
       await loadData();
     } catch {
-      setError("Failed to deactivate employee");
+      setError(STEP_UP_NETWORK_MESSAGE); // never resent automatically
     } finally {
       setDeactivatingEmployee(false);
     }
+    return { kind: "done" };
   };
 
-  const handleReactivateEmployee = async (employeeId: number) => {
-    if (!token) return;
+  // G-11: needs the administrator's password (step-up dialog); a refused password keeps the dialog open.
+  const handleReactivateEmployee = async (employeeId: number, stepUpPassword: string): Promise<StepUpAttempt> => {
+    if (!token) return { kind: "done" };
     setReactivatingEmployee(true);
     setError("");
     setSuccess("");
     try {
-      const result = await reactivateEmployee(token, employeeId);
+      const result = await reactivateEmployee(token, employeeId, stepUpPassword);
       if (result.status === 401) {
         clearAuthAndRedirect();
-        return;
+        return { kind: "done" };
       }
+      const failure = result.ok ? null : stepUpFailure(result.body);
+      if (failure) return { kind: "retry", message: stepUpMessage(failure) };
       if (!result.ok || !("success" in result.body) || !result.body.success) {
         setError(extractErrorMessage(result.body, "Failed to reactivate employee"));
-        return;
+        return { kind: "done" };
       }
       setSelectedEmployee((current) =>
         current && current.id === employeeId ? { ...current, status: "ACTIVE" } : current
@@ -248,10 +258,11 @@ function EmployeesPageContent() {
       setSuccess("Employee reactivated.");
       await loadData();
     } catch {
-      setError("Failed to reactivate employee");
+      setError(STEP_UP_NETWORK_MESSAGE); // never resent automatically
     } finally {
       setReactivatingEmployee(false);
     }
+    return { kind: "done" };
   };
 
   const loadEmployeeDetails = async (employeeId: number) => {
@@ -527,7 +538,11 @@ function EmployeesPageContent() {
                           variant="outline"
                           className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
                           disabled={reactivatingEmployee}
-                          onClick={() => handleReactivateEmployee(selectedEmployee.id)}
+                          onClick={() => {
+                            const employee = selectedEmployee;
+                            stepUp.ask("Reactivate employee", `Reactivate ${employee.name}? Enter your password to confirm.`,
+                                       (password) => handleReactivateEmployee(employee.id, password));
+                          }}
                         >
                           {reactivatingEmployee ? "Reactivating..." : "Reactivate Employee"}
                         </Button>
@@ -536,7 +551,11 @@ function EmployeesPageContent() {
                           variant="outline"
                           className="border-red-300 text-red-700 hover:bg-red-50"
                           disabled={deactivatingEmployee}
-                          onClick={() => handleDeactivateEmployee(selectedEmployee.id)}
+                          onClick={() => {
+                            const employee = selectedEmployee;
+                            stepUp.ask("Deactivate employee", `Deactivate ${employee.name}? Enter your password to confirm.`,
+                                       (password) => handleDeactivateEmployee(employee.id, password));
+                          }}
                         >
                           {deactivatingEmployee ? "Deactivating..." : "Deactivate Employee"}
                         </Button>
@@ -549,6 +568,7 @@ function EmployeesPageContent() {
           </div>
         </div>
       </section>
+      {stepUp.dialog}
     </main>
   );
 }

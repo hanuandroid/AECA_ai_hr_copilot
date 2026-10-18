@@ -59,7 +59,7 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
 | G-07 | Verified model pricing and per-user cost budget | Finance | AIS-11 |
 | G-08 | Monitoring/alerting tooling, owners, channels (`monitoring-alerts.md`) | Ops | AIS-15 |
 | G-10 | Refusal-rule tuning: 6 of 18 benign sensitive-keyword policy questions are refused by the deterministic rules (AIS-16). Loosening a refusal rule weakens a control | Security + product | false-refusal reduction |
-| G-11 | Step-up on the high-impact business endpoints (review M1). **Implementation approved and done 2026-10-18 in `log` mode**; switching `STEP_UP_ENFORCEMENT` to `enforce` still needs explicit approval and the admin-UI password prompt | Security + product | stolen-token protection for high-impact actions |
+| G-11 | Step-up on the high-impact business endpoints (review M1). **Implementation approved and done 2026-10-18 in `log` mode; admin-UI password prompt done 2026-10-19 (§6)**; switching `STEP_UP_ENFORCEMENT` to `enforce` still needs explicit approval and an enforcement-readiness review | Security + product | stolen-token protection for high-impact actions |
 | G-09 | Conversation storage minimisation of contact data (would change what users see when replaying their own history) | Product + DPO | further storage redaction |
 
 ## 3. Phase log
@@ -347,9 +347,8 @@ gates in `release-readiness.md` §6 (PostgreSQL not verified, `braces` advisory 
   password in the pending action, audit rows or output; negative control — if forwarding were removed the business API
   alone refuses (reported to the Copilot as the existing generic `FORBIDDEN`) and nothing changes.
 - **Rollout risks / prerequisites before `enforce` (approval required):**
-  1. the admin UI does not send `X-Step-Up-Password` yet (employee create/edit, deactivate/reactivate, ORG
-     announcement/poll forms): enforcing first would block administrators; `log` mode shows how often each operation
-     would be refused (`auth.step_up.not_satisfied`);
+  1. ~~the admin UI does not send `X-Step-Up-Password` yet~~ — done in G-11 phase 2 (§6); `log` mode still shows how
+     often each operation would be refused (`auth.step_up.not_satisfied`);
   2. any other API client (scripts, integrations) must add the header;
   3. reverse proxies must not log request headers (the password travels in one);
   4. `current_salary_usd` is not in the step-up field set (the approved scope named password, role, email, bank, PAN);
@@ -359,3 +358,35 @@ gates in `release-readiness.md` §6 (PostgreSQL not verified, `braces` advisory 
   skipped; offline evals **139/139**; gate tests **25**; frontend **185 passed**, `tsc` 0 errors (no frontend change;
   `next build` not re-run); gitleaks on the new files: only the already-allowlisted lines 129/131 of
   `test_step_up.py`. `STEP_UP_ENFORCEMENT` stays `log`.
+
+## 6. G-11 phase 2 — Admin UI password step-up (2026-10-19) · IMPLEMENTED (frontend only; backend unchanged, `log` mode)
+
+- **Change:** `lib/api.ts` — `STEP_UP_HEADER` and an optional trailing `stepUpPassword` argument on `createEmployee`,
+  `updateEmployee`, `deactivateEmployee`, `reactivateEmployee`, `createAnnouncement` and `createPoll`; it is sent only
+  as the `X-Step-Up-Password` header (never URL, query or body). `lib/step-up.ts` — `employeeUpdateNeedsStepUp`
+  (mirrors the backend's `_update_needs_step_up`: new password, different role, email (case-insensitive), changed
+  bank/PAN after the backend's normalisation), `audienceNeedsStepUp` (ORG), and the mapping of `STEP_UP_REQUIRED` /
+  `STEP_UP_FAILED` / `STEP_UP_THROTTLED` (either envelope) to clear "Nothing was changed" messages.
+  `components/security/step-up-dialog.tsx` — reusable `useStepUp()` + accessible modal dialog (`role="dialog"`,
+  labelled, `type=password`, `autocomplete=current-password`, focus on open, Escape/Cancel). Pages: announcements and
+  polls (ORG only; TEAM posts unchanged), employees directory (deactivate / reactivate), employee form (create always;
+  edit only when a protected value really changes; if the backend still answers `STEP_UP_REQUIRED` to an unprompted
+  edit, the dialog opens and nothing is resent until the administrator confirms).
+- **Password handling:** typed into the dialog's own state only; cleared on submit (whatever the outcome), cancel,
+  Escape and close (unmount); passed straight into the one request; never in localStorage/sessionStorage/cookies,
+  global state, logs or analytics. A refused or throttled password keeps the dialog open for a deliberate new attempt.
+  A network failure is **never retried automatically**: the page says the change may or may not have been applied.
+- **Tests:** `tests/step-up-admin.test.tsx` (29) — prompt for every applicable operation; TEAM announcement/poll and
+  non-sensitive / unchanged / case-only-email edits without a prompt; header sent only after confirmation; password
+  absent from URLs, bodies, storage, cookies, console and the DOM; cancel clears the field and sends nothing; wrong
+  password and throttling messages with retry; `STEP_UP_REQUIRED` message; network failure not resent; create keeps the
+  existing form validation; backend-requested step-up on an unprompted edit opens the dialog; unit table for
+  `employeeUpdateNeedsStepUp`. `tests/content-audience.test.tsx`: the ADMIN ORG post now confirms with a synthetic
+  password (intent unchanged).
+- **Executed 2026-10-19:** frontend **214 passed** (16 files); `tsc` 0 errors; `next build` PASS; backend
+  `tests/rbac/test_step_up_api.py` + `tests/ai/actions/test_step_up.py` **128 passed** (contract unchanged, keys
+  blanked in the container); gitleaks history PASS and `--no-git` on the changed files PASS (no new allowlist entries).
+- **Still open (not decided here):** switching `STEP_UP_ENFORCEMENT` to `enforce` (approval + enforcement-readiness
+  review); salary (`current_salary_usd`) step-up remains an **open scope decision** (not implemented); other API
+  clients must add the header; reverse proxies/APM must not log request headers; the frontend check is UX only —
+  the backend remains the enforcement point. Release status unchanged: **NOT YET PRODUCTION READY**.

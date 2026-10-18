@@ -6,11 +6,13 @@ import { useRouter } from "next/navigation";
 import { AudienceBadge, AudienceField, audienceError, audienceFor } from "@/components/content-audience";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import { useStepUp } from "@/components/security/step-up-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ContentAudience, Poll, PollResultItem, createPoll, fetchPollResults, fetchPolls, fetchProfile, votePoll } from "@/lib/api";
 import { endSession } from "@/lib/session";
+import { STEP_UP_NETWORK_MESSAGE, StepUpAttempt, audienceNeedsStepUp, stepUpFailure, stepUpMessage } from "@/lib/step-up";
 
 export default function PollsPage() {
   const [name, setName] = useState("User");
@@ -23,6 +25,7 @@ export default function PollsPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const stepUp = useStepUp();
   const router = useRouter();
 
   const token = useMemo(() => {
@@ -63,29 +66,52 @@ export default function PollsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  const onCreate = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!token) return;
-    setSubmitting(true);
+  // G-11: a poll for everyone (ORG) needs the administrator's password; TEAM polls do not.
+  const create = async (
+    payload: { question: string; options: string[]; audience: ContentAudience },
+    stepUpPassword?: string,
+  ): Promise<StepUpAttempt> => {
+    if (!token) return { kind: "done" };
     setError("");
     try {
-      const options = optionsText
-        .split(",")
-        .map((value) =>
-          value
-            .replace(/^\s*Option A\s*/i, "")
-            .replace(/\s*Option B\s*$/i, "")
-            .trim()
-        )
-        .filter(Boolean);
-      const result = await createPoll(token, { question: question.trim(), options, audience: audienceFor(role, audience) });
+      const result = await createPoll(token, payload, stepUpPassword);
+      const failure = result.ok ? null : stepUpFailure(result.body);
+      if (failure) return { kind: "retry", message: stepUpMessage(failure) };
       if (!result.ok) {
         setError(audienceError(result.status, "Failed to create poll"));
-        return;
+        return { kind: "done" };
       }
       setQuestion("");
       setOptionsText("");
       await loadData();
+    } catch {
+      setError(STEP_UP_NETWORK_MESSAGE); // never resent automatically
+    }
+    return { kind: "done" };
+  };
+
+  const onCreate = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!token) return;
+    const options = optionsText
+      .split(",")
+      .map((value) =>
+        value
+          .replace(/^\s*Option A\s*/i, "")
+          .replace(/\s*Option B\s*$/i, "")
+          .trim()
+      )
+      .filter(Boolean);
+    const payload = { question: question.trim(), options, audience: audienceFor(role, audience) };
+    if (audienceNeedsStepUp(payload.audience)) {
+      stepUp.ask("Create a poll for everyone", "This poll will be visible to the whole organisation. Enter your password to create it.",
+                 (password) => create(payload, password));
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const attempt = await create(payload);
+      if (attempt.kind === "retry") setError(attempt.message);
     } finally {
       setSubmitting(false);
     }
@@ -196,6 +222,7 @@ export default function PollsPage() {
           </Card>
         </div>
       </section>
+      {stepUp.dialog}
     </main>
   );
 }

@@ -57,6 +57,9 @@ describe("announcement audience (UX only)", () => {
     render(<AnnouncementsPage />);
     await screen.findByText("Company update");
     await post("First");
+    // G-11: a post to everyone (ORG) is sent only after the administrator confirms with their password.
+    await userEvent.type(await screen.findByLabelText("Your password"), "synthetic-admin-pass-1");
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
     await waitFor(() => expect(calls.filter((c) => c.method === "POST")).toHaveLength(1));
     expect(calls.filter((c) => c.method === "POST")[0].body).toMatchObject({ audience: "ORG" });
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Audience" }), "TEAM");

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import { useStepUp } from "@/components/security/step-up-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -20,6 +21,14 @@ import {
   updateEmployee,
 } from "@/lib/api";
 import { endSession } from "@/lib/session";
+import {
+  EmployeeSensitiveSnapshot,
+  STEP_UP_NETWORK_MESSAGE,
+  StepUpAttempt,
+  employeeUpdateNeedsStepUp,
+  stepUpFailure,
+  stepUpMessage,
+} from "@/lib/step-up";
 
 // RBAC step 4: fields an admin cannot change on their own record (the backend refuses them with 403).
 const SELF_PROTECTED_FIELDS: (keyof EmployeeUpdatePayload)[] = [
@@ -47,6 +56,9 @@ function NewEmployeePageContent() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const stepUp = useStepUp();
+  // G-11: the sensitive values as loaded for editing; a step-up is asked only when the submission changes one of them.
+  const [originalSensitive, setOriginalSensitive] = useState<EmployeeSensitiveSnapshot | null>(null);
   const [createForm, setCreateForm] = useState({
     name: "",
     email: "",
@@ -156,6 +168,12 @@ function NewEmployeePageContent() {
         }
 
         const employee = employeeResult.body.data;
+        setOriginalSensitive({
+          email: employee.email ?? null, role: employee.role ?? null, bank_name: employee.bank_name ?? null,
+          bank_account_number: employee.bank_account_number ?? null, bank_account_name: employee.bank_account_name ?? null,
+          bank_branch: employee.bank_branch ?? null, bank_ifsc: employee.bank_ifsc ?? null,
+          pan_number: employee.pan_number ?? null, pan_name: employee.pan_name ?? null, pan_dob: employee.pan_dob ?? null,
+        });
         const parsedCountryCode =
           employee.phone && employee.phone.startsWith("+")
             ? (employee.phone.match(/^\+\d{1,3}/)?.[0] ?? "+91")
@@ -268,62 +286,82 @@ function NewEmployeePageContent() {
       return;
     }
 
-    setSubmitting(true);
-    try {
-      const commonPayload: EmployeeUpdatePayload = {
-        name: createForm.name.trim(),
-        email: createForm.email.trim(),
-        joining_date: createForm.joiningDate,
-        date_of_birth: createForm.dateOfBirth,
-        job_title: createForm.jobTitle.trim(),
-        phone: `${createForm.countryCode}${createForm.phone.replace(/[^\d]/g, "")}`,
-        occupancy: createForm.occupancy.trim(),
-        role: createForm.role as "ADMIN" | "MANAGER" | "EMPLOYEE",
-        current_salary_usd: Number(createForm.currentSalaryUsd),
-        bank_name: createForm.bankName.trim(),
-        bank_account_number: createForm.bankAccountNumber.trim(),
-        bank_account_name: createForm.bankAccountName.trim(),
-        bank_branch: createForm.bankBranch.trim(),
-        bank_ifsc: createForm.bankIfsc.trim().toUpperCase(),
-        pan_number: createForm.panNumber.trim().toUpperCase(),
-        pan_name: createForm.panName.trim(),
-        pan_dob: createForm.panDob,
-        pf_uan: createForm.pfUan.trim(),
-        esi_no: createForm.esiNo.trim(),
-      };
-      if (createForm.departmentId) commonPayload.department_id = Number(createForm.departmentId);
+    const commonPayload: EmployeeUpdatePayload = {
+      name: createForm.name.trim(),
+      email: createForm.email.trim(),
+      joining_date: createForm.joiningDate,
+      date_of_birth: createForm.dateOfBirth,
+      job_title: createForm.jobTitle.trim(),
+      phone: `${createForm.countryCode}${createForm.phone.replace(/[^\d]/g, "")}`,
+      occupancy: createForm.occupancy.trim(),
+      role: createForm.role as "ADMIN" | "MANAGER" | "EMPLOYEE",
+      current_salary_usd: Number(createForm.currentSalaryUsd),
+      bank_name: createForm.bankName.trim(),
+      bank_account_number: createForm.bankAccountNumber.trim(),
+      bank_account_name: createForm.bankAccountName.trim(),
+      bank_branch: createForm.bankBranch.trim(),
+      bank_ifsc: createForm.bankIfsc.trim().toUpperCase(),
+      pan_number: createForm.panNumber.trim().toUpperCase(),
+      pan_name: createForm.panName.trim(),
+      pan_dob: createForm.panDob,
+      pf_uan: createForm.pfUan.trim(),
+      esi_no: createForm.esiNo.trim(),
+    };
+    if (createForm.departmentId) commonPayload.department_id = Number(createForm.departmentId);
 
-      let result:
-        | Awaited<ReturnType<typeof createEmployee>>
-        | Awaited<ReturnType<typeof updateEmployee>>;
-      if (isEditMode && editingEmployeeId) {
-        if (isSelfEdit) {
-          // Not editable on one's own record (backend 403): these fields are shown read-only and not sent.
-          for (const key of SELF_PROTECTED_FIELDS) delete commonPayload[key];
-        } else if (createForm.password.trim()) {
-          commonPayload.password = createForm.password.trim();
-        }
-        result = await updateEmployee(token, editingEmployeeId, commonPayload);
-      } else {
-        const payload: EmployeeCreatePayload = {
-          ...(commonPayload as EmployeeCreatePayload),
-          password: createForm.password,
-        };
-        result = await createEmployee(token, payload);
+    if (isEditMode && editingEmployeeId) {
+      if (isSelfEdit) {
+        // Not editable on one's own record (backend 403): these fields are shown read-only and not sent.
+        for (const key of SELF_PROTECTED_FIELDS) delete commonPayload[key];
+      } else if (createForm.password.trim()) {
+        commonPayload.password = createForm.password.trim();
       }
-      if (result.status === 401) return clearAuthAndRedirect();
-      if (!result.ok || !("success" in result.body) || !result.body.success) {
-        setError(extractErrorMessage(result.body, isEditMode ? "Failed to update employee" : "Failed to create employee"));
+      const employeeId = editingEmployeeId;
+      const send = (stepUpPassword?: string) =>
+        submitEmployee(() => updateEmployee(token, employeeId, commonPayload, stepUpPassword));
+      const askToConfirm = (description: string) =>
+        stepUp.ask("Confirm sensitive changes", description, (password) => send(password));
+      // G-11: only a real change of password, role, email, bank or PAN details needs the administrator's password.
+      if (originalSensitive && employeeUpdateNeedsStepUp(originalSensitive, commonPayload)) {
+        askToConfirm("You are changing this employee's password, role, email, bank or PAN details. Enter your password to save.");
         return;
       }
+      // The backend decides: if it still asks for the password, open the dialog (nothing is resent until confirmed).
+      const attempt = await send();
+      if (attempt.kind === "retry") askToConfirm(attempt.message);
+      return;
+    }
+    const payload: EmployeeCreatePayload = { ...(commonPayload as EmployeeCreatePayload), password: createForm.password };
+    // G-11: creating an account always needs the administrator's password.
+    stepUp.ask("Create employee account", "Creating an account gives access to CB Nest. Enter your password to create it.",
+               (password) => submitEmployee(() => createEmployee(token, payload, password)));
+  };
 
+  // One request; the password (if any) is only inside `request` and is never kept here.
+  const submitEmployee = async (
+    request: () => ReturnType<typeof createEmployee> | ReturnType<typeof updateEmployee>,
+  ): Promise<StepUpAttempt> => {
+    setSubmitting(true);
+    try {
+      const result = await request();
+      if (result.status === 401) {
+        clearAuthAndRedirect();
+        return { kind: "done" };
+      }
+      const failure = result.ok ? null : stepUpFailure(result.body);
+      if (failure) return { kind: "retry", message: stepUpMessage(failure) };
+      if (!result.ok || !("success" in result.body) || !result.body.success) {
+        setError(extractErrorMessage(result.body, isEditMode ? "Failed to update employee" : "Failed to create employee"));
+        return { kind: "done" };
+      }
       setSuccess(isEditMode ? "Employee updated successfully." : "Employee created successfully.");
       router.push("/employees");
     } catch {
-      setError(isEditMode ? "Failed to update employee" : "Failed to create employee");
+      setError(STEP_UP_NETWORK_MESSAGE); // never resent automatically: the change may have been applied
     } finally {
       setSubmitting(false);
     }
+    return { kind: "done" };
   };
 
   const updateCreateField = (field: keyof typeof createForm, value: string) => {
@@ -559,6 +597,7 @@ function NewEmployeePageContent() {
           </Card>
         </div>
       </section>
+      {stepUp.dialog}
     </main>
   );
 }
