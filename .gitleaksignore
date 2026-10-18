@@ -8,3 +8,7 @@ c685e8b8cf11a6fe1f5037817fb7cc76eb979776:HRMS-main/backend/tests/ai/conversation
 cde6ec69757c9bc17b3210b4164a7824503a1efa:HRMS-main/backend/tests/ai/test_provider_policy.py:jwt:14
 cde6ec69757c9bc17b3210b4164a7824503a1efa:HRMS-main/backend/tests/ai/orchestration/test_provider_payloads.py:jwt:180
 be41b8c309117c258f4adbc149bee0095924c33c:HRMS-main/backend/tests/ai/hardening/test_output_privacy.py:jwt:27
+# Added 2026-10-18 (AI security remediation, independent-review fix L1, needs reviewer confirmation): the synthetic probe
+# password "Synthetic-Probe-Pass-9" used to prove 422 responses never echo a step-up password; never a real credential.
+fd18e8cb4eeb3954866b1e16b437ec29ad7ad2ab:HRMS-main/backend/tests/ai/actions/test_step_up.py:generic-api-key:129
+fd18e8cb4eeb3954866b1e16b437ec29ad7ad2ab:HRMS-main/backend/tests/ai/actions/test_step_up.py:generic-api-key:131

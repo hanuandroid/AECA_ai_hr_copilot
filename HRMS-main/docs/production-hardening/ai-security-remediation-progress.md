@@ -267,7 +267,8 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
   business endpoints, `services/auth.py`, models or dependency files changed. No test skipped, xfailed or deselected.
 - **gitleaks (full history):** 3 findings — the synthetic JWT-shaped canaries added by AIS-02/AIS-07 tests
   (decode to `{"alg":"HS256"}` / `{"sub":"test"|"canary"}` / fake signatures). History is not rewritten; the three
-  exact fingerprints were added to `.gitleaksignore` with the reason, following the existing reviewed precedent —
+  exact fingerprints were added to `.gitleaksignore` with the reason, following the existing reviewed precedent (plus two
+  for the synthetic probe password of the L1 test, found by the rescan after the Phase 10 commit) —
   **reviewer confirmation requested**. Rescan: no leaks.
 - **Independent review** (read-only security-review agent over the cumulative diff): no CRITICAL/HIGH. Actions:
   - **M1** step-up protects the Copilot path only (a token thief can call the business endpoints directly) —
