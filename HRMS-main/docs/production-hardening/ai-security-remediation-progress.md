@@ -30,8 +30,8 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
 | AIS-04 | Regex refusal rules run on `/chat` only | — | — | — | NOT PLANNED: stricter direct-endpoint refusals change their error contract; the deterministic controls behind them (SQL validator, scope, registry, confirmation, RAG guard) are the boundary and are tested per endpoint |
 | AIS-05 | Anthropic endpoint not pinned (OpenAI is) | 4 | Anthropic client pinned to the public API URL; `ANTHROPIC_BASE_URL` ignored | provider tests | DONE (phase 4) |
 | AIS-06 | Anthropic server-side fallback beta on by default | 4 | existing configuration preserved; decision recorded | — | BLOCKED (G-05) |
-| AIS-07 | Log-privacy tests inspect only `ai.audit` lines | 5 | full stdout/stderr of whole requests (success and error paths) free of synthetic PII, tokens, prompts | capsys/capfd tests | OPEN |
-| AIS-08 | Storage privacy not pinned by tests (conversation rows, pending-action summary, terminal records) | 5 | tests pin what is stored; no business payload altered | storage tests | OPEN |
+| AIS-07 | Log-privacy tests inspect only `ai.audit` lines | 5 | full stdout/stderr of whole requests (success and error paths) free of synthetic PII, tokens, prompts | capsys/capfd tests | DONE (phase 5) |
+| AIS-08 | Storage privacy not pinned by tests (conversation rows, pending-action summary, terminal records) | 5 | tests pin what is stored; no business payload altered | storage tests | DONE (phase 5) |
 | AIS-09 | Leave reason (possibly health data) in action summary and `payload_json` | 5 / 9 | documented and tested as-is; clearing stored payloads needs approval | — | BLOCKED (G-02, G-03) for any change |
 | AIS-10 | No request deadline or per-request model-call budget | 6 | bounded end-to-end deadline and call budget enforced before each model call; SDK retries cannot outlive the deadline; failures are safe AI errors | unit + HTTP tests | OPEN |
 | AIS-11 | Daily cost cap disabled; no pricing configured | 6 | — | — | BLOCKED (G-07: verified pricing and budget) |
@@ -140,3 +140,22 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
   misconfigured OpenAI or Anthropic selection fails closed instead of using the other provider's key.
 - **Executed 2026-10-18:** provider suites 110 passed; full backend **2985 passed**; offline evals **139/139**; gate
   tests **25**.
+
+### Phase 5 — AIS-07 / AIS-08 Output and storage privacy tests · DONE
+
+- **Expected behaviour:** no request writes user canaries, bearer tokens, confirmation tokens, HR row values, model SQL or
+  system-prompt text to stdout/stderr on any path; AI tables keep no credentials or confirmation tokens; business
+  values the user typed reach the business record unchanged.
+- **Tests (`tests/ai/hardening/test_output_privacy.py`, synthetic canaries: email, phone, PAN, JWT):**
+  - fd-level capture (`capfd`: every logger and print, stdout + stderr) across a policy turn, an SQL turn (the user
+    receives the row value), an action proposal and its confirmation through the real ticket endpoint, an SQL rejected
+    by the validator, malformed model output, and a malformed policy answer — none of the forbidden strings appear;
+  - conversation rows: credentials and PAN never stored; **email and phone the user typed are stored** in their own
+    owner-only history (pinned explicitly; changing it is decision G-09);
+  - pending action after confirmation: `COMPLETED`, `used_at` set, only the token hash stored, no credential; the
+    ticket description keeps the user's own contact values (restored from placeholders).
+- **Code changes:** none — the existing logging was already content-free on every exercised path. (While writing the
+  test, the generic needle `"SELECT "` matched the audit label `query_type=SELECT`; the check now uses the actual model
+  SQL texts.) The HMAC fingerprint is already pinned by `tests/ai/audit/test_audit_recorder.py::test_text_fingerprint_is_keyed_and_content_free`.
+- **Executed 2026-10-18:** new tests 3 passed; full backend **2988 passed**; offline evals **139/139**; gate tests **25**.
+- **Remaining:** AIS-09 (leave reasons and other free text in action records) unchanged — G-02 / G-03.
