@@ -40,7 +40,7 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
 | AIS-14 | No prompt version or retrieved-chunk ids in audit | 8 | prompt fingerprint and chunk ids recorded as identifier tokens only | audit tests | DONE (phase 8) |
 | AIS-15 | No alerting tooling | 8 | — | — | BLOCKED (G-08: monitoring tooling, owners, channels) |
 | AIS-16 | Groundedness heuristics / false refusals not measured | 8 | extra RAG guard tests; false-refusal cases measured without loosening any refusal rule | tests / eval | DONE (phase 8, measured) |
-| AIS-17 | Retention purge operator-run; partial-failure behaviour untested | 9 | dry run, idempotency, rollback on failure, EXECUTING/UNKNOWN preserved, audit append-only — tested; scheduling only with deployment support | retention tests | OPEN |
+| AIS-17 | Retention purge operator-run; partial-failure behaviour untested | 9 | dry run, idempotency, rollback on failure, EXECUTING/UNKNOWN preserved, audit append-only — tested; scheduling only with deployment support | retention tests | DONE (phase 9) |
 | AIS-18 | Retention periods, erasure, audit archival | 9 | — | — | BLOCKED (G-03, G-04) |
 | AIS-19 | Live-model evaluation never run | — | — | — | BLOCKED (G-06) |
 | AIS-20 | Strict script CSP / JWT in `localStorage` | — | — | — | BLOCKED (CSP decision review of 2026-10-18 awaiting approval; S1) |
@@ -238,3 +238,21 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
   ACTION_OUTCOME_UNKNOWN, audit write failures); no tooling exists in the repository or deployment — BLOCKED (G-08).
 - **Tests:** `tests/ai/hardening/test_observability_quality.py` (23).
 - **Executed 2026-10-18:** focused 372 + 23 passed; full backend **3030 passed**; offline evals **139/139**; gates **25**.
+
+### Phase 9 — AIS-17 Retention safety and observable status · DONE (AIS-18 BLOCKED on G-03 / G-04)
+
+- **Expected behaviour:** retention stays a dry run by default and an ADMIN-operated apply; a second apply removes
+  nothing; a failure part-way leaves every AI table as it was; EXECUTING/UNKNOWN actions and audit events are never
+  deleted; a scheduler can detect that a purge is due without deleting anything.
+- **Reconciliation finding:** `monitoring-alerts.md` said the retention dry run's exit code is the scheduling signal,
+  but `retention_purge.py` always exited 0. Fixed with an opt-in `--check` (dry run; exit 3 when conversations,
+  messages or pending actions are past retention; cannot be combined with `--apply`), same convention as
+  `stale_actions_report.py`. Docs: `monitoring-alerts.md`, `deployment-runbook.md`.
+- **Change:** `services/ai/retention.check_exit_code`, `CHECK_DUE_EXIT_CODE`; `scripts/retention_purge.py --check`.
+  No retention period, deletion rule or audit lifecycle changed.
+- **Tests (`tests/ai/test_retention.py`, +4):** idempotent apply; a simulated failure on the third delete rolls back
+  the first two; `check_exit_code` 3 → 0 after an apply; `--check` deletes nothing and `--check --apply` is refused
+  (exit 2). Append-only audit triggers are already pinned (`tests/ai/audit/test_audit_api.py`).
+- **Not done (gated):** scheduling itself (no scheduler exists in the deployment; ops decision G-08); approval of the
+  periods (G-03); erasure on request or on exit and audit archival (G-04); clearing free text in action records (G-02).
+- **Executed 2026-10-18:** retention 15 passed; full backend **3034 passed**; offline evals **139/139**; gates **25**.

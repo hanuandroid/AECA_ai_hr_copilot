@@ -109,6 +109,17 @@ async def run_retention(db: AsyncSession, *, apply: bool = False, operator_emplo
     return report
 
 
+CHECK_DUE_EXIT_CODE = 3  # same convention as scripts/stale_actions_report.py
+
+
+def check_exit_code(report: RetentionReport) -> int:
+    """AIS-17: exit status of `retention_purge.py --check`: 3 when conversations, messages or pending actions are past
+    their retention (a purge is due), else 0. Audit events past retention are informational (they are never deleted
+    by tooling) and EXECUTING/UNKNOWN actions are reported by stale_actions_report.py."""
+    due = report.conversations + report.conversation_messages + report.pending_actions
+    return CHECK_DUE_EXIT_CODE if due else 0
+
+
 async def _audit_purge(operator: tuple[int, str], counts: dict[str, int]) -> None:
     """Append RETENTION_PURGE events (one per table, counts only). Fail-closed is not needed: the purge is done; a
     write failure falls back to the structured log like every other audit write."""

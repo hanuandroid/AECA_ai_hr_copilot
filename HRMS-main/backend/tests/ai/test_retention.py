@@ -159,3 +159,64 @@ async def test_stale_action_report_lists_unknown_and_stale_executing_only(db, se
     assert all(set(item) == {"confirmation_record_id", "action", "status", "employee_id", "target_employee_id",
                              "resource_id", "claimed_at", "result_code"} for item in items)  # no payload/summary/token hash
     assert await _counts(db) == before  # read-only
+
+
+# --- AIS-17: repeatability, atomicity and a scheduler-friendly exit status ------------------------------------------
+
+async def test_apply_is_idempotent(db, seeded):
+    first = await run_retention(db, apply=True, operator_employee_id=ADMIN.id, now=NOW)
+    after_first = await _counts(db)
+    second = await run_retention(db, apply=True, operator_employee_id=ADMIN.id, now=NOW)
+    assert (first.conversations, first.pending_actions) == (1, 3)
+    assert (second.conversations, second.conversation_messages, second.pending_actions) == (0, 0, 0)
+    counts = await _counts(db)
+    assert {k: v for k, v in counts.items() if k != "audit"} == {k: v for k, v in after_first.items() if k != "audit"}
+
+
+async def test_a_failure_part_way_through_deletes_nothing(db, seeded, monkeypatch):
+    """The three deletes share one transaction: if the last one fails, the earlier ones are rolled back."""
+    before = await _counts(db)
+    original = db.execute
+
+    async def failing_execute(statement, *args, **kwargs):
+        table = getattr(getattr(statement, "table", None), "name", None)
+        if getattr(statement, "is_delete", False) and table == AIPendingAction.__tablename__:
+            raise RuntimeError("simulated storage failure")  # the 3rd delete, after conversations and messages
+        return await original(statement, *args, **kwargs)
+
+    monkeypatch.setattr(db, "execute", failing_execute)
+    with pytest.raises(RuntimeError):
+        await run_retention(db, apply=True, operator_employee_id=ADMIN.id, now=NOW)
+    monkeypatch.setattr(db, "execute", original)
+    await db.rollback()  # what the operator script's session does when the exception propagates
+    assert await _counts(db) == before
+
+
+async def test_check_exit_code_signals_a_due_purge(db, seeded):
+    from app.services.ai.retention import CHECK_DUE_EXIT_CODE, check_exit_code
+    assert check_exit_code(await run_retention(db, now=NOW)) == CHECK_DUE_EXIT_CODE == 3
+    await run_retention(db, apply=True, operator_employee_id=ADMIN.id, now=NOW)
+    assert check_exit_code(await run_retention(db, now=NOW)) == 0  # only audit/EXECUTING/UNKNOWN remain: not "due"
+
+
+def _script():
+    import importlib.util
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[2] / "scripts" / "retention_purge.py"
+    spec = importlib.util.spec_from_file_location("retention_purge_script", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+async def test_check_flag_is_a_dry_run_and_cannot_apply(db, seeded, monkeypatch, capsys):
+    script = _script()
+    monkeypatch.setattr(script, "configure_logging", lambda: None)  # keep the test process's logging configuration
+    before = await _counts(db)
+    monkeypatch.setattr("sys.argv", ["retention_purge.py", "--check"])
+    assert await script.main() in (0, 3)  # depends on the wall clock; the exit code itself is tested above
+    assert await _counts(db) == before
+    monkeypatch.setattr("sys.argv", ["retention_purge.py", "--check", "--apply", "--operator-employee-id", str(ADMIN.id)])
+    with pytest.raises(SystemExit) as refused:
+        await script.main()
+    assert refused.value.code == 2 and await _counts(db) == before

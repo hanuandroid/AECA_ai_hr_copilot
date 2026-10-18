@@ -108,6 +108,7 @@ Scheduling, encryption, off-host copies and access control are **open decisions*
 |---|---|---|
 | Stale or unknown AI actions | `python scripts/stale_actions_report.py` | Read-only. Exit code 3 means items need human review in the HR system. |
 | Retention dry run | `python scripts/retention_purge.py` | Prints counts only. |
+| Retention check (scheduler) | `python scripts/retention_purge.py --check` | Dry run; exit 3 when a purge is due, 0 otherwise (AIS-17). Cannot be combined with `--apply`. |
 | Retention apply | `python scripts/retention_purge.py --apply --operator-employee-id <active admin id>` | **Only after the retention periods are approved.** Audited. Never deletes audit events. |
 | Policy index | `python scripts/ingest_policies.py` | Run after an ADMIN publishes a policy (the publish response says `index_refresh_required`). Until then a newly published policy is not retrievable; archived or rejected ones already are not. Needs AI enabled. With AI disabled it exits with an error (traceback); this is known and cosmetic. |
 

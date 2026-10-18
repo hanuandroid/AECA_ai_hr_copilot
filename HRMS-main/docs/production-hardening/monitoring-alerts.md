@@ -12,7 +12,7 @@
 | Container health | Docker `HEALTHCHECK` on `/api/v1/health` (API); web container state | Unhealthy after 3 failed checks, 30 s apart |
 | Structured logs (structlog, JSON) | API stdout | Event names below. Redacted by design: no prompts, tokens or HR values |
 | AI audit metrics | `GET /api/v1/ai/audit/metrics` (ADMIN) | Requests by status and role, refusals by reason, provider calls, errors and latency, tokens, estimated cost, RAG no-answer rate, SQL security rejections, action lifecycle counts |
-| Operator scripts | `stale_actions_report.py` (exit 3 means review needed), `backup.py` / `restore.py --verify-only` (non-zero means failure), `retention_purge.py` dry run | Run on a schedule; exit codes are the signal |
+| Operator scripts | `stale_actions_report.py` (exit 3 means review needed), `backup.py` / `restore.py --verify-only` (non-zero means failure), `retention_purge.py --check` (dry run; exit 3 means records are past retention, AIS-17) | Run on a schedule; exit codes are the signal |
 | Proxy | Reverse proxy access logs | TLS, 4xx/5xx and latency at the edge (proxy not yet chosen) |
 
 ## 2. Alerts
