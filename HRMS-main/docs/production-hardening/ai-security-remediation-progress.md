@@ -1,0 +1,65 @@
+# AI Security Remediation — Progress Tracker
+
+**Programme:** autonomous remediation of the AI safety audit and the R1 (PII minimisation) audit, both taken at
+`f8c551a` on 2026-10-18. **Started:** 2026-10-18. **Release status: NOT YET PRODUCTION READY** (unchanged by this
+programme; see the final assessment at the end).
+
+Rules for this file: record only what was actually executed and observed. Tests run in the `hrms-test-py311` container
+(Python 3.11, no API keys: `-e OPENAI_API_KEY= -e ANTHROPIC_API_KEY=`). Synthetic data only. Never push or deploy.
+Governance decisions are never assumed: dependent work is marked **BLOCKED** with the decision it needs.
+
+## 0. Baseline (Phase 0, 2026-10-18)
+
+| Item | Value |
+|---|---|
+| Branch / HEAD | `main` / `f8c551a` (21 commits ahead of `origin/main`, not pushed) |
+| Working tree at start | R1 Task 1 changes (uncommitted, verified the same day) + 4 protected untracked `writing-block*.md` files (never touched) |
+| Test commands | backend `python -m pytest -q`; offline evals `python -m evals.run_evals`; gate tests `pytest .github/scripts`; frontend `npm test`, `npx tsc --noEmit`, `npm run build` |
+| Last observed results | 2026-10-18 (R1 Task 1 tree): backend 2924 passed, offline evals 139/139, gate tests 25 passed. Live-model eval NOT_RUN |
+| Sources reconciled | AI safety audit (2026-10-18, chat report), R1 audit (2026-10-18), `data-processing.md`, `release-readiness.md`, `monitoring-alerts.md`, `ai_permissions_matrix.md` |
+
+## 1. Finding → phase map
+
+Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · NOT PLANNED (reason given).
+
+| ID | Finding (revalidated against `f8c551a`) | Phase | Acceptance criteria | Verification | Status |
+|---|---|---|---|---|---|
+| AIS-01 | Single-value SQL answer ("The result is …") stored as assistant text and sent to the classifier model as history | 1 | SQL-derived values absent from every later provider payload; immediate answer and owner replay unchanged | two-turn HTTP tests with payload spy; negative control on the old code | OPEN |
+| AIS-02 | No central provider boundary: user text and history leave unminimised; no operation allowlist | 2 | every model call passes one policy in `audit/provider.observe`; unknown operation fails closed; credentials never sent; identifiers replaced before sending and restored only in the same request's output; counts (never values) audited | per-operation payload tests for `/chat` and the 3 direct endpoints | OPEN |
+| AIS-03 | Narrow detection (no email, separated phone, Aadhaar); no Unicode normalisation | 3 | NFKC + format-character stripping on every question; extended patterns with a measured synthetic false-positive / false-negative corpus | table-driven corpus tests | OPEN |
+| AIS-04 | Regex refusal rules run on `/chat` only | — | — | — | NOT PLANNED: stricter direct-endpoint refusals change their error contract; the deterministic controls behind them (SQL validator, scope, registry, confirmation, RAG guard) are the boundary and are tested per endpoint |
+| AIS-05 | Anthropic endpoint not pinned (OpenAI is) | 4 | Anthropic client pinned to the public API URL; `ANTHROPIC_BASE_URL` ignored | provider tests | OPEN |
+| AIS-06 | Anthropic server-side fallback beta on by default | 4 | existing configuration preserved; decision recorded | — | BLOCKED (G-05) |
+| AIS-07 | Log-privacy tests inspect only `ai.audit` lines | 5 | full stdout/stderr of whole requests (success and error paths) free of synthetic PII, tokens, prompts | capsys/capfd tests | OPEN |
+| AIS-08 | Storage privacy not pinned by tests (conversation rows, pending-action summary, terminal records) | 5 | tests pin what is stored; no business payload altered | storage tests | OPEN |
+| AIS-09 | Leave reason (possibly health data) in action summary and `payload_json` | 5 / 9 | documented and tested as-is; clearing stored payloads needs approval | — | BLOCKED (G-02, G-03) for any change |
+| AIS-10 | No request deadline or per-request model-call budget | 6 | bounded end-to-end deadline and call budget enforced before each model call; SDK retries cannot outlive the deadline; failures are safe AI errors | unit + HTTP tests | OPEN |
+| AIS-11 | Daily cost cap disabled; no pricing configured | 6 | — | — | BLOCKED (G-07: verified pricing and budget) |
+| AIS-12 | One-click confirmation for high-impact actions (deactivation, announcements) | 7 | step-up re-authentication for high-impact AI actions; low-risk flow unchanged; replay/expiry/tamper/cross-user/concurrency still fail | backend + frontend tests | OPEN |
+| AIS-13 | In-memory rate limiter (single worker) | 7 | documented; production already refuses more than one worker (`production_checks.py`) | existing test | OPEN (documentation) |
+| AIS-14 | No prompt version or retrieved-chunk ids in audit | 8 | prompt fingerprint and chunk ids recorded as identifier tokens only | audit tests | OPEN |
+| AIS-15 | No alerting tooling | 8 | — | — | BLOCKED (G-08: monitoring tooling, owners, channels) |
+| AIS-16 | Groundedness heuristics / false refusals not measured | 8 | extra RAG guard tests; false-refusal cases measured without loosening any refusal rule | tests / eval | OPEN |
+| AIS-17 | Retention purge operator-run; partial-failure behaviour untested | 9 | dry run, idempotency, rollback on failure, EXECUTING/UNKNOWN preserved, audit append-only — tested; scheduling only with deployment support | retention tests | OPEN |
+| AIS-18 | Retention periods, erasure, audit archival | 9 | — | — | BLOCKED (G-03, G-04) |
+| AIS-19 | Live-model evaluation never run | — | — | — | BLOCKED (G-06) |
+| AIS-20 | Strict script CSP / JWT in `localStorage` | — | — | — | BLOCKED (CSP decision review of 2026-10-18 awaiting approval; S1) |
+| AIS-21 | Request-body size limit not verified at the app layer | — | — | — | NOT PLANNED: deployment-level (TLS reverse proxy); `validate_question` bounds the text that is used |
+
+## 2. Governance gates (decisions the organisation must make; never assumed)
+
+| Gate | Decision | Owner | Blocks |
+|---|---|---|---|
+| G-01 | Data categories each provider may receive (register #1, #7) and the DPA / retention / ZDR / training / residency terms (#2, #3, #8, #9) | Legal / DPO / account owner | Enabling AI with real HR data |
+| G-02 | Whether health-related leave reasons may be sent to an external model at all (R1 N2) | Legal / DPO + HR | Any change to action free text handling |
+| G-03 | Retention periods (90 / 30 / ≥365 days) and whether stored action free text may be cleared after completion | HR / Legal | AIS-09, AIS-18 |
+| G-04 | Erasure on request / on employee exit; audit archival procedure | Legal / DPO | AIS-18 |
+| G-05 | Anthropic server-side fallback beta acceptable under the provider terms | Account owner + legal | AIS-06 |
+| G-06 | Live-model evaluation: approved key, budget, synthetic-only inputs | Product + finance | AIS-19 |
+| G-07 | Verified model pricing and per-user cost budget | Finance | AIS-11 |
+| G-08 | Monitoring/alerting tooling, owners, channels (`monitoring-alerts.md`) | Ops | AIS-15 |
+| G-09 | Conversation storage minimisation of contact data (would change what users see when replaying their own history) | Product + DPO | further storage redaction |
+
+## 3. Phase log
+
+(Each phase appends: expected behaviour, files changed, commands executed, observed results, commit, remaining risks.)
