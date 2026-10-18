@@ -287,3 +287,36 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
   - **I4** audit shows how many identifiers a turn contained (counts, ADMIN-only) — accepted, noted.
 - **Executed 2026-10-18:** review-fix suites 302 passed; full backend **3042 passed**; offline evals **139/139**; gates
   **25**; frontend **185 passed**, `tsc` 0 errors, `next build` compiled (no frontend change since).
+
+## 4. Final assessment (Phase 11, 2026-10-18)
+
+**Verdict: NOT YET PRODUCTION READY.** The implementable findings are fixed and tested; the remaining blockers are
+organisational decisions and live verification, which this programme must not assume.
+
+| Status | Findings |
+|---|---|
+| DONE (code + tests) | AIS-01, 02, 03, 05, 07, 08, 10, 12, 14, 16 (measured), 17; review fixes L1, L2, L3, I1, I2 |
+| DONE (documentation) | AIS-13 (single worker enforced by `production_checks.py`) |
+| BLOCKED (decision) | AIS-06 (G-05), 09 (G-02/G-03), 11 (G-07), 15 (G-08), 18 (G-03/G-04), 19 (G-06), 20 (CSP decision review / S1); G-09, G-10, G-11 |
+| NOT PLANNED (reason in §1) | AIS-04, AIS-21 |
+
+**Last executed results (HEAD after phase 10, Python 3.11 container, no API keys):** backend 3042 passed, 0 skipped;
+offline evals 139/139 (scripted providers); gate tests 25; frontend 185 passed, `tsc` 0 errors, `next build` compiled;
+gitleaks no leaks (five exact synthetic-fixture fingerprints allowlisted, reviewer confirmation requested).
+Live-model evaluation: **NOT_RUN**. Only SQLite verified. Nothing pushed or deployed.
+
+**Data-flow summary after the programme:** every model call passes `audit/provider.observe` → `provider_policy.prepare`
+(operation allowlist; NFKC; credentials removed; email/phone/PAN/IFSC/Aadhaar/long numbers → per-call placeholders,
+restored only in that call's output) → per-request budget and deadline → concurrency slot → pinned provider endpoint.
+SQL rows stay in the backend by default and SQL replies never re-enter classifier history. Names and free text
+(leave reasons, ticket text, policy wording) still reach the provider as typed (G-01/G-02).
+
+**Release blockers (explicit):** G-01 provider data categories / DPA / retention / ZDR / residency (both providers);
+G-06 live-model evaluation (quality, false refusals, groundedness on real models); G-03/G-04 retention periods,
+erasure and audit lifecycle; G-08 monitoring and alerting tooling; AIS-20 strict script CSP and token storage;
+G-11 business-endpoint step-up if stolen-token protection for high-impact actions is required; plus the pre-existing
+gates in `release-readiness.md` §6 (PostgreSQL not verified, `braces` advisory exception PROPOSED, restore drill).
+
+**Commits (local only, on `main`):** `3db7479` phase 0 · `4f43f1c` AIS-01 · `cde6ec6` AIS-02 · `be543d4` AIS-03 ·
+`c6500de` AIS-05 · `be41b8c` AIS-07/08 · `eefc1d8` AIS-10 · `3550197` AIS-12 · `f3cdb59` AIS-14/16 · `18233fc` AIS-17 ·
+`fd18e8c` review fixes · `a608039` gitleaks allowlist · (this assessment). No migrations.
