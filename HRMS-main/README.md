@@ -297,6 +297,18 @@ Next.js /copilot ─► FastAPI /api/v1/chat ─► AI authorization (DB role, I
     explicit confirmation.
   - The SQL agent is read-only and scoped.
   - Passwords, bank, PAN, DOB, salary and payroll identifiers never leave via AI.
+- **Where each requirement lives** (full deliverable map: [`ai_architecture.md`](docs/ai_architecture.md) §2.1):
+
+  | Requirement | Package / service (`backend/app/`) | Endpoint | Tests (`backend/tests/` unless noted) |
+  |---|---|---|---|
+  | Policy RAG | `services/ai/rag/` (`PolicyRagService`), `services/ai/embeddings.py` | `POST /api/v1/chat/policy` | `ai/rag/`, `evals/policy_eval.json` |
+  | Read-only Text-to-SQL | `services/ai/sql/` (parser, validator, scope, read-only executor) | `POST /api/v1/chat/sql` | `ai/sql/`, `ai/hardening/`, `evals/sql_eval.json` |
+  | HR actions via existing APIs | `services/ai/actions/` (registry, confirmation, client with the user's token) | `POST /api/v1/chat/actions`, `/chat/actions/confirm` | `ai/actions/`, `evals/action_eval.json` |
+  | Router (LangGraph) and conversations | `services/ai/orchestration/`, `services/ai/conversation/` | `POST /api/v1/chat`, `/chat/conversations` | `ai/orchestration/`, `ai/conversation/` |
+  | RBAC and backend authorization | `services/ai/authorization/`; business routes in `api/v1/endpoints/` | `GET /api/v1/chat/permissions` | `ai/authorization/`, `rbac/`, `characterization/` |
+  | Audit logging | `services/ai/audit/`, table `ai_audit_events` (no message text; see `ai_architecture.md` §3.5) | `GET /api/v1/ai/audit[/metrics]` | `ai/audit/` |
+  | Provider boundary and limits | `services/ai/provider_policy.py`, `services/ai/limits.py`, `services/ai/llm/` | all model-calling routes | `ai/test_provider_policy.py`, `ai/test_limits.py`, `ai/test_openai_provider.py` |
+  | Frontend | `frontend/app/copilot/`, `frontend/components/copilot/`, `frontend/lib/copilot-*.ts` | — | `frontend/tests/copilot-*.test.tsx` |
 - **Policy index:** after migrate and seed, run
   `docker-compose exec api python scripts/ingest_policies.py`.
 - **Tests and evaluation** (offline, no API key):

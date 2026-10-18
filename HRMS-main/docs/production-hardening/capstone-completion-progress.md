@@ -23,7 +23,7 @@ not committed). Treat the code and freshly observed results as authoritative; th
 |---|---|---|---|
 | 0 | Preflight, baseline, this tracker | DONE | (this commit) |
 | 1 | Reconcile status documents (README, phase-status, ai_eval_results, CLAUDE.md, handoff) | PENDING | |
-| 2 | Architecture doc corrections + deliverable map | PENDING | |
+| 2 | Architecture doc corrections + deliverable map | DONE | see log |
 | 3 | G-11 operator documentation | PENDING | |
 | 4 | Live evaluation runner: OpenAI selection + answer-level scoring (offline tests only; never executed live) | PENDING | |
 | 5 | `docs/demo-script.md` | PENDING | |
@@ -45,3 +45,17 @@ not committed). Treat the code and freshly observed results as authoritative; th
 | E | External infrastructure (proxy, monitoring, hosting) | OPEN |
 
 ## 3. Phase log
+
+### Phase 2 — Architecture documentation and deliverable map · DONE (2026-10-19)
+
+- `docs/ai_architecture.md`: §2 rewritten from the actual tree. The old list mixed implemented modules with
+  never-built plan entries (`api_tools.py`, `action_agent.py`, `audit.py`, `models/ai_audit_log.py`,
+  `0018_ai_audit_logs.py`, `/chat/router`, `GET /audit/recent`). New §2.1 maps each assignment deliverable to its
+  real location and tests (no compatibility modules added); §2.2 explains the provider abstraction and the AIS-02
+  boundary; §2.3 states that authorization and mutation controls are backend-enforced. AI-owned table list
+  corrected (§1). Audit-message privacy deviation explained (§3.5). The Phase 0 design diagram and notes stay, marked
+  historical and superseded. Streaming note: decided under FastAPI 0.116, not re-probed on 0.133.1. Config block:
+  `openai` provider variables added.
+- `README.md`: requirement → package / endpoint / tests table in the AI Copilot section.
+- Check: every path named in §2, §2.1 and the README table exists (`ls`); remaining mentions of old names are only
+  in the mapping table and the sections marked historical.

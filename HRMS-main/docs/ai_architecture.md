@@ -28,7 +28,8 @@ LangGraph router (Phase 6): classify ─► policy | sql | action-PROPOSAL | cla
 ai_audit_events (Phase 8, append-only) ─► /api/v1/ai/audit, /api/v1/ai/audit/metrics (admin dashboard)
 ```
 
-Original Phase 0 design (historical):
+Original Phase 0 design (historical; several names in it were renamed during implementation, e.g. `/ai-copilot` ->
+`/copilot`, `ai_audit_logs` -> `ai_audit_events`, `/chat/router` -> `POST /chat`; the implemented layout is §2):
 
 ```text
 Next.js  /ai-copilot  ──JWT (Authorization: Bearer)──►  FastAPI /api/v1/chat/{policy|sql|actions|router|confirm}
@@ -76,51 +77,91 @@ Design properties:
 - `services/ai/guards.py` (Phase 1) now imports its sensitive-field definition from `authorization/sensitive.py`, so there is one definition.
 - `GET /api/v1/chat/permissions` returns the caller's capabilities and data scope (for role-aware UI in Phase 9). An `AIError` exception handler in `main.py` renders AI errors in the standard envelope. It is registered for `AIError` only, and existing endpoint error shapes are unchanged (tested).
 
-**Critical invariant:** no AI module holds a read-write connection to business tables. The only AI writes are to AI-owned tables (`policy_chunks`, `ai_audit_logs`, `ai_pending_actions`), done by dedicated repository functions. All business mutations are HTTP calls to existing endpoints using the requesting user's bearer token.
+**Critical invariant:** no AI module holds a read-write connection to business tables. The only AI writes are to AI-owned tables (`policy_chunks`, `ai_pending_actions`, `ai_conversations`, `ai_conversation_messages`, `ai_audit_events`), done by dedicated repository functions. All business mutations are HTTP calls to existing endpoints using the requesting user's bearer token.
 
-## 2. Backend module layout
+## 2. Backend module layout (as implemented)
 
-Phase 1 implemented (✅) and planned modules:
+Every path below exists in the repository (checked 2026-10-19).
 
 ```text
 backend/app/services/ai/
-  __init__.py          ✅
-  errors.py            ✅ AIError base + AIUnavailable/AIProvider/AIInvalidOutput/AIPermissionDenied (safe messages, HTTP status)
-  providers.py         ✅ build_llm_provider / build_embedding_provider: config → provider; fail closed (AI_UNAVAILABLE)
-  guards.py            ✅ SENSITIVE_FIELDS, forbidden backend routes (R1 et al.), strip_sensitive_fields
-  redaction.py         ✅ JWT / bearer / API key / PAN / IFSC / long-number redaction + truncation
-  llm/base.py          ✅ LLMProvider protocol: generate(), generate_structured(); LLMMessage, LLMResponse
-  llm/fake.py          ✅ FakeLLMProvider: deterministic rules, schema-validated structured output, call log
-  embeddings.py        ✅ EmbeddingProvider (embed, embed_query, model_id); FakeEmbeddingProvider (hash);
-                          FastEmbedEmbeddingProvider (Phase 3, lazy); cosine_similarity
-  (AI settings live in core/config.py::Settings: ai_* fields, anthropic_api_key: SecretStr)
-  authorization/       ✅ Phase 2: capabilities, policy (matrix), context, scope, sensitive, service (see above)
-  llm/anthropic_provider.py ✅ Phase 3: AnthropicLLMProvider (messages.parse structured output, server fallbacks)
-  llm/openai_provider.py   ✅ 2026-10-16: OpenAILLMProvider (Responses API, strict JSON-schema structured output, store=false); see ai-provider-setup.md
-  rag/                 ✅ Phase 3 (see §3.1): models, loader, chunker, vector_store, ingest, retriever, prompts,
-                          guard, service (PolicyRagService + get_policy_rag_service)
-  validation.py        ✅ shared question validation (RAG + SQL)
-  sql/                 ✅ Phase 4 (see §3.2): schema, parser, validator, scope, executor, prompts, generator,
-                          formatter, models, service
-  actions/             ✅ Phase 5 (see §3.3): models, registry, resolver, validators, confirmation, client, prompts, service
-  orchestration/       ✅ Phase 6 (see §3.4): classifier, graph (LangGraph), state, models, prompts, service;
-                          followup.py (Phase 7: untrusted conversation context, follow-up resolution)
-  conversation/        ✅ Phase 7 (see §3.4.1): ConversationService (ai_conversations/_messages), ConversationalCopilot
-  audit/               ✅ Phase 8 (see §3.5): events, recorder, store, middleware, provider (observe), query
-  schemas.py           IntentResult
-  intent.py            IntentClassifier (LLM structured output + keyword fallback)
-  api_tools.py         typed tool definitions + httpx calls to existing endpoints (token forwarded)
-  action_agent.py      tool selection (LLM tool-use) → validate args → permission → propose/confirm → execute → summarize
-  confirmations.py     ai_pending_actions repository (single-use, user-bound, TTL)
-  audit.py             AuditLogger (redaction, never raises into request path)
-  graph.py             LangGraph StateGraph (Phase 6)
-backend/app/api/v1/endpoints/chat.py   + POST /policy /sql /actions /actions/confirm /router, GET /audit/recent
-backend/app/models/ai_audit_log.py, policy_chunk.py, ai_pending_action.py
-backend/alembic/versions/0017_policy_chunks.py, 0018_ai_audit_logs.py, 0019_ai_pending_actions.py
-backend/scripts/ingest_policies.py     CLI to (re)build the vector index
+  errors.py            AIError hierarchy with stable AI_* codes and safe messages
+  providers.py         build_llm_provider / build_fast_llm_provider / build_embedding_provider: config -> provider;
+                       fail closed (AI_UNAVAILABLE); no automatic fallback between real providers
+  provider_policy.py   AIS-02 provider boundary applied to every model call (§2.2)
+  limits.py            AIS-10 per-request model-call budget and deadline; per-user rate limit and daily token budget
+  guards.py            sensitive fields, AI deny-list of business routes (e.g. GET /employees/{id})
+  redaction.py         JWT / bearer / API key / PAN / IFSC / long-number redaction + truncation
+  validation.py        shared question validation (RAG + SQL)
+  retention.py         AI-owned table retention report (dry run / --check)
+  embeddings.py        EmbeddingProvider protocol, FakeEmbeddingProvider (hash), FastEmbedEmbeddingProvider (local)
+  llm/                 base.py (LLMProvider protocol), anthropic_provider.py, openai_provider.py, fake.py
+  authorization/       Phase 2: capabilities, policy (the matrix), context, scope, sensitive, service
+  rag/                 Phase 3: loader, chunker, ingest, vector_store, retriever, prompts, guard, models, service
+  sql/                 Phase 4: schema (registry), parser, validator, scope, executor, generator, formatter,
+                       prompts, models, skill_search, service
+  actions/             Phase 5: registry, models, resolver, validators, confirmation, client, prompts,
+                       reconciliation, service
+  orchestration/       Phase 6: classifier, graph (LangGraph), state, models, prompts, service; followup.py (Phase 7)
+  conversation/        Phase 7: ConversationService (ai_conversations / ai_conversation_messages)
+  audit/               Phase 8: events, recorder, store, middleware, provider (observe), query
+backend/app/api/v1/endpoints/chat.py       POST /chat, /chat/policy, /chat/sql, /chat/actions, /chat/actions/confirm;
+                                           GET /chat/permissions; GET|DELETE /chat/conversations[/{id}];
+                                           the pre-existing /chat/sessions stubs (unchanged)
+backend/app/api/v1/endpoints/ai_audit.py   GET /ai/audit, GET /ai/audit/metrics
+backend/app/models/                        policy_chunk.py, ai_pending_action.py, ai_conversation.py, ai_audit_event.py
+backend/alembic/versions/                  0017_policy_chunks, 0018_ai_pending_actions, 0019_ai_conversations,
+                                           0020_ai_audit_events (AI-owned); 0021-0024 business changes
+                                           (policy publication, audiences, token version)
+backend/scripts/ingest_policies.py         CLI to (re)build the policy index
+backend/evals/                             evaluation runner and datasets (see ai_eval_results.md)
+frontend/app/copilot/[[...conversation]]/  the Copilot page; frontend/app/admin/ai-usage, frontend/app/admin/ai-audit
+frontend/components/copilot/               copilot-shell (chat panel), message-parts (PolicySources, DataTable,
+                                           ActionCard, SafeText), usage-dashboard, audit-view
+frontend/lib/                              copilot-api.ts, copilot-errors.ts, copilot-display.ts
 ```
 
-The existing `/chat/sessions` stubs stay untouched.
+### 2.1 Assignment deliverables -> implementation
+
+The assignment suggests single-file names; the implementation uses one package per concern
+(`.claude/rules/architecture.md`). No compatibility modules were added just to match names. This is the same
+mapping as [architecture/phase-10-gap-analysis.md](architecture/phase-10-gap-analysis.md).
+
+| Assignment expects | Implemented as | Main tests |
+|---|---|---|
+| `services/ai/policy_rag.py`, `embeddings.py`, `vector_store.py` | `services/ai/rag/` (`service.py`, `vector_store.py`, `retriever.py`, `guard.py`), `services/ai/embeddings.py` | `tests/ai/rag/` |
+| `services/ai/sql_agent.py`, `sql_guardrails.py` | `services/ai/sql/service.py`; guardrails in `sql/parser.py`, `validator.py`, `schema.py`, `scope.py`, `executor.py` | `tests/ai/sql/`, `tests/ai/hardening/` |
+| `services/ai/action_agent.py`, `api_tools.py`, `permissions.py` | `services/ai/actions/service.py`; tools in `actions/registry.py` + `actions/client.py`; permissions in `services/ai/authorization/` | `tests/ai/actions/`, `tests/ai/authorization/` |
+| `api/v1/endpoints/chat.py` (`/chat/policy`, `/chat/sql`, `/chat/actions`, optional `/chat/router`) | same file; the router is `POST /api/v1/chat` | `tests/ai/rag/`, `tests/ai/sql/`, `tests/ai/actions/`, `tests/ai/orchestration/` |
+| `app/ai-copilot/page.tsx`, `components/ai/*` | `app/copilot/[[...conversation]]/page.tsx`, `components/copilot/*`, `lib/copilot-*.ts` | `frontend/tests/copilot-*.test.tsx` |
+| `models/ai_audit_log.py`, `services/ai/audit.py`, `<migration>_add_ai_audit_logs.py` | `models/ai_audit_event.py`, `services/ai/audit/`, `0020_ai_audit_events.py` | `tests/ai/audit/` |
+| `docs/ai_architecture.md`, `ai_permissions_matrix.md`, `ai_eval_results.md` | `HRMS-main/docs/` (same names) | — |
+
+### 2.2 Provider abstraction and the provider boundary
+
+- Services depend only on the `LLMProvider` protocol (`llm/base.py`: `generate`, `generate_structured`). The
+  concrete provider (`anthropic`, `openai`, or `fake` for tests) is chosen by `AI_LLM_PROVIDER` in `providers.py`.
+  A missing key or model fails closed (`AI_UNAVAILABLE`); there is no automatic fallback between real providers, so
+  data never goes to a provider that was not configured.
+- Every call is wrapped by `audit/provider.observe(llm, "operation")`. Before the provider sees anything,
+  `provider_policy.prepare` applies the boundary policy: unregistered operations are refused, credentials are
+  removed, text is normalised, and personal identifiers (email, PAN, IFSC, Aadhaar, phone, long numbers) become
+  placeholders that are restored only in that call's output and never stored. Only counts and categories are
+  audited. Names and free text are not detected by patterns; which of those may be sent is an open governance
+  decision (G-01/G-02 in `production-hardening/ai-security-remediation-progress.md`).
+- Policy documents and model output are untrusted data; document text is never placed in a system prompt.
+
+### 2.3 Authorization and mutations are enforced by the backend, not the LLM
+
+- Access decisions come only from `services/ai/authorization/` (deterministic, DB-loaded role and team). The model
+  never sees, produces or influences a permission decision; INACTIVE users are rejected before any AI work.
+- The SQL agent never executes model text directly: it is parsed, validated against the registry, scope-rewritten
+  with bound parameters and run on a separate read-only connection.
+- The Action agent can only propose registered actions. Execution needs an explicit, single-use, user-bound
+  confirmation; the call then goes to the existing HRMS endpoint with the user's own token (in-process
+  `httpx.ASGITransport`), so the business endpoint's own authorization and validation apply as well. Two
+  high-impact actions also need the user's password (AIS-12 / G-11).
+- AI code never writes business tables.
 
 ## 3. Components
 
@@ -292,7 +333,7 @@ POST /chat/actions/confirm {confirmation_id}            (extra fields → 422)
 
 **Retries / idempotency.** Mutations are never retried. A timeout or 5xx returns `AI_BACKEND_UNAVAILABLE` and marks the confirmation FAILED. Stale state, such as a leave approved meanwhile, is rejected by the existing API (`LEAVE_NOT_PENDING`), and the token is single-use.
 
-**Audit-ready.** `ActionAuditRecord` (user, role, stage, action, target, resource, confirmation record id, outcome, error code, timestamp) is logged as `ai.action`. `ai_pending_actions` keeps the status, result code and used_at of every confirmation. Neither holds tokens, request bodies or personal data values. Phase 8 will persist these records in `ai_audit_logs`.
+**Audit-ready.** `ActionAuditRecord` (user, role, stage, action, target, resource, confirmation record id, outcome, error code, timestamp) is logged as `ai.action`. `ai_pending_actions` keeps the status, result code and used_at of every confirmation. Neither holds tokens, request bodies or personal data values. Phase 8 persists these outcomes as typed events in `ai_audit_events` (§3.5).
 
 **Not supported (no backing API).** Editing or cancelling a leave request. A rejection reason (the existing reject endpoint takes no body). Reactivation (not requested by the assignment).
 
@@ -350,8 +391,17 @@ supersedes the Phase 0 notes below.
 - Read API: `GET /api/v1/ai/audit` and `/api/v1/ai/audit/metrics`, using AUDIT_READ_ORG / AUDIT_READ_OWN.
 - Evaluation: `python -m evals.run_evals` (offline, throwaway DB; `--live` needs a key).
 
-#### Phase 0 design notes (historical)
-- `ai_audit_logs` stores `id, user_id, role, message (redacted, truncated to 2000), intent, agent, tool_name, action_status, records_accessed (JSON ids/counts), latency_ms, error_code, created_at`.
+#### Audit message privacy (deliberate deviation from the assignment)
+
+The assignment lists "message" among the audit fields. Audit events store **no message text**: only its length
+(`message_chars`) and a keyed HMAC fingerprint (`message_hash`), together with the user id, `actor_role`, intents
+and routes, the capability or action used, status, error code and timestamp. The user's text is kept, **redacted**,
+only in the owner-scoped conversation store (`ai_conversation_messages`), and is linked to the audit trail by
+`request_id`. Reason: the audit table is append-only and cannot be corrected or erased, so it must not hold personal
+data. Evidence: `tests/ai/audit/`; [architecture/phase-10-gap-analysis.md](architecture/phase-10-gap-analysis.md).
+
+#### Phase 0 design notes (historical and superseded: the `ai_audit_logs` table below was never built)
+- `ai_audit_logs` would have stored `id, user_id, role, message (redacted, truncated to 2000), intent, agent, tool_name, action_status, records_accessed (JSON ids/counts), latency_ms, error_code, created_at`.
 - Writes use their own session and commit, after the response is built. A failure is logged and never breaks the user response.
 - Redaction removes JWT-like strings, PAN patterns, 9–18 digit account numbers and IFSC codes before persistence and before structlog.
 
@@ -367,8 +417,8 @@ supersedes the Phase 0 notes below.
   or weak `JWT_SECRET_KEY`, fake AI providers, and a missing key or model for the selected provider.
 - **Formal evaluation set:** `evals/assignment_eval.json` (the assignment's prompts plus injection cases), run by
   `python -m evals.run_evals`.
-- **Streaming:** not implemented. FastAPI 0.116 closes `yield` dependencies (the request DB session) before a
-  streaming body runs. See [architecture/phase-10-gap-analysis.md](architecture/phase-10-gap-analysis.md) §3.
+- **Streaming:** not implemented. Decided under FastAPI 0.116, which closes `yield` dependencies (the request DB
+  session) before a streaming body runs; not re-probed on the current FastAPI 0.133.1. See [architecture/phase-10-gap-analysis.md](architecture/phase-10-gap-analysis.md) §3.
 
 **Models and providers.**
 - **LLM:** Anthropic Claude through `AnthropicLLMProvider`, or OpenAI through `OpenAILLMProvider` (`AI_LLM_PROVIDER=openai`).
@@ -403,10 +453,13 @@ references and recover the conversation of a failed first turn.
 
 ```text
 AI_ENABLED=true                                 ✅
-AI_LLM_PROVIDER=anthropic                       ✅ anthropic | fake
+AI_LLM_PROVIDER=anthropic                       ✅ anthropic | openai | fake (fake refused in production)
 AI_LLM_MODEL=claude-sonnet-5-5                  ✅ (D1)
 AI_LLM_FAST_MODEL=claude-haiku-4-5-20251001     ✅ router classification (Phase 6; no effort/fallback beta)
 ANTHROPIC_API_KEY=                              ✅ SecretStr, env only, never committed
+OPENAI_API_KEY=                                 ✅ SecretStr, env only (AI_LLM_PROVIDER=openai)
+AI_OPENAI_MODEL= / AI_OPENAI_FAST_MODEL=        ✅ no default model; fast falls back to AI_OPENAI_MODEL
+AI_OPENAI_REASONING_EFFORT=                     ✅ sent only when set
 AI_TEMPERATURE=                                 ✅ unset by default (Claude 5.x rejects non-default sampling)
 AI_MAX_TOKENS=4096                              ✅
 AI_LLM_EFFORT=low                               ✅ output_config.effort
