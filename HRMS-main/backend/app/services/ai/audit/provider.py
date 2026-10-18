@@ -7,6 +7,7 @@ pricing for that exact model exist; otherwise it is null (never invented, never 
 Prompts, completions, keys and headers are never recorded.
 """
 
+import hashlib
 from typing import Any
 
 from app.core.config import Settings, settings
@@ -59,23 +60,24 @@ class ObservedLLMProvider:
         self.name = getattr(inner, "name", "unknown")
         self.model = getattr(inner, "model", "unknown")
 
-    def _meta(self, schema_name: str | None) -> dict[str, Any]:
+    def _meta(self, schema_name: str | None, system: str | None = None) -> dict[str, Any]:
         operation = self._operation if self._operation in PROVIDER_OPERATIONS else "unregistered"  # never free text
         return {"provider": _token(self.name), "model": _token(self.model), "operation": operation,
-                "schema_name": schema_name}
+                "schema_name": schema_name, "prompt_version": prompt_version(system)}
 
     # AIS-02: every call passes the provider boundary first (provider_policy.prepare); the inner provider only ever
     # receives the prepared messages, and placeholders are restored in the output of the same call only.
 
     async def generate(self, messages: list[LLMMessage], **kwargs: Any) -> LLMResponse:
         payload = self._prepare(messages, None)
-        response = await self._call(lambda: self._inner.generate(payload.messages, **kwargs), None, payload)
+        response = await self._call(lambda: self._inner.generate(payload.messages, **kwargs), None, payload,
+                                    kwargs.get("system"))
         return response.model_copy(update={"text": restore_text(response.text, payload)})
 
     async def generate_structured(self, messages: list[LLMMessage], schema: type[StructuredT], **kwargs: Any) -> StructuredT:
         payload = self._prepare(messages, schema.__name__)
         result = await self._call(lambda: self._inner.generate_structured(payload.messages, schema, **kwargs),
-                                  schema.__name__, payload)
+                                  schema.__name__, payload, kwargs.get("system"))
         return restore_structured(result, schema, payload)  # type: ignore[return-value]
 
     def _prepare(self, messages: list[LLMMessage], schema_name: str | None) -> PreparedPayload:
@@ -85,8 +87,8 @@ class ObservedLLMProvider:
             record(AuditEventType.AI_PROVIDER_ERROR, AuditStatus.FAILED, error_code=error.code, **self._meta(schema_name))
             raise
 
-    async def _call(self, invoke, schema_name: str | None, payload: PreparedPayload):
-        meta = self._meta(schema_name)
+    async def _call(self, invoke, schema_name: str | None, payload: PreparedPayload, system: str | None = None):
+        meta = self._meta(schema_name, system)
         record(AuditEventType.AI_PROVIDER_REQUEST, AuditStatus.STARTED, redacted_values=payload.total,
                redacted_categories=sorted(payload.counts) or None, **meta)
         usage = LLMUsage()
@@ -114,6 +116,12 @@ class ObservedLLMProvider:
                estimated_cost_usd=estimate_cost_usd(str(self.model), usage.input_tokens, usage.output_tokens,
                                                     provider=str(self.name)), **meta)
         return result
+
+
+def prompt_version(system: str | None) -> str | None:
+    """AIS-14: identifies which fixed system prompt a call used (changes whenever the prompt text changes). The prompts
+    are code constants without user data, and only a 12-hex-character digest is recorded."""
+    return hashlib.sha256(system.encode("utf-8")).hexdigest()[:12] if system else None
 
 
 def _token(value: object) -> str:

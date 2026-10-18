@@ -37,9 +37,9 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
 | AIS-11 | Daily cost cap disabled; no pricing configured | 6 | — | — | BLOCKED (G-07: verified pricing and budget) |
 | AIS-12 | One-click confirmation for high-impact actions (deactivation, announcements) | 7 | step-up re-authentication for high-impact AI actions; low-risk flow unchanged; replay/expiry/tamper/cross-user/concurrency still fail | backend + frontend tests | DONE (phase 7) |
 | AIS-13 | In-memory rate limiter (single worker) | 7 | documented; production already refuses more than one worker (`production_checks.py`) | existing test | DONE (phase 7, documentation) |
-| AIS-14 | No prompt version or retrieved-chunk ids in audit | 8 | prompt fingerprint and chunk ids recorded as identifier tokens only | audit tests | OPEN |
+| AIS-14 | No prompt version or retrieved-chunk ids in audit | 8 | prompt fingerprint and chunk ids recorded as identifier tokens only | audit tests | DONE (phase 8) |
 | AIS-15 | No alerting tooling | 8 | — | — | BLOCKED (G-08: monitoring tooling, owners, channels) |
-| AIS-16 | Groundedness heuristics / false refusals not measured | 8 | extra RAG guard tests; false-refusal cases measured without loosening any refusal rule | tests / eval | OPEN |
+| AIS-16 | Groundedness heuristics / false refusals not measured | 8 | extra RAG guard tests; false-refusal cases measured without loosening any refusal rule | tests / eval | DONE (phase 8, measured) |
 | AIS-17 | Retention purge operator-run; partial-failure behaviour untested | 9 | dry run, idempotency, rollback on failure, EXECUTING/UNKNOWN preserved, audit append-only — tested; scheduling only with deployment support | retention tests | OPEN |
 | AIS-18 | Retention periods, erasure, audit archival | 9 | — | — | BLOCKED (G-03, G-04) |
 | AIS-19 | Live-model evaluation never run | — | — | — | BLOCKED (G-06) |
@@ -58,6 +58,7 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
 | G-06 | Live-model evaluation: approved key, budget, synthetic-only inputs | Product + finance | AIS-19 |
 | G-07 | Verified model pricing and per-user cost budget | Finance | AIS-11 |
 | G-08 | Monitoring/alerting tooling, owners, channels (`monitoring-alerts.md`) | Ops | AIS-15 |
+| G-10 | Refusal-rule tuning: 6 of 18 benign sensitive-keyword policy questions are refused by the deterministic rules (AIS-16). Loosening a refusal rule weakens a control | Security + product | false-refusal reduction |
 | G-09 | Conversation storage minimisation of contact data (would change what users see when replaying their own history) | Product + DPO | further storage redaction |
 
 ## 3. Phase log
@@ -215,3 +216,25 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
 - **Executed 2026-10-18:** backend focused 1400 + 42 passed; full backend **3007 passed**; offline evals **139/139**;
   gate tests **25**; frontend **185 passed**, `tsc` 0 errors, `next build` compiled.
 - **Remaining:** no second-person approval for high-impact actions (a business policy decision, not assumed).
+
+### Phase 8 — AIS-14 traceability, AIS-16 measured quality · DONE (AIS-15 alerting BLOCKED on G-08)
+
+- **Expected behaviour:** every provider event names which fixed system prompt was used (12-hex SHA-256 prefix,
+  `prompt_version`), and every policy answer records the cited chunk ids (`source_ids`, opaque 32-hex ids) — enough
+  to trace a request across classification, retrieval, model call and response without storing any text.
+- **Change:** `audit/events.AuditMetadata.prompt_version`, `.source_ids` (validated as identifier tokens);
+  `audit/provider.prompt_version()` and `_meta(schema, system)`; `rag/service` records `source_ids` on
+  `POLICY_RESPONSE`.
+- **Measured (scripted models; NOT real-model quality):** refusal rules on an 18-question benign HR set — 12 pass,
+  **6 false refusals** (bank-detail update, PAN onboarding documents, password reset, password-sharing policy,
+  privacy-policy coverage of salary data, DOB visibility). Pinned, not changed: loosening is gate G-10. The offline
+  eval suite was not extended with these, because its cases must state the correct expected outcome and today's
+  outcome for six of them is wrong; the measurement lives in pytest instead.
+- **RAG guard:** existing tests already cover not-grounded, missing/fabricated citations, empty answers, sensitive
+  values and terms, action/role claims, injection echoes and unsupported numbers. Added: a citation list with one
+  unknown label is rejected; **pinned limitation** — an invented rule without numbers that cites a real excerpt passes
+  (no entailment check; only an evaluation can measure it, G-06).
+- **Alerting (AIS-15):** `monitoring-alerts.md` lists the signals (provider failures, AI_BUSY, budget hits,
+  ACTION_OUTCOME_UNKNOWN, audit write failures); no tooling exists in the repository or deployment — BLOCKED (G-08).
+- **Tests:** `tests/ai/hardening/test_observability_quality.py` (23).
+- **Executed 2026-10-18:** focused 372 + 23 passed; full backend **3030 passed**; offline evals **139/139**; gates **25**.

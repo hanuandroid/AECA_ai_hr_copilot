@@ -130,12 +130,14 @@ class AuditMetadata(BaseModel):
     output_tokens: int | None = None
     total_tokens: int | None = None
     estimated_cost_usd: float | None = None
+    prompt_version: str | None = None  # AIS-14: first 12 hex chars of SHA-256 of the fixed system prompt (never its text)
     redacted_values: int | None = None  # AIS-02: values removed at the provider boundary (count only)
     redacted_categories: list[str] | None = None  # e.g. ["EMAIL", "PAN"]; never the values
 
     # policy
     grounded: bool | None = None
     sources: int | None = None
+    source_ids: list[str] | None = None  # AIS-14: cited policy chunk ids (opaque 32-hex identifiers, never chunk text)
 
     # sql (never SQL text or values)
     query_type: str | None = None
@@ -153,12 +155,12 @@ class AuditMetadata(BaseModel):
 
     @field_validator("endpoint", "actor_role", "method", "source", "reason", "message_hash", "response_hash", "error_code", "capability",
                      "scope", "provider", "model", "operation", "schema_name", "query_type", "security_result", "action",
-                     "confirmation_state")
+                     "confirmation_state", "prompt_version")
     @classmethod
     def _tokens(cls, value: str | None) -> str | None:
         return None if value is None else _check_token(value)
 
-    @field_validator("intents", "routes", "tables", "redacted_categories")
+    @field_validator("intents", "routes", "tables", "redacted_categories", "source_ids")
     @classmethod
     def _token_lists(cls, value: list[str] | None) -> list[str] | None:
         if value is None:

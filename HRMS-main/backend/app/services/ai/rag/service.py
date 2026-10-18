@@ -70,7 +70,8 @@ class PolicyRagService:
                    error_code=error.code)
             raise
         record(AuditEventType.POLICY_RESPONSE, AuditStatus.SUCCESS, route="POLICY", duration_ms=timer.ms,
-               grounded=result.grounded, sources=len(result.sources))
+               grounded=result.grounded, sources=len(result.sources),
+               source_ids=[source.chunk_id for source in result.sources] or None)  # AIS-14: opaque chunk ids only
         return result
 
     async def _answer(self, ctx: AIUserContext, question: object) -> PolicyAnswer:
