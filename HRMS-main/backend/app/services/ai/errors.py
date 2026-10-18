@@ -122,6 +122,22 @@ class AIBusyError(AIError):
     http_status = status.HTTP_503_SERVICE_UNAVAILABLE
 
 
+class AIRequestLimitError(AIError):
+    """One request needed more model calls than AI_MAX_MODEL_CALLS_PER_REQUEST (AIS-10). Raised before the call."""
+
+    code = "AI_REQUEST_LIMIT_EXCEEDED"
+    message = "This request needed more AI work than allowed. Please ask a shorter or simpler question."
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+
+
+class AIRequestTimeoutError(AIError):
+    """The request's end-to-end AI deadline (AI_REQUEST_DEADLINE_SECONDS) passed (AIS-10)."""
+
+    code = "AI_REQUEST_TIMEOUT"
+    message = "The Copilot took too long to answer. Please try again."
+    http_status = status.HTTP_504_GATEWAY_TIMEOUT
+
+
 class AIActionOutcomeUnknownError(AIError):
     """The business call did not finish within the execution deadline: it may or may not have been applied.
     Never retried automatically (business APIs have no idempotency keys)."""

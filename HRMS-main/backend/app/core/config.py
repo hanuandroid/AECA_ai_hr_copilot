@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     ai_daily_cost_cap_usd: float | None = None  # per user per UTC day; disabled until pricing/budget policy is set
     ai_max_concurrent_llm_calls: int = 4  # process-wide
     ai_llm_queue_timeout_seconds: float = 15.0  # wait for a free model-call slot before AI_BUSY
+    # AIS-10: per AI HTTP request. 8 = the most calls a legitimate /chat turn can make (up to 4 classifier clauses +
+    # policy + SQL generation + optional SQL wording + action proposal). The deadline bounds queueing, provider calls
+    # and SDK retries together. Provisional defaults, to be tuned by operations; 0 disables either.
+    ai_max_model_calls_per_request: int = 8
+    ai_request_deadline_seconds: float = 120.0
     auth_login_rate_limit_per_minute: int = 10  # per client IP + normalized account identifier; 0 disables
     # Retention (production hardening B-14). PROVISIONAL planning defaults pending business/security/legal approval.
     ai_conversation_retention_days: int = 90  # by last activity (updated_at)

@@ -13,7 +13,7 @@ from app.core.config import Settings, settings
 from app.services.ai.audit.events import AuditEventType, AuditStatus
 from app.services.ai.audit.recorder import Timer, record
 from app.services.ai.errors import AIError
-from app.services.ai.limits import llm_slots
+from app.services.ai.limits import charge_model_call, llm_slots, within_deadline
 from app.services.ai.llm.base import LLMMessage, LLMResponse, LLMUsage, StructuredT, usage_sink
 from app.services.ai.provider_policy import (
     PROVIDER_OPERATIONS,
@@ -93,8 +93,9 @@ class ObservedLLMProvider:
         token = usage_sink.set(usage)
         timer = Timer()
         try:
-            async with llm_slots.slot():  # B-09: process-wide model-call concurrency bound (AI_BUSY on timeout)
-                result = await invoke()
+            deadline = charge_model_call()  # AIS-10: per-request call budget + end-to-end deadline (raises before calling)
+            async with llm_slots.slot(deadline):  # B-09: process-wide model-call concurrency bound (AI_BUSY on timeout)
+                result = await within_deadline(invoke(), deadline)
         except AIError as error:
             record(AuditEventType.AI_PROVIDER_ERROR, AuditStatus.FAILED, duration_ms=timer.ms, error_code=error.code, **meta)
             raise

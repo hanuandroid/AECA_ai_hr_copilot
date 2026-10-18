@@ -33,7 +33,7 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
 | AIS-07 | Log-privacy tests inspect only `ai.audit` lines | 5 | full stdout/stderr of whole requests (success and error paths) free of synthetic PII, tokens, prompts | capsys/capfd tests | DONE (phase 5) |
 | AIS-08 | Storage privacy not pinned by tests (conversation rows, pending-action summary, terminal records) | 5 | tests pin what is stored; no business payload altered | storage tests | DONE (phase 5) |
 | AIS-09 | Leave reason (possibly health data) in action summary and `payload_json` | 5 / 9 | documented and tested as-is; clearing stored payloads needs approval | — | BLOCKED (G-02, G-03) for any change |
-| AIS-10 | No request deadline or per-request model-call budget | 6 | bounded end-to-end deadline and call budget enforced before each model call; SDK retries cannot outlive the deadline; failures are safe AI errors | unit + HTTP tests | OPEN |
+| AIS-10 | No request deadline or per-request model-call budget | 6 | bounded end-to-end deadline and call budget enforced before each model call; SDK retries cannot outlive the deadline; failures are safe AI errors | unit + HTTP tests | DONE (phase 6) |
 | AIS-11 | Daily cost cap disabled; no pricing configured | 6 | — | — | BLOCKED (G-07: verified pricing and budget) |
 | AIS-12 | One-click confirmation for high-impact actions (deactivation, announcements) | 7 | step-up re-authentication for high-impact AI actions; low-risk flow unchanged; replay/expiry/tamper/cross-user/concurrency still fail | backend + frontend tests | OPEN |
 | AIS-13 | In-memory rate limiter (single worker) | 7 | documented; production already refuses more than one worker (`production_checks.py`) | existing test | OPEN (documentation) |
@@ -159,3 +159,26 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
   SQL texts.) The HMAC fingerprint is already pinned by `tests/ai/audit/test_audit_recorder.py::test_text_fingerprint_is_keyed_and_content_free`.
 - **Executed 2026-10-18:** new tests 3 passed; full backend **2988 passed**; offline evals **139/139**; gate tests **25**.
 - **Remaining:** AIS-09 (leave reasons and other free text in action records) unchanged — G-02 / G-03.
+
+### Phase 6 — AIS-10 Request deadline and model-call budget · DONE (AIS-11 BLOCKED on G-07)
+
+- **Expected behaviour:** one AI HTTP request makes at most `AI_MAX_MODEL_CALLS_PER_REQUEST` model calls (default 8 =
+  the most a legitimate `/chat` turn needs: 4 classifier clauses + policy + SQL generation + SQL wording + action) and
+  finishes its model work within `AI_REQUEST_DEADLINE_SECONDS` (default 120 s; provisional, operations to tune; 0
+  disables). Queueing, the provider call and the SDK's own retries all count against the deadline. Failures are AI
+  errors (`AI_REQUEST_LIMIT_EXCEEDED` 422, `AI_REQUEST_TIMEOUT` 504); nothing is executed — confirmation makes no model
+  call, and a proposal that times out creates no pending action.
+- **Change:** `limits.py` — `RequestBudget`, `charge_model_call()` (before every call), `within_deadline()` (cancels
+  the provider call at the deadline), deadline-aware `llm_slots.slot()` (AI_BUSY unchanged when the queue timeout is
+  shorter), `AIRequestBudgetMiddleware` (pure ASGI, AI paths only, reset after the request); `audit/provider.observe`
+  charges every call; `errors.py` two classes (and the 422 constant now uses Starlette's current name); `config.py`
+  two settings; `main.py` registers the middleware. Enforcement lives in `limits.py`, not in the audit scope ("audit
+  observes, never authorizes").
+- **Not done:** a circuit breaker — not justified while one provider is configured and every failure already fails
+  fast and closed; per-user cost caps stay disabled until verified pricing exists (G-07).
+- **Tests (`tests/ai/orchestration/test_request_budget.py`, 8):** no budget outside requests; call budget enforced
+  before the call; passed deadline refuses the next call; a slow provider call is cancelled at the deadline; queueing
+  never outlives the deadline while AI_BUSY still wins when shorter; the default covers the longest legitimate turn;
+  HTTP: budget exceeded → 422, no business change, budget not leaked; slow model → 504 within 2 s, provider call
+  cancelled, no pending action.
+- **Executed 2026-10-18:** focused 84 passed; full backend **2996 passed**; offline evals **139/139**; gate tests **25**.

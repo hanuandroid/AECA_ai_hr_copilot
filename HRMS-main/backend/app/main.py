@@ -16,6 +16,7 @@ from app.db.session import engine
 from app.services.ai.audit.middleware import AIAuditMiddleware
 from app.services.ai.audit.recorder import record_error
 from app.services.ai.errors import AIError, ai_error_response
+from app.services.ai.limits import AIRequestBudgetMiddleware
 
 
 @asynccontextmanager
@@ -38,6 +39,7 @@ app.add_middleware(
     expose_headers=["X-Request-Id", "X-Conversation-Id"],
 )
 app.add_middleware(AIAuditMiddleware)  # Phase 8: request_id + audit scope for /api/v1/chat* and /api/v1/ai* only
+app.add_middleware(AIRequestBudgetMiddleware)  # AIS-10: per-request model-call budget + deadline (same AI paths)
 app.add_middleware(RangeHeaderLimitMiddleware)  # Production hardening B-26: ignore abusive multi-range requests
 # Production hardening B-25: reject unknown Host headers (400) before routing, so a spoofed Host can never produce a
 # redirect or URL pointing elsewhere. The in-process action client's internal host is always allowed.
