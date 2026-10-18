@@ -174,6 +174,8 @@ Code source of truth: `backend/app/services/ai/actions/registry.py` (`ACTION_REG
 
 Every action requires confirmation (D6): a server-side, single-use token bound to the user, action, target and payload, with a TTL of `AI_ACTION_CONFIRMATION_TTL_SECONDS` (300).
 
+**Step-up (AIS-12, 2026-10-18):** `ANNOUNCEMENT_CREATE` and `EMPLOYEE_DEACTIVATE` additionally require the confirming user to re-enter their own password on `POST /chat/actions/confirm` (`password` field; the proposal says `step_up_required: true`). Order: confirmation record checks, then capability/target authorization, then the password (throttled per user with the login limiter), then the atomic claim. A missing or wrong password is `403 AI_STEP_UP_FAILED`, too many attempts `429 AI_STEP_UP_THROTTLED`; neither consumes the confirmation nor executes anything. Stricter than the existing UI path (D7). Tests: `tests/ai/actions/test_step_up.py`.
+
 **Changes vs the Phase 0 design below:**
 - Read-only tools such as `get_my_leave_balance` and `list_pending_leaves` are not part of the Action Agent. Reads go through the SQL agent (Phase 4), so the registry contains only mutations.
 - Phase 0 named the confirmation table `ai_pending_actions`; it is implemented under that name in migration 0018.

@@ -35,8 +35,8 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
 | AIS-09 | Leave reason (possibly health data) in action summary and `payload_json` | 5 / 9 | documented and tested as-is; clearing stored payloads needs approval | — | BLOCKED (G-02, G-03) for any change |
 | AIS-10 | No request deadline or per-request model-call budget | 6 | bounded end-to-end deadline and call budget enforced before each model call; SDK retries cannot outlive the deadline; failures are safe AI errors | unit + HTTP tests | DONE (phase 6) |
 | AIS-11 | Daily cost cap disabled; no pricing configured | 6 | — | — | BLOCKED (G-07: verified pricing and budget) |
-| AIS-12 | One-click confirmation for high-impact actions (deactivation, announcements) | 7 | step-up re-authentication for high-impact AI actions; low-risk flow unchanged; replay/expiry/tamper/cross-user/concurrency still fail | backend + frontend tests | OPEN |
-| AIS-13 | In-memory rate limiter (single worker) | 7 | documented; production already refuses more than one worker (`production_checks.py`) | existing test | OPEN (documentation) |
+| AIS-12 | One-click confirmation for high-impact actions (deactivation, announcements) | 7 | step-up re-authentication for high-impact AI actions; low-risk flow unchanged; replay/expiry/tamper/cross-user/concurrency still fail | backend + frontend tests | DONE (phase 7) |
+| AIS-13 | In-memory rate limiter (single worker) | 7 | documented; production already refuses more than one worker (`production_checks.py`) | existing test | DONE (phase 7, documentation) |
 | AIS-14 | No prompt version or retrieved-chunk ids in audit | 8 | prompt fingerprint and chunk ids recorded as identifier tokens only | audit tests | OPEN |
 | AIS-15 | No alerting tooling | 8 | — | — | BLOCKED (G-08: monitoring tooling, owners, channels) |
 | AIS-16 | Groundedness heuristics / false refusals not measured | 8 | extra RAG guard tests; false-refusal cases measured without loosening any refusal rule | tests / eval | OPEN |
@@ -182,3 +182,36 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
   HTTP: budget exceeded → 422, no business change, budget not leaked; slow model → 504 within 2 s, provider call
   cancelled, no pending action.
 - **Executed 2026-10-18:** focused 84 passed; full backend **2996 passed**; offline evals **139/139**; gate tests **25**.
+
+### Phase 7 — AIS-12 Step-up for high-impact actions · DONE; AIS-13 rate limiter · DOCUMENTED
+
+- **Expected behaviour:** `EMPLOYEE_DEACTIVATE` and `ANNOUNCEMENT_CREATE` (org-wide or team reach; account lock-out)
+  need the confirming user's own password in addition to the single-use confirmation, so a stolen session token alone
+  (e.g. via XSS, AIS-20) cannot confirm them. Order on confirm: record checks (owner, unused, unexpired, binding) →
+  capability/target re-authorization → password (throttled per user before hashing) → atomic claim → audit → execute.
+  A refused password (403 `AI_STEP_UP_FAILED`, never 401 — the session is valid) or throttle (429
+  `AI_STEP_UP_THROTTLED`) leaves the confirmation PENDING and executes nothing. All other actions are unchanged.
+- **Change (backend):** `actions/registry.ActionSpec.step_up` (set for the two actions); `ActionResponse.step_up_required`;
+  `schemas/chat.ActionConfirmRequest.password` (unconstrained so a validation error can never echo it);
+  `actions/service._verify_step_up` (login limiter key `ai-step-up|<employee>`, bcrypt check against the DB hash);
+  `errors.AIStepUpFailedError`, `AIStepUpThrottledError`; audited as `ACTION_REJECTED` (DENIED) with the code only.
+- **Change (frontend):** password field only on step-up cards (`components/copilot/message-parts.tsx`), cleared after
+  every attempt; `lib/copilot-api.confirmAction` sends `password` only when given; the shell keeps the card open after
+  a step-up refusal (user-initiated new attempt; nothing automatic); `lib/copilot-errors.ts` messages for the step-up
+  codes and for Phase 2/6 codes (`AI_PROVIDER_POLICY_BLOCKED`, `AI_REQUEST_LIMIT_EXCEEDED`, `AI_REQUEST_TIMEOUT`).
+- **Existing tests adjusted (intent unchanged: the authorized user confirms):** `tests/ai/actions/conftest.py`
+  (`propose_and_confirm` passes the synthetic test password for step-up actions only), `test_action_eval.py`,
+  `test_action_parity.py`, `test_announcement_audience_ai.py`, `test_confirmation_parity.py` (one call each). A static
+  guard (`test_no_ai_module_references_forbidden_routes`) caught an auth route path in a new comment; the comment was
+  reworded, the guard untouched.
+- **New tests:** `tests/ai/actions/test_step_up.py` (11: only the two actions; ordinary actions unchanged; missing /
+  empty / wrong / over-long / non-string password refused with nothing executed and the record still PENDING; correct
+  password executes once, replay still refused, audit has the code but no password, no password in stdout/stderr;
+  authorization re-checked before the password; throttling before hashing; announcements too);
+  `frontend/tests/copilot-shell.test.tsx` (3: password required and sent only with that confirmation and cleared;
+  refusal keeps the card open for a new attempt; ordinary cards show no password field).
+- **AIS-13:** the in-memory limiters stay single-process by design; `production_checks.py` already refuses more than
+  one worker. A shared store (e.g. Redis) would be new infrastructure — not introduced (approval gate 4).
+- **Executed 2026-10-18:** backend focused 1400 + 42 passed; full backend **3007 passed**; offline evals **139/139**;
+  gate tests **25**; frontend **185 passed**, `tsc` 0 errors, `next build` compiled.
+- **Remaining:** no second-person approval for high-impact actions (a business policy decision, not assumed).

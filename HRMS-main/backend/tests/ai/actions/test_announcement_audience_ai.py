@@ -20,7 +20,7 @@ from app.services.ai.authorization import build_ai_user_context
 from app.services.ai.errors import AIInvalidOutputError, AIPermissionDeniedError
 from app.services.ai.sql.schema import TABLES
 from tests.ai.actions.conftest import proposal
-from tests.support.data import ADMIN, MANAGER, OUTSIDER
+from tests.support.data import ADMIN, MANAGER, OUTSIDER, PASSWORD
 from tests.support.db import business_snapshot
 
 NEWS = {"title": "Sprint review", "body": "Sprint review moves to Thursday 3 PM."}
@@ -78,7 +78,7 @@ async def test_demoted_admin_cannot_confirm_an_org_announcement(agent, db, login
     await db.commit()
     db.expire_all()
     fresh = await build_ai_user_context((await db.execute(select(Employee).where(Employee.id == ADMIN.id))).scalar_one(), db)
-    result = await service.confirm(fresh, proposed.confirmation_id, await login("admin"))
+    result = await service.confirm(fresh, proposed.confirmation_id, await login("admin"), password=PASSWORD)  # AIS-12
     assert result.status == "failed" and result.error_code == "FORBIDDEN"  # the API re-checks the audience
     db.expire_all()
     assert (await db.execute(select(func.count(Announcement.id)))).scalar_one() == count

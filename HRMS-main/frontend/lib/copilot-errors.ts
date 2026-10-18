@@ -18,6 +18,9 @@ const MESSAGES: Record<string, string> = {
   AI_RATE_LIMITED: "You're sending requests too quickly. Please wait a minute and try again.",
   AI_BUDGET_EXCEEDED: "You've reached today's Copilot usage limit. Please try again tomorrow.",
   AI_BUSY: "The Copilot is busy right now. Please try again shortly.",
+  AI_REQUEST_LIMIT_EXCEEDED: "That request needed too much work. Please ask a shorter or simpler question.",
+  AI_REQUEST_TIMEOUT: "The Copilot took too long to answer. Please try again.",
+  AI_PROVIDER_POLICY_BLOCKED: "The Copilot could not process this request safely. Please rephrase it.",
   // understanding / routing
   AI_INVALID_REQUEST: "Please enter a question (up to 1000 characters).",
   AI_CLASSIFICATION_FAILED: "I couldn't understand that request. Please rephrase it.",
@@ -31,6 +34,8 @@ const MESSAGES: Record<string, string> = {
   AI_CONFIRMATION_INVALID: "This confirmation is no longer valid (it may have expired or already been used). Please ask again.",
   AI_AUDIT_UNAVAILABLE: "The action could not be completed right now. Nothing was changed. Please try again.",
   AI_ACTION_OUTCOME_UNKNOWN: "We couldn't confirm whether this action completed. Please check the related page before trying again.",
+  AI_STEP_UP_FAILED: "Your password could not be verified. Nothing was changed. Please try again.",
+  AI_STEP_UP_THROTTLED: "Too many password attempts. Please wait a minute and try again. Nothing was changed.",
   // conversations (a generic message: a foreign conversation looks exactly like a missing one)
   AI_CONVERSATION_NOT_FOUND: "Conversation unavailable.",
   AI_CONVERSATION_LIMIT_REACHED: "This conversation is full. Please start a new conversation.",

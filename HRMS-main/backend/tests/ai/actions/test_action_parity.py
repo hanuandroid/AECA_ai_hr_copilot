@@ -32,6 +32,7 @@ from tests.support.data import (
     MANAGER,
     OUTSIDER,
     OUTSIDER_PENDING_LEAVE_ID,
+    PASSWORD,
     future,
 )
 
@@ -178,5 +179,6 @@ async def test_copilot_side(agent, db, login, row):
     if proposed.status != "confirmation_required":  # refused as a clarification: nothing executable was issued
         assert row.ai_allowed is False and proposed.confirmation_id is None, (row.id, proposed)
         return
-    result = await service.confirm(ctx, proposed.confirmation_id, await login(row.user))
+    password = PASSWORD if proposed.step_up_required else None  # AIS-12: step-up actions need the password
+    result = await service.confirm(ctx, proposed.confirmation_id, await login(row.user), password=password)
     assert (result.status == "completed") is row.ai_allowed, (row.id, result)

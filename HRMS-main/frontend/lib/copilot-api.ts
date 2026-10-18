@@ -43,6 +43,7 @@ export type ActionData = {
   summary?: string;
   confirmation_id?: string;
   expires_at?: string;
+  step_up_required?: boolean; // AIS-12: high-impact action; the backend asks for the user's password on confirm
 };
 
 export type PartRoute = "POLICY" | "SQL" | "ACTION" | "CLARIFICATION" | "REFUSAL";
@@ -217,11 +218,16 @@ export function archiveConversation(token: string, conversationId: string): Prom
   return call(token, `/api/v1/chat/conversations/${encodeURIComponent(conversationId)}`, { method: "DELETE" });
 }
 
-/** POST /api/v1/chat/actions/confirm with ONLY the backend-issued confirmation id. Never retried. */
-export function confirmAction(token: string, confirmationId: string): Promise<CopilotResult<ConfirmationResponse>> {
+/** POST /api/v1/chat/actions/confirm with the backend-issued confirmation id and, only for a step-up action, the
+ * password the user just typed (AIS-12; checked by the backend, never stored here). Never retried automatically. */
+export function confirmAction(
+  token: string,
+  confirmationId: string,
+  password?: string,
+): Promise<CopilotResult<ConfirmationResponse>> {
   return call<ConfirmationResponse>(token, "/api/v1/chat/actions/confirm", {
     method: "POST",
-    body: JSON.stringify({ confirmation_id: confirmationId }),
+    body: JSON.stringify(password ? { confirmation_id: confirmationId, password } : { confirmation_id: confirmationId }),
   });
 }
 

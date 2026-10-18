@@ -37,6 +37,9 @@ class ActionSpec:
     target_type: TargetType
     requires_confirmation: bool
     description: str  # shown to the model
+    # AIS-12: high-impact actions also require the confirming user's password (step-up re-authentication), so a stolen
+    # session token alone cannot confirm them. Stricter than the existing UI path (decision D7 allows stricter).
+    step_up: bool = False
 
 
 _SPECS = (
@@ -62,7 +65,7 @@ _SPECS = (
                "Change an existing ticket's status (OPEN|IN_PROGRESS|RESOLVED)."),
     ActionSpec(ActionName.ANNOUNCEMENT_CREATE, Capability.ANNOUNCEMENT_CREATE, "POST", "/api/v1/announcements",
                AnnouncementCreateParams, TargetType.NONE, True,
-               "Publish a company announcement (title, body)."),
+               "Publish a company announcement (title, body).", step_up=True),
     ActionSpec(ActionName.PROJECT_ASSIGN, Capability.PROJECT_ASSIGN, "POST", "/api/v1/employees/{employee_id}/projects",
                ProjectAssignParams, TargetType.EMPLOYEE, True,
                "Assign an employee (target_employee_name) to an existing project (project_name), optional role_on_project."),
@@ -71,7 +74,7 @@ _SPECS = (
                "Create a project in the catalog (project_name, optional project_description, project_status)."),
     ActionSpec(ActionName.EMPLOYEE_DEACTIVATE, Capability.EMPLOYEE_DEACTIVATE, "DELETE", "/api/v1/employees/{employee_id}",
                NoParams, TargetType.EMPLOYEE, True,
-               "Deactivate an employee account (target_employee_name)."),
+               "Deactivate an employee account (target_employee_name).", step_up=True),
 )
 
 ACTION_REGISTRY: MappingProxyType[ActionName, ActionSpec] = MappingProxyType({spec.name: spec for spec in _SPECS})

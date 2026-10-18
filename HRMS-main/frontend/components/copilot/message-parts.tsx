@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { AlertTriangle, CheckCircle2, ClipboardCheck, FileText, HelpCircle, Loader2, ShieldAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -85,7 +86,7 @@ export function DataTable({ data }: { data: SqlData }) {
 }
 
 export type ActionState =
-  | { state: "pending" }
+  | { state: "pending"; error?: string } // error: a step-up attempt failed; the confirmation is still pending
   | { state: "confirming" }
   | { state: "cancelled" }
   | { state: "completed"; message: string }
@@ -100,14 +101,21 @@ export function ActionCard({
 }: {
   data: ActionData;
   actionState: ActionState;
-  onConfirm: (confirmationId: string) => void;
+  onConfirm: (confirmationId: string, password?: string) => void;
   onCancel: (confirmationId: string) => void;
 }) {
+  const [password, setPassword] = useState("");
   const confirmationId = data.confirmation_id;
   if (!confirmationId) return null;
   const busy = actionState.state === "confirming";
   const settled = actionState.state !== "pending" && !busy;
   const titleId = `action-${confirmationId.slice(0, 12)}`;
+  const stepUp = data.step_up_required === true;
+  const submit = () => {
+    const typed = password;
+    setPassword(""); // never kept after the attempt
+    onConfirm(confirmationId, stepUp ? typed : undefined);
+  };
   return (
     <section aria-labelledby={titleId} className="mt-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
       <div className="flex items-center gap-2">
@@ -117,10 +125,23 @@ export function ActionCard({
       {data.summary ? <SafeText text={data.summary} className="mt-2 whitespace-pre-wrap text-sm text-slate-800" /> : null}
       <p className="mt-2 text-xs text-amber-800">Nothing has been changed yet. The action runs only if you confirm.</p>
 
+      {stepUp && (actionState.state === "pending" || busy) ? (
+        <label className="mt-3 block space-y-1 text-xs text-amber-900" htmlFor={`${titleId}-password`}>
+          <span>This is a high-impact action. Enter your password to confirm it.</span>
+          <input id={`${titleId}-password`} type="password" autoComplete="current-password" value={password}
+                 disabled={busy} onChange={(event) => setPassword(event.target.value)}
+                 className="block w-full rounded-md border border-amber-300 bg-white px-2 py-1 text-sm text-slate-900" />
+        </label>
+      ) : null}
+      {actionState.state === "pending" && actionState.error ? (
+        <p role="alert" className="mt-2 text-xs text-red-700">{actionState.error}</p>
+      ) : null}
+
       {actionState.state === "pending" || busy ? (
         <div className="mt-3 flex flex-wrap gap-2">
           <Button type="button" variant="outline" disabled={busy} onClick={() => onCancel(confirmationId)}>Cancel</Button>
-          <Button type="button" disabled={busy} aria-disabled={busy} onClick={() => onConfirm(confirmationId)}>
+          <Button type="button" disabled={busy || (stepUp && !password)} aria-disabled={busy || (stepUp && !password)}
+                  onClick={submit}>
             {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : null}
             {busy ? "Confirming…" : "Confirm"}
           </Button>
@@ -171,7 +192,7 @@ export function PartView({
 }: {
   part: ChatPart;
   actionStates: Record<string, ActionState>;
-  onConfirm: (confirmationId: string) => void;
+  onConfirm: (confirmationId: string, password?: string) => void;
   onCancel: (confirmationId: string) => void;
 }) {
   if (part.status === "failed") {

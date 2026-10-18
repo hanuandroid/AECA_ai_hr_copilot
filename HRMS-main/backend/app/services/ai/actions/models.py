@@ -150,5 +150,6 @@ class ActionResponse(BaseModel):
     summary: str | None = None
     confirmation_id: str | None = None
     expires_at: str | None = None
+    step_up_required: bool | None = None  # AIS-12: confirm must carry the user's password
     result: dict[str, Any] | None = None
     error_code: str | None = None

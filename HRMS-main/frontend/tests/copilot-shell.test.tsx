@@ -522,3 +522,63 @@ describe("accessibility", () => {
     expect(document.body.textContent).not.toMatch(/PROMPT_INJECTION|prompt_injection/);
   });
 });
+
+// --- AIS-12: step-up confirmation for high-impact actions ------------------------------------------------------------
+
+describe("step-up confirmation", () => {
+  const PASSWORD = "synthetic-pass-1";
+
+  function stepUpBackend(...replies: Array<() => ReturnType<typeof ok>>) {
+    const part = actionPart("tok-step-up-456", "Deactivate the account of Test User");
+    part.data = { ...(part.data as object), action: "EMPLOYEE_DEACTIVATE", step_up_required: true } as typeof part.data;
+    let index = 0;
+    return mockBackend({
+      "GET /api/v1/chat/conversations": () => ok([]),
+      "POST /api/v1/chat": () => ok(chatResponse([part])),
+      "POST /api/v1/chat/actions/confirm": () => replies[Math.min(index++, replies.length - 1)](),
+    });
+  }
+
+  async function proposeDeactivation(user: ReturnType<typeof userEvent.setup>) {
+    await ask(user, "Deactivate Test User.");
+    return screen.findByRole("region", { name: /Employee deactivation/ });
+  }
+
+  it("asks for the password and sends it only with that confirmation, then clears it", async () => {
+    const { calls } = stepUpBackend(() => ok({ status: "completed", message: "Employee account deactivated." }));
+    const { user } = renderShell({ roleHint: "ADMIN" });
+    const card = await proposeDeactivation(user);
+    const confirm = within(card).getByRole("button", { name: "Confirm" });
+    expect(confirm).toBeDisabled();  // nothing can be sent without the password
+    const field = within(card).getByLabelText(/Enter your password to confirm it/);
+    await user.type(field, PASSWORD);
+    await user.click(confirm);
+    expect(await within(card).findByText("Done: Employee account deactivated.")).toBeInTheDocument();
+    const confirms = calls.filter((c) => c.path === "/api/v1/chat/actions/confirm");
+    expect(confirms.map((c) => c.body)).toEqual([{ confirmation_id: "tok-step-up-456", password: PASSWORD }]);
+    expect(chatCalls(calls).map((c) => JSON.stringify(c.body)).join()).not.toContain(PASSWORD);
+    expect(document.body.innerHTML).not.toContain(PASSWORD);
+  });
+
+  it("keeps the card open after a refused password and allows a new attempt", async () => {
+    const { calls } = stepUpBackend(() => fail(403, "AI_STEP_UP_FAILED"),
+                                    () => ok({ status: "completed", message: "Employee account deactivated." }));
+    const { user } = renderShell({ roleHint: "ADMIN" });
+    const card = await proposeDeactivation(user);
+    await user.type(within(card).getByLabelText(/Enter your password/), "wrong-pass-1");
+    await user.click(within(card).getByRole("button", { name: "Confirm" }));
+    expect(await within(card).findByRole("alert")).toHaveTextContent("Your password could not be verified. Nothing was changed.");
+    expect(within(card).getByLabelText(/Enter your password/)).toHaveValue("");
+    await user.type(within(card).getByLabelText(/Enter your password/), PASSWORD);
+    await user.click(within(card).getByRole("button", { name: "Confirm" }));
+    expect(await within(card).findByText("Done: Employee account deactivated.")).toBeInTheDocument();
+    expect(calls.filter((c) => c.path === "/api/v1/chat/actions/confirm")).toHaveLength(2);
+  });
+
+  it("ordinary actions show no password field", async () => {
+    actionBackend(() => ok({ status: "completed", message: "Leave approved." }));
+    const { user } = renderShell({ roleHint: "MANAGER" });
+    const card = await propose(user);
+    expect(within(card).queryByLabelText(/password/i)).not.toBeInTheDocument();
+  });
+});

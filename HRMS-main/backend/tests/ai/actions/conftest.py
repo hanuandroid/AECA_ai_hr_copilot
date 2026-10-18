@@ -21,7 +21,7 @@ from app.services.ai.actions.models import ActionProposal
 from app.services.ai.actions.service import ActionAgentService, get_action_agent_service
 from app.services.ai.authorization import AIUserContext, build_ai_user_context
 from app.services.ai.errors import AIInvalidOutputError
-from tests.support.data import MANAGER, USERS, future
+from tests.support.data import MANAGER, PASSWORD, USERS, future
 
 TTL_SECONDS = 300
 TODAY = date(2026, 10, 1)
@@ -121,7 +121,9 @@ def propose_and_confirm(agent, login):
         service, llm, ctx = await agent(user_key, proposal)
         proposed = await service.propose(ctx, question)
         assert proposed.status == "confirmation_required", proposed
-        return await service.confirm(ctx, proposed.confirmation_id, await login(user_key)), proposed
+        # AIS-12: the authorized user re-enters their own (synthetic test) password for step-up actions only.
+        password = PASSWORD if proposed.step_up_required else None
+        return await service.confirm(ctx, proposed.confirmation_id, await login(user_key), password=password), proposed
 
     return _run
 

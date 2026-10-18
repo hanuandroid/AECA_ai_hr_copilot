@@ -19,6 +19,8 @@ import { conversationGroup, copilotMode, maskSensitive } from "@/lib/copilot-dis
 import { errorReference, friendlyError } from "@/lib/copilot-errors";
 
 const MAX_MESSAGE = 1000;
+// AIS-12: step-up refusals happen before the confirmation is claimed, so the card stays open for another attempt.
+const STEP_UP_RETRYABLE = new Set(["AI_STEP_UP_FAILED", "AI_STEP_UP_THROTTLED"]);
 
 export type UiMessage =
   | { id: string; kind: "user"; text: string }
@@ -173,14 +175,19 @@ export function CopilotShell({ token, roleHint, capabilities, initialConversatio
     }
   };
 
-  const confirm = async (confirmationId: string) => {
+  const confirm = async (confirmationId: string, password?: string) => {
     if (confirmingRef.current.has(confirmationId)) return; // never send the same confirmation twice
     confirmingRef.current.add(confirmationId);
     setActionStates((current) => ({ ...current, [confirmationId]: { state: "confirming" } }));
-    const result = await confirmAction(token, confirmationId);
+    const result = await confirmAction(token, confirmationId, password);
     if (result.status === 401) return onUnauthorized();
     let next: ActionState;
-    if (result.ok && result.data) {
+    if (!result.ok && STEP_UP_RETRYABLE.has(result.error?.code ?? "")) {
+      // AIS-12: the backend refused the password BEFORE claiming the confirmation, so it is still pending. The user may
+      // try again (a new, user-initiated request; nothing is retried automatically).
+      confirmingRef.current.delete(confirmationId);
+      next = { state: "pending", error: friendlyError(result.error, result.status) };
+    } else if (result.ok && result.data) {
       next = result.data.status === "completed"
         ? { state: "completed", message: result.data.message }
         : { state: "failed", message: result.data.message || "The HR system rejected this request." };
@@ -412,7 +419,7 @@ function MessageView({
 }: {
   message: UiMessage;
   actionStates: Record<string, ActionState>;
-  onConfirm: (id: string) => void;
+  onConfirm: (id: string, password?: string) => void;
   onCancel: (id: string) => void;
   onRetry: (text: string) => void;
   sending: boolean;

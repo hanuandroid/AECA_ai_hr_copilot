@@ -138,6 +138,23 @@ class AIRequestTimeoutError(AIError):
     http_status = status.HTTP_504_GATEWAY_TIMEOUT
 
 
+class AIStepUpFailedError(AIError):
+    """A step-up action was confirmed without the user's correct password (AIS-12). 403, never 401: the session itself
+    is still valid. The confirmation is NOT consumed."""
+
+    code = "AI_STEP_UP_FAILED"
+    message = "Your password could not be verified. Nothing was changed."
+    http_status = status.HTTP_403_FORBIDDEN
+
+
+class AIStepUpThrottledError(AIError):
+    """Too many step-up attempts by this user in the current window (AIS-12). Checked before any password hashing."""
+
+    code = "AI_STEP_UP_THROTTLED"
+    message = "Too many password attempts. Please wait a minute and try again."
+    http_status = status.HTTP_429_TOO_MANY_REQUESTS
+
+
 class AIActionOutcomeUnknownError(AIError):
     """The business call did not finish within the execution deadline: it may or may not have been applied.
     Never retried automatically (business APIs have no idempotency keys)."""

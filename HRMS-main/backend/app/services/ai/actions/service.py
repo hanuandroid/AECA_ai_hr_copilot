@@ -25,10 +25,14 @@ import time
 
 import structlog
 from fastapi import Depends, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.rate_limit import login_limiter
+from app.core.security import verify_password
 from app.db.session import get_db
+from app.models.employee import Employee
 from app.services.ai.actions.client import HRMSActionClient
 from app.services.ai.audit.events import AuditEventType, AuditStatus
 from app.services.ai.audit.provider import observe
@@ -47,6 +51,8 @@ from app.services.ai.errors import (
     AIError,
     AIInactiveUserError,
     AIPermissionDeniedError,
+    AIStepUpFailedError,
+    AIStepUpThrottledError,
 )
 from app.services.ai.llm.base import LLMMessage, LLMProvider
 from app.services.ai.providers import get_llm_provider
@@ -157,11 +163,13 @@ class ActionAgentService:
             summary=prepared.summary,
             confirmation_id=token,
             expires_at=record.expires_at.isoformat() + "Z",
+            step_up_required=True if spec.step_up else None,
         )
 
     # --- confirm ------------------------------------------------------------------------------
 
-    async def confirm(self, ctx: AIUserContext, confirmation_id: object, access_token: str) -> ActionResponse:
+    async def confirm(self, ctx: AIUserContext, confirmation_id: object, access_token: str, *,
+                      password: object = None) -> ActionResponse:
         audit = self._audit(ctx, "confirmed")
         try:
             if not ctx.is_active:
@@ -173,7 +181,9 @@ class ActionAgentService:
             resource = TargetEmployee(record.target_employee_id) if record.target_employee_id else None
             try:
                 return await run_authorized(
-                    ctx, spec.capability, lambda: self._execute(record.id, spec, prepared, access_token, audit), resource=resource
+                    ctx, spec.capability, lambda: self._execute(record.id, spec, prepared, access_token, audit,
+                                                                step_up=(ctx.employee_id, password)),
+                    resource=resource,
                 )
             except AIPermissionDeniedError:
                 await self._confirmations.finish(record.id, "DENIED", "AI_PERMISSION_DENIED")
@@ -187,7 +197,11 @@ class ActionAgentService:
         finally:
             self._log(audit)
 
-    async def _execute(self, record_id: int, spec: ActionSpec, prepared, access_token: str, audit: ActionAuditRecord) -> ActionResponse:
+    async def _execute(self, record_id: int, spec: ActionSpec, prepared, access_token: str, audit: ActionAuditRecord,
+                       *, step_up: tuple[int, object]) -> ActionResponse:
+        # AIS-12: after authorization (above), before the claim: a refused password leaves the confirmation PENDING.
+        if spec.step_up:
+            await self._verify_step_up(*step_up)
         # B-12: claim first (atomic, single use). Only the request that wins the claim records ACTION_CONFIRMED, so a
         # replay that loses the race leaves no "confirmed" evidence (it is audited as ACTION_REJECTED instead).
         await self._confirmations.claim(record_id)
@@ -223,6 +237,16 @@ class ActionAgentService:
 
     # --- helpers ------------------------------------------------------------------------------
 
+    async def _verify_step_up(self, employee_id: int, password: object) -> None:
+        """The confirming user re-enters their own password. Throttled per user (login limiter, before any hashing);
+        the password is never logged, stored or audited."""
+        if not login_limiter.allow(f"ai-step-up|{employee_id}", settings.auth_login_rate_limit_per_minute):
+            raise AIStepUpThrottledError()
+        hashed = (await self._db.execute(select(Employee.hashed_password).where(Employee.id == employee_id))).scalar_one_or_none()
+        if (not isinstance(password, str) or not password or len(password) > MAX_STEP_UP_PASSWORD_CHARS
+                or not hashed or not verify_password(password, hashed)):
+            raise AIStepUpFailedError()
+
     @staticmethod
     def _audit(ctx: AIUserContext, stage: str) -> ActionAuditRecord:
         return ActionAuditRecord(employee_id=ctx.employee_id, role=ctx.role.value, stage=stage)
@@ -233,7 +257,9 @@ class ActionAgentService:
         _record_action_events(audit)
 
 
-_DENIAL_CODES = {"AI_PERMISSION_DENIED", "AI_USER_INACTIVE", "AI_TARGET_NOT_FOUND", "AI_CONFIRMATION_INVALID"}
+_DENIAL_CODES = {"AI_PERMISSION_DENIED", "AI_USER_INACTIVE", "AI_TARGET_NOT_FOUND", "AI_CONFIRMATION_INVALID",
+                 "AI_STEP_UP_FAILED", "AI_STEP_UP_THROTTLED"}
+MAX_STEP_UP_PASSWORD_CHARS = 128  # the account password policy's maximum length
 
 
 def _record_action_events(audit: ActionAuditRecord) -> None:

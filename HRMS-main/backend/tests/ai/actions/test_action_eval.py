@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app.models.leave_request import LeaveRequest
 from evals.action_agent_eval import evaluate, load_cases
 from evals.reporting import from_actions, publish
-from tests.support.data import EMPLOYEE_PENDING_LEAVE_ID
+from tests.support.data import EMPLOYEE_PENDING_LEAVE_ID, PASSWORD
 from tests.support.db import business_snapshot
 
 REQUIRED_VALID = {"LEAVE_CREATE", "LEAVE_APPROVE", "LEAVE_REJECT", "TICKET_CREATE", "TICKET_ASSIGN",
@@ -39,7 +39,8 @@ async def test_action_eval_passes(agent, login, db):
 
     async def confirm(role_key, confirmation_id):
         service, ctx = services[role_key]
-        return await service.confirm(ctx, confirmation_id, await login(role_key))
+        # AIS-12: the authorized user re-enters their (synthetic) password; ignored for non-step-up actions.
+        return await service.confirm(ctx, confirmation_id, await login(role_key), password=PASSWORD)
 
     report = await evaluate(cases, propose, confirm, business_snapshot)
     publish(from_actions(report))

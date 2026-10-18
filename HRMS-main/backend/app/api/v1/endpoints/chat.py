@@ -108,7 +108,7 @@ async def confirm_action(
     access_token: str = Depends(oauth2_scheme),
 ):
     """Execute a previously proposed action via the existing HRMS API, as the authenticated user."""
-    result = await service.confirm(ctx, payload.confirmation_id, access_token)
+    result = await service.confirm(ctx, payload.confirmation_id, access_token, password=payload.password)
     return success_response(result.model_dump(exclude_none=True))
 
 

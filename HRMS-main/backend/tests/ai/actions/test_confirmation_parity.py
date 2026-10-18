@@ -21,7 +21,7 @@ from app.models.ticket import Ticket
 from app.services.ai.authorization import build_ai_user_context
 from app.services.ai.errors import AIInactiveUserError, AIPermissionDeniedError
 from tests.ai.actions.conftest import RAVI_KUMAR, ScriptedActionLLM, proposal
-from tests.support.data import EMPLOYEE, EMPLOYEE_TICKET_ID, MANAGER, OUTSIDER
+from tests.support.data import EMPLOYEE, EMPLOYEE_TICKET_ID, MANAGER, OUTSIDER, PASSWORD
 from tests.support.db import business_snapshot
 from tests.support.http import data
 
@@ -120,7 +120,7 @@ async def test_target_state_change_is_refused_by_the_api(agent, db, login, clien
     service, _, ctx = await agent("admin", proposal("EMPLOYEE_DEACTIVATE", target_employee_id=OUTSIDER.id))
     proposed = await service.propose(ctx, "deactivate")
     assert (await client.delete(f"/api/v1/employees/{OUTSIDER.id}", headers=await auth("admin"))).status_code == 200
-    result = await service.confirm(ctx, proposed.confirmation_id, await login("admin"))
+    result = await service.confirm(ctx, proposed.confirmation_id, await login("admin"), password=PASSWORD)  # AIS-12
     assert result.status == "failed" and result.error_code == "ALREADY_INACTIVE"
 
 
