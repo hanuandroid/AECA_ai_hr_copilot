@@ -24,7 +24,7 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
 
 | ID | Finding (revalidated against `f8c551a`) | Phase | Acceptance criteria | Verification | Status |
 |---|---|---|---|---|---|
-| AIS-01 | Single-value SQL answer ("The result is …") stored as assistant text and sent to the classifier model as history | 1 | SQL-derived values absent from every later provider payload; immediate answer and owner replay unchanged | two-turn HTTP tests with payload spy; negative control on the old code | OPEN |
+| AIS-01 | Single-value SQL answer ("The result is …") stored as assistant text and sent to the classifier model as history | 1 | SQL-derived values absent from every later provider payload; immediate answer and owner replay unchanged | two-turn HTTP tests with payload spy; negative control on the old code | DONE (phase 1) |
 | AIS-02 | No central provider boundary: user text and history leave unminimised; no operation allowlist | 2 | every model call passes one policy in `audit/provider.observe`; unknown operation fails closed; credentials never sent; identifiers replaced before sending and restored only in the same request's output; counts (never values) audited | per-operation payload tests for `/chat` and the 3 direct endpoints | OPEN |
 | AIS-03 | Narrow detection (no email, separated phone, Aadhaar); no Unicode normalisation | 3 | NFKC + format-character stripping on every question; extended patterns with a measured synthetic false-positive / false-negative corpus | table-driven corpus tests | OPEN |
 | AIS-04 | Regex refusal rules run on `/chat` only | — | — | — | NOT PLANNED: stricter direct-endpoint refusals change their error contract; the deterministic controls behind them (SQL validator, scope, registry, confirmation, RAG guard) are the boundary and are tested per endpoint |
@@ -63,3 +63,20 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
 ## 3. Phase log
 
 (Each phase appends: expected behaviour, files changed, commands executed, observed results, commit, remaining risks.)
+
+### Phase 1 — AIS-01 SQL-derived values in classifier history · DONE
+
+- **Expected behaviour:** the user still receives the full SQL answer and can replay it; no later provider payload
+  contains a value from an earlier SQL result.
+- **Change:** `conversation/service.py` — `build_context` uses `_context_text()`: the assistant reply of any turn whose
+  stored route includes `SQL` becomes `SQL_REPLY_IN_CONTEXT` (decided by the backend-recorded route, not by pattern
+  matching; also covers rows stored before the fix; stored rows unchanged). Limitation: a combined turn
+  (e.g. `POLICY+SQL`) is replaced as a whole.
+- **Tests:** `tests/ai/orchestration/test_provider_payloads.py` — `test_sql_values_never_reach_the_classifier_through_history`
+  (synthetic email, leave reason, ticket text; actual outbound payloads of both turns), `test_direct_sql_endpoint_response_is_unchanged`;
+  `tests/ai/conversation/test_conversation_service.py` — `test_sql_turn_replies_never_enter_the_context` (8 routes),
+  `test_sql_placeholder_keeps_follow_up_state`. Doc: `data-processing.md` call site 1 corrected.
+- **Executed 2026-10-18:** focused 61 passed; the new two-turn tests on the original `service.py` (read-only mount,
+  copy in `/tmp`) failed 3/3 with the values present in the classifier payload; full backend **2924 passed**; offline
+  evals **139/139**; gate tests **25 passed**; `git diff --check` clean.
+- **Remaining:** the stored conversation still contains the value (owner-only replay; G-09).

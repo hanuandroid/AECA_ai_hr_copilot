@@ -8,7 +8,13 @@ from sqlalchemy import func, select
 
 from app.db.session import SessionLocal
 from app.models.ai_conversation import AIConversation, AIConversationMessage
-from app.services.ai.conversation.service import ASSISTANT, USER, build_context, parse_public_id
+from app.services.ai.conversation.service import (
+    ASSISTANT,
+    SQL_REPLY_IN_CONTEXT,
+    USER,
+    build_context,
+    parse_public_id,
+)
 from app.services.ai.errors import AIConversationLimitError, AIConversationNotFoundError
 from tests.ai.conversation.conftest import make_conversations
 
@@ -227,6 +233,37 @@ async def test_context_flags(conversations, ctx_for, route, status, expected):
     await turn(conversations, conversation, "q", "a", route=route, status=status)
     context = await conversations.get_recent_context(conversation, await ctx_for("employee"))
     assert (context.anchor_route, context.awaiting_clarification, context.awaiting_confirmation) == expected
+
+
+# R1: an assistant reply of a SQL turn can quote record values (here a synthetic email), so the classifier context
+# carries a fixed placeholder instead. Every other reply, all user text and the stored rows stay as they were.
+SQL_REPLY = "The result is someone@example.test."
+
+
+@pytest.mark.parametrize("route,forwarded", [
+    ("SQL", False), ("POLICY+SQL", False), ("SQL+ACTION", False),
+    ("POLICY", True), ("ACTION", True), ("CLARIFICATION", True), ("REFUSAL", True), (None, True),
+])
+async def test_sql_turn_replies_never_enter_the_context(conversations, ctx_for, route, forwarded):
+    ctx = await ctx_for("employee")
+    conversation = await conversations.create(ctx, "hello")
+    await turn(conversations, conversation, "What is my email address?", SQL_REPLY, route=route)
+    context = await conversations.get_recent_context(conversation, ctx)
+    assert [m.text for m in context.recent if m.role == USER] == ["What is my email address?"]  # user text unchanged
+    assert [m.text for m in context.recent if m.role == ASSISTANT] == [SQL_REPLY if forwarded else SQL_REPLY_IN_CONTEXT]
+    stored = await conversations.get_messages(conversation, 10)
+    assert stored[-1].content == SQL_REPLY  # the owner's replay is unchanged
+
+
+async def test_sql_placeholder_keeps_follow_up_state(conversations, ctx_for):
+    ctx = await ctx_for("employee")
+    conversation = await conversations.create(ctx, "hello")
+    await turn(conversations, conversation, "What is the WFH policy?", "Up to 2 WFH days per week.", route="POLICY")
+    await turn(conversations, conversation, "What is my email address?", SQL_REPLY, route="SQL")
+    context = await conversations.get_recent_context(conversation, ctx)
+    assert [m.text for m in context.recent] == ["What is the WFH policy?", "Up to 2 WFH days per week.",
+                                                "What is my email address?", SQL_REPLY_IN_CONTEXT]
+    assert context.anchor_question == "What is my email address?" and context.anchor_route == "SQL"
 
 
 async def test_confirmation_attempt_turns_are_transparent(conversations, ctx_for):

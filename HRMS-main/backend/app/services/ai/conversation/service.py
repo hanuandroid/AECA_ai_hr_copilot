@@ -37,6 +37,9 @@ CAPABILITY_ROUTES = frozenset({"POLICY", "SQL", "ACTION"})
 ANCHOR_STATUSES = frozenset({"answered", "partial", "clarification_required", "confirmation_required"})
 # RBAC step 7: shown on replay instead of a reply that cited a policy the reader can no longer read.
 WITHHELD_REPLY = "This answer is hidden because it cited an HR policy you can no longer access."
+# R1: what the classifier context shows instead of the assistant reply of a turn that used the SQL route. That reply
+# can contain HR record values (e.g. "The result is <email>."), which must not reach the model provider again.
+SQL_REPLY_IN_CONTEXT = "(Answered from HR records; the result is not included here.)"
 
 
 def parse_public_id(value: object) -> str | None:
@@ -185,7 +188,8 @@ class ConversationService:
 def build_context(messages: list[AIConversationMessage], max_chars: int, *, withheld: set[int] = frozenset()) -> ConversationContext:
     """Untrusted, bounded context from the last messages (oldest first).
 
-    - recent: newest messages first until `max_chars` is used, each capped at CONTEXT_MESSAGE_CHARS.
+    - recent: newest messages first until `max_chars` is used, each capped at CONTEXT_MESSAGE_CHARS. Assistant
+      replies of SQL turns are replaced by SQL_REPLY_IN_CONTEXT (see _context_text).
     - anchor: the latest successfully routed turn (refused and failed turns are skipped), paired with its
       USER message by request_id; only that user text (resolved form) is ever forwarded to a service.
     - flags describe only the latest assistant message ("yes"/"confirm" turns are skipped).
@@ -193,7 +197,7 @@ def build_context(messages: list[AIConversationMessage], max_chars: int, *, with
     recent: list[HistoryMessage] = []
     budget = max_chars
     for message in reversed(messages):
-        text = (WITHHELD_REPLY if message.id in withheld else message.content)[:CONTEXT_MESSAGE_CHARS]
+        text = _context_text(message, withheld)[:CONTEXT_MESSAGE_CHARS]
         if len(text) > budget:
             break
         recent.append(HistoryMessage(role=message.role, text=text))  # type: ignore[arg-type]
@@ -223,3 +227,18 @@ def build_context(messages: list[AIConversationMessage], max_chars: int, *, with
         awaiting_clarification=bool(latest and latest.status == "clarification_required"),
         awaiting_confirmation=bool(latest and latest.status == "confirmation_required"),
     )
+
+
+def _context_text(message: AIConversationMessage, withheld: set[int]) -> str:
+    """The text a stored message contributes to the classifier context.
+
+    An assistant reply of a turn whose (backend-recorded) route includes SQL is never forwarded: it may quote record
+    values that redaction cannot recognise (names, emails, leave reasons, ticket text). This is decided by the stored
+    route, not by inspecting the text, and it also applies to messages stored before this rule. A combined turn
+    (e.g. POLICY+SQL) is replaced as a whole. The stored message itself is unchanged, so the owner's replay still
+    shows the answer."""
+    if message.id in withheld:
+        return WITHHELD_REPLY
+    if message.role == ASSISTANT and "SQL" in (message.route or "").split("+"):
+        return SQL_REPLY_IN_CONTEXT
+    return message.content
