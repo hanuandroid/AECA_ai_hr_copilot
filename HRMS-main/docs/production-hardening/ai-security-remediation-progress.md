@@ -26,7 +26,7 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
 |---|---|---|---|---|---|
 | AIS-01 | Single-value SQL answer ("The result is …") stored as assistant text and sent to the classifier model as history | 1 | SQL-derived values absent from every later provider payload; immediate answer and owner replay unchanged | two-turn HTTP tests with payload spy; negative control on the old code | DONE (phase 1) |
 | AIS-02 | No central provider boundary: user text and history leave unminimised; no operation allowlist | 2 | every model call passes one policy in `audit/provider.observe`; unknown operation fails closed; credentials never sent; identifiers replaced before sending and restored only in the same request's output; counts (never values) audited | per-operation payload tests for `/chat` and the 3 direct endpoints | DONE (phase 2) |
-| AIS-03 | Narrow detection (no email, separated phone, Aadhaar); no Unicode normalisation | 3 | NFKC + format-character stripping on every question; extended patterns with a measured synthetic false-positive / false-negative corpus | table-driven corpus tests | OPEN |
+| AIS-03 | Narrow detection (no email, separated phone, Aadhaar); no Unicode normalisation | 3 | NFKC + format-character stripping on every question; extended patterns with a measured synthetic false-positive / false-negative corpus | table-driven corpus tests | DONE (phase 3) |
 | AIS-04 | Regex refusal rules run on `/chat` only | — | — | — | NOT PLANNED: stricter direct-endpoint refusals change their error contract; the deterministic controls behind them (SQL validator, scope, registry, confirmation, RAG guard) are the boundary and are tested per endpoint |
 | AIS-05 | Anthropic endpoint not pinned (OpenAI is) | 4 | Anthropic client pinned to the public API URL; `ANTHROPIC_BASE_URL` ignored | provider tests | OPEN |
 | AIS-06 | Anthropic server-side fallback beta on by default | 4 | existing configuration preserved; decision recorded | — | BLOCKED (G-05) |
@@ -104,3 +104,25 @@ Status: OPEN · IN PROGRESS · DONE (committed) · BLOCKED (decision named) · N
   187) — all passed after the fixes above; full backend **2938 passed**; offline evals **139/139**; gate tests **25**.
 - **Remaining:** names and free text are not recognisable (G-01/G-02); the model can mangle a placeholder (then the
   placeholder text, not the value, reaches the business API).
+
+### Phase 3 — AIS-03 Normalisation and identifier detection · DONE
+
+- **Expected behaviour:** every question is NFKC-normalised with invisible format characters removed before any rule,
+  service or model sees it; the provider boundary also recognises emails, phone numbers and spaced Aadhaar numbers;
+  the current message and the history are minimised identically; dates, amounts, ranges and short ids are untouched.
+- **Change:** `validation.normalize_text` (NFKC + Unicode category Cf removed) used by `validate_question` (all entry
+  points) and by `provider_policy.prepare` (all provider-bound text, including stored history); `redaction.py`:
+  `EMAIL_RE`, `AADHAAR_SPACED_RE`, `PHONE_CANDIDATE_RE` + `is_phone_number` (with "+": 8–15 digits; otherwise a
+  10-digit Indian mobile, optional 0/91 prefix; one consistent separator per number). These are provider-boundary
+  only: `redact()` (stored history, logs, SQL results shown to the user) is unchanged — that is decision G-09.
+- **Measured (synthetic corpus, `tests/ai/test_pii_detection_corpus.py`):** 22 positives (email, PAN, IFSC, Aadhaar
+  spaced/unspaced, account, 9 phone formats, full-width and Devanagari digits, zero-width obfuscation, mixed message,
+  credential) — **0 false negatives**; 9 negatives (dates, times, amounts, ranges, ticket/employee/order ids,
+  invoice/version strings, short digit groups) — **0 false positives**; 4 pinned known misses (person names, spelled
+  digits, free-text health reason, irregular grouping). One defect found and fixed while building the corpus: a date
+  followed by a phone number fused into one 18-digit candidate and the phone was missed.
+- **Tests:** corpus (43 incl. normalisation of full-width, zero-width, bidi override, ligature; invisible-only question
+  rejected; non-Latin text unchanged); `test_contact_details_in_current_and_earlier_turns_never_reach_the_classifier`.
+- **Executed 2026-10-18:** focused 550 + corpus 43 passed; full backend **2982 passed**; offline evals **139/139**;
+  gate tests **25**.
+- **Remaining:** names and free text (G-01/G-02); other national formats beyond the corpus are untested.

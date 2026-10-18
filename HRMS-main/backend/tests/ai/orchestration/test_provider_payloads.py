@@ -239,3 +239,19 @@ async def test_unregistered_operation_fails_closed_before_the_provider(payloads)
     with pytest.raises(AIProviderPolicyError):
         await observe(llm, "free_form").generate_structured([LLMMessage(role="user", content="hi")], RouterClassification)
     assert llm.calls == [] and payloads == []
+
+
+async def test_contact_details_in_current_and_earlier_turns_never_reach_the_classifier(client, auth, install_real, payloads):
+    """AIS-03: the current message and the history are minimised the same way (synthetic contact details)."""
+    email, phone = "someone.else@example.test", "+91 98765 43210"
+    install_real(full_llm(router=_router, sql="SELECT email FROM employees WHERE id = :me"))
+    headers, token = await _token(auth, "employee")
+    first = data(await client.post(CHAT, json={"message": f"What is my email address? Mine is not {email}"}, headers=headers))
+    await client.post(CHAT, json={"message": f"{UNCLASSIFIABLE} call me on {phone}",
+                                  "conversation_id": first["conversation_id"]}, headers=headers)
+    router_payloads = [text for schema, text in payloads if schema == RouterClassification.__name__]
+    assert len(router_payloads) == 2 and "<conversation_context>\nUser: " in router_payloads[1]
+    assert "[PII_EMAIL_1]" in router_payloads[1] and "[PII_PHONE_1]" in router_payloads[1]
+    for _, text in payloads:
+        assert email not in text and phone not in text and "98765 43210" not in text
+    _assert_nothing_prohibited(payloads, token)

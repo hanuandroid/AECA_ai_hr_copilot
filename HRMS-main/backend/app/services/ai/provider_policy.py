@@ -5,7 +5,9 @@ and optional SQL wording, action proposals), so /chat and the direct endpoints s
 
 - Operation allowlist: an operation that is not registered here fails closed; the provider is never called.
 - Credentials (JWTs, bearer tokens, API keys) are removed irreversibly.
-- Personal identifiers are replaced by placeholders such as "[PII_PAN_1]". The placeholder -> value map exists only in
+- Text is normalised first (NFKC, invisible format characters removed: AIS-03).
+- Personal identifiers (email, PAN, IFSC, Aadhaar, phone numbers, 9-18 digit numbers) are replaced by placeholders
+  such as "[PII_PAN_1]". Detection quality is measured in tests/ai/test_pii_detection_corpus.py. The placeholder -> value map exists only in
   memory for that one call. It is used to put the caller's own values back into the model's output for that same call
   (so an SQL literal, a ticket description or a clarification keeps what the user typed); it is never logged, stored,
   audited or reused. Only category counts are audited.
@@ -17,6 +19,7 @@ System prompts are fixed constants and are not rewritten.
 """
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -24,7 +27,19 @@ from pydantic import BaseModel, ValidationError
 
 from app.services.ai.errors import AIInvalidOutputError, AIProviderPolicyError
 from app.services.ai.llm.base import LLMMessage
-from app.services.ai.redaction import API_KEY_RE, BEARER_RE, IFSC_RE, JWT_RE, LONG_NUMBER_RE, PAN_RE
+from app.services.ai.redaction import (
+    AADHAAR_SPACED_RE,
+    API_KEY_RE,
+    BEARER_RE,
+    EMAIL_RE,
+    IFSC_RE,
+    JWT_RE,
+    LONG_NUMBER_RE,
+    PAN_RE,
+    PHONE_CANDIDATE_RE,
+    is_phone_number,
+)
+from app.services.ai.validation import normalize_text
 
 PROVIDER_OPERATIONS = frozenset({"route_classification", "policy_answer", "sql", "action_proposal"})
 
@@ -34,11 +49,14 @@ _CREDENTIALS: tuple[tuple[re.Pattern[str], str], ...] = (
     (BEARER_RE, "Bearer [REDACTED_TOKEN]"),
     (API_KEY_RE, "[REDACTED_KEY]"),
 )
-# Replaced by placeholders (category, pattern), most specific first.
-_IDENTIFIERS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("PAN", PAN_RE),
-    ("IFSC", IFSC_RE),
-    ("NUMBER", LONG_NUMBER_RE),
+# Replaced by placeholders (category, pattern, optional check of the match), most specific first.
+_IDENTIFIERS: tuple[tuple[str, re.Pattern[str], Callable[[str], bool] | None], ...] = (
+    ("EMAIL", EMAIL_RE, None),
+    ("PAN", PAN_RE, None),
+    ("IFSC", IFSC_RE, None),
+    ("AADHAAR", AADHAAR_SPACED_RE, None),
+    ("PHONE", PHONE_CANDIDATE_RE, is_phone_number),
+    ("NUMBER", LONG_NUMBER_RE, None),
 )
 _PLACEHOLDER_RE = re.compile(r"\[PII_[A-Z]+_\d+\]")
 _EXISTING_PLACEHOLDER_RE = re.compile(r"\[PII_")  # placeholder-looking input text is neutralised, never restored
@@ -68,8 +86,9 @@ class _Replacer:
         return text
 
     def identifiers(self, text: str) -> str:
-        for category, pattern in _IDENTIFIERS:
-            text = pattern.sub(lambda match, c=category: self._placeholder(c, match.group(0)), text)
+        for category, pattern, check in _IDENTIFIERS:
+            text = pattern.sub(lambda match, c=category, k=check: (
+                self._placeholder(c, match.group(0)) if k is None or k(match.group(0)) else match.group(0)), text)
         return text
 
     def _placeholder(self, category: str, value: str) -> str:
@@ -93,7 +112,7 @@ def prepare(operation: str, messages: list[LLMMessage]) -> PreparedPayload:
         payload = PreparedPayload(messages=[])
         replacer = _Replacer(payload)
         for message in messages:
-            text = _EXISTING_PLACEHOLDER_RE.sub("[PII-", message.content)
+            text = _EXISTING_PLACEHOLDER_RE.sub("[PII-", normalize_text(message.content))  # AIS-03
             text = replacer.identifiers(replacer.credential(text))
             payload.messages.append(LLMMessage(role=message.role, content=text))
         return payload
