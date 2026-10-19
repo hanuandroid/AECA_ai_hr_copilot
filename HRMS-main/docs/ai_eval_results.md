@@ -18,7 +18,7 @@ date (2026-10-19: backend 3154, frontend 238). Current figures: `production-hard
 ```bash
 cd HRMS-main/backend
 .venv/Scripts/python -m evals.run_evals            # offline; writes evals/results/{suite}.json, summary.json, summary.txt
-.venv/Scripts/python -m evals.run_evals --live     # adds the live router evaluation, only if ANTHROPIC_API_KEY is set
+.venv/Scripts/python -m evals.run_evals --live     # + live suites (needs approval; provider from the environment, §4)
 ```
 
 The runner executes the eval tests in a pytest **subprocess**. The test harness builds a temporary database and
@@ -94,9 +94,18 @@ a test catches it. All are caught:
 
 ## 4. Live-model evaluation
 
-`LIVE_MODEL_EVAL = NOT_RUN`: no `ANTHROPIC_API_KEY` in this environment. The harness
-(`evals/live_router_eval.py`, run by `run_evals --live`) classifies the router dataset with the real fast model
-and reports it separately as `mode: live-model`. It never calls the services and never opens a database. No live
+`LIVE_MODEL_EVAL = NOT_RUN`: no live run has been approved or executed. Since 2026-10-19 (capstone phase 4)
+`run_evals --live` selects the provider from the process environment and never switches it: `AI_LLM_PROVIDER=anthropic`
+(the default) needs `ANTHROPIC_API_KEY`; `AI_LLM_PROVIDER=openai` needs `OPENAI_API_KEY` and `AI_OPENAI_MODEL`; `fake`
+or a missing key/model reports NOT_RUN, any other provider CONFIG_ERROR, and no call is made. It runs two live suites,
+reported separately as `mode: live-model` with provider, model, start/finish time, per-case outcomes and usage
+(estimated cost only when prices are configured, otherwise null):
+- `router_live` (`evals/live_router_eval.py`): routing of the router dataset;
+- `policy_live` (`tests/ai/rag/test_policy_eval_live.py`, skipped in normal test runs): real Policy RAG answers on
+  the 11 policy cases, scored for retrieval, citation validity, grounding with the expected fact, and refusal; every
+  call passes the provider boundary and a per-question request budget; a provider error is a failed case.
+The selection, fail-closed behaviour and reporting are tested offline (`tests/ai/audit/test_eval_reporting.py`). The
+original router harness It never calls the services and never opens a database. No live
 answer quality, SQL generation quality or action-extraction quality has been measured. Those are the main open
 evaluation items before a production rollout.
 
@@ -123,5 +132,6 @@ Estimated cost is `null` because no `AI_OPENAI_*_COST_PER_MTOK` prices are confi
 **Limitations:**
 - One run of each check, so this is not a statistical evaluation.
 - The quality evaluations are still **NOT RUN**: routing accuracy, faithfulness, citation correctness, SQL accuracy and action extraction (Phase 3 workstreams 3.1 / 3.4).
-- `python -m evals.run_evals --live` currently checks only `ANTHROPIC_API_KEY`.
+- `python -m evals.run_evals --live` supports Anthropic and OpenAI since 2026-10-19 (not yet executed live). Live SQL
+  generation and action extraction quality are still not covered by a live suite.
 - The OpenAI data-processing decisions (`data-processing.md` §5, items 7–11) remain open.

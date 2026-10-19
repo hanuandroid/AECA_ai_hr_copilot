@@ -325,8 +325,7 @@ Next.js /copilot ─► FastAPI /api/v1/chat ─► AI authorization (DB role, I
 - **Tests and evaluation** (offline, no API key):
   - `cd backend && .venv/Scripts/python -m pytest -q`
   - `cd frontend && npm test && npm run build`
-  - `cd backend && .venv/Scripts/python -m evals.run_evals`. Add `--live` (with `ANTHROPIC_API_KEY`) for the live
-    router evaluation.
+  - `cd backend && .venv/Scripts/python -m evals.run_evals`. `--live` runs the live-model suites (router classification and Policy RAG answer quality) with the provider selected by the environment: `AI_LLM_PROVIDER=anthropic` + `ANTHROPIC_API_KEY`, or `AI_LLM_PROVIDER=openai` + `OPENAI_API_KEY` + `AI_OPENAI_MODEL`; otherwise NOT_RUN. External calls that cost money: run only with approval and synthetic data.
 
 Docs:
 - [`ai_architecture.md`](docs/ai_architecture.md)

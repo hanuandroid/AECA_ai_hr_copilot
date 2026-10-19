@@ -648,7 +648,8 @@ Runner: `backend/evals/run_evals.py`. It runs the six suites as a pytest subproc
 - **Failure reporting:** per-suite JSON plus the last 20k characters of pytest output (`run_evals.py:38-48`).
 - **CI integration: none.** There's no `.github/` or other pipeline.
 - **Regression threshold or release gate:** the eval tests assert a pass, but nothing enforces them before a merge or deploy.
-- **The `--live` gate** reads `os.environ["ANTHROPIC_API_KEY"]`; a key that exists only in `backend/.env` reports NOT_RUN.
+- **The `--live` gate** reads the provider, key and model from the process environment only (Anthropic or OpenAI since
+  2026-10-19); a key that exists only in `backend/.env` reports NOT_RUN.
 
 ### K.2 Test suites (deterministic)
 Static counts of `def test_` functions, before parametrization: characterization 64, authorization 45, RAG 81, SQL 84, actions 58, orchestration 134, conversation 108, audit 84, hardening 41. Collected totals per phase are in `docs/phase-status.md`. Last full run: **1687 passed on 2026-10-10** (Python 3.13, this machine). Frontend: 5 Vitest files (86 tests [inherited]; not run on this machine).
@@ -877,7 +878,7 @@ Priorities:
 | # | Documentation says | Implementation / evidence shows |
 |---|---|---|
 | D1 | `.claude/rules/*` and several skills and agents refer to `services/ai/api_tools.py`, `sql_executor.py`, `ai_audit_logs`, `llm/fake.py` "hash embedding", `/ai-copilot`, `components/ai/*` | The actual modules are `actions/client.py`, `sql/executor.py`, `ai_audit_events`, `embeddings.FakeEmbeddingProvider`, `/copilot`, `components/copilot/*`. CLAUDE.md is accurate |
-| D2 | `.claude/rules/testing.md`: real-provider runs via `evals/run_evals.py --provider real` | The flag is `--live`, and it covers **router classification only** |
+| D2 | `.claude/rules/testing.md`: real-provider runs via `evals/run_evals.py --provider real` | The flag is `--live`. It covered router classification only; since 2026-10-19 it also scores Policy RAG answers |
 | D3 | `.claude/rules/architecture.md` lists AI-owned tables `policy_chunks, ai_audit_logs, ai_pending_actions` | The AI tables are `policy_chunks`, `ai_pending_actions`, `ai_conversations`, `ai_conversation_messages`, `ai_audit_events` |
 | D4 | Phase 10 final report §3: identity guarantees ("forged claims ignored") presented as verified | A refresh token was accepted as an access token until the 2026-10-10 fix (uncommitted) |
 | D5 | Phase 3–10 reports: fastembed "could not load on this Windows host"; Docker unverified | fastembed works in the Docker container `[runtime 2026-10-10]` |

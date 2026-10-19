@@ -27,7 +27,7 @@ async def evaluate_live(provider_factory: Callable[[], Any], cases: list[dict[st
     from app.services.ai.orchestration.classifier import RouterClassifier
 
     cases = cases if cases is not None else load_cases()
-    passed, failures, llm_cases = 0, [], 0
+    passed, failures, llm_cases, outcomes = 0, [], 0, []
     for case in cases:
         classifier = RouterClassifier(llm_factory=provider_factory)
         try:
@@ -35,19 +35,26 @@ async def evaluate_live(provider_factory: Callable[[], Any], cases: list[dict[st
         except Exception as error:  # noqa: BLE001 - a provider failure is a failed case, not a crash
             route = f"error:{type(error).__name__}"
         llm_cases += int(classifier.llm_calls > 0)
-        if route == case["expected_route"]:
-            passed += 1
-        else:
+        ok = route == case["expected_route"]
+        passed += int(ok)
+        if not ok:
             failures.append(case["id"])
+        outcomes.append({"id": case["id"], "expected_route": case["expected_route"], "route": route, "passed": ok,
+                         "reached_model": classifier.llm_calls > 0})
     return SuiteResult("router_live", len(cases), passed, {"route_accuracy": round(passed / len(cases), 4) if cases else 0.0},
                        failures, mode="live-model",
-                       notes=f"{llm_cases} of {len(cases)} cases reached the live model; the rest were decided by rules")
+                       notes=f"{llm_cases} of {len(cases)} cases reached the live model; the rest were decided by rules",
+                       details={"cases": outcomes})
 
 
 def main() -> None:
     from app.services.ai.providers import get_fast_llm_provider
 
-    print(json.dumps(asyncio.run(evaluate_live(get_fast_llm_provider)).to_dict(), sort_keys=True))
+    provider = get_fast_llm_provider()  # fails closed (AI_UNAVAILABLE) on a missing key or model: no call is made
+    result = asyncio.run(evaluate_live(lambda: provider))
+    result.details = {"provider": getattr(provider, "name", None), "model": getattr(provider, "model", None),
+                      **(result.details or {})}
+    print(json.dumps(result.to_dict(), sort_keys=True))
 
 
 if __name__ == "__main__":

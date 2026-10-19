@@ -170,7 +170,8 @@ fail-closed path.
   it can never touch `storage/hrms.db`. It writes `evals/results/<suite>.json`, `summary.json` and `summary.txt`
   (git-ignored) and prints the summary.
 - `--live` adds the live-model router classification (`evals/live_router_eval.py`) **only if `ANTHROPIC_API_KEY`
-  is set**. Otherwise the report says `LIVE_MODEL_EVAL = NOT_RUN`. Live results are never faked or mixed with
+  is set** (as designed in Phase 8; since 2026-10-19 the provider may also be OpenAI and Policy RAG answers are
+  scored too, see `ai_eval_results.md` §4). Otherwise the report says `LIVE_MODEL_EVAL = NOT_RUN`. Live results are never faked or mixed with
   offline results.
 - The actions suite executes confirmed cases through the real HRMS API, but only on the throwaway evaluation
   database. The proposal steps assert that business data is unchanged.

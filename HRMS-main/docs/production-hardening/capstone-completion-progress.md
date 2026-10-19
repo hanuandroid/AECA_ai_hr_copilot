@@ -25,7 +25,7 @@ not committed). Treat the code and freshly observed results as authoritative; th
 | 1 | Reconcile status documents (README, phase-status, ai_eval_results, CLAUDE.md, handoff) | DONE | see log |
 | 2 | Architecture doc corrections + deliverable map | DONE | see log |
 | 3 | G-11 operator documentation | DONE | see log |
-| 4 | Live evaluation runner: OpenAI selection + answer-level scoring (offline tests only; never executed live) | PENDING | |
+| 4 | Live evaluation runner: OpenAI selection + answer-level scoring (offline tests only; never executed live) | DONE | see log |
 | 5 | `docs/demo-script.md` | PENDING | |
 | 6 | Step-up failure-mode tests on every protected page | DONE | see log |
 | 7 | Browser walkthrough evidence (or NOT_RUN checklist) | PENDING | |
@@ -107,3 +107,34 @@ CI gate tests `.github/scripts` **25 passed**.
   single source of current status so the other files do not need new numbers each time.
 - "Ready for final submission" (2026-10-03) removed from the README and the phase-status banner. Old counts (1685,
   86, 2778, 152) remain only in dated historical entries. `ai_eval_results.md` §3 is replaced in Phase 8.
+
+### Phase 4 — Live evaluation runner: Anthropic and OpenAI, answer-level scoring · DONE (2026-10-19; never executed live)
+
+- `evals/run_evals.py`: `select_live_provider(env)` reads the provider, key and model **names** from the process
+  environment: `anthropic` (default) needs `ANTHROPIC_API_KEY` (model `AI_LLM_MODEL` or the app default); `openai`
+  needs `OPENAI_API_KEY` + `AI_OPENAI_MODEL` (no default model assumed); `fake`/missing values → NOT_RUN; anything else
+  → CONFIG_ERROR; no subprocess and no call unless READY. The chosen provider is passed explicitly to every live
+  subprocess (no fallback), and each suite must report the provider it actually used, otherwise the run is FAILED.
+  A requested live run that fails or is misconfigured sets exit code 1; NOT_RUN does not.
+- Live suites: `router_live` (now with provider, model and per-case outcomes) and new `policy_live`
+  (`tests/ai/rag/test_policy_eval_live.py`, skipped unless the runner sets `AI_LIVE_EVAL=1`): real Policy RAG answers
+  on the 11 policy cases, scored by the offline scorer (retrieval, citation validity, grounding with the expected
+  fact, refusal). Calls go through `PolicyRagService` → `observe` → `provider_policy` (boundary kept); each question
+  has its own AIS-10 request budget; a provider error is a failed case, never a correct refusal; usage is summed from
+  provider-reported numbers and the estimated cost is null unless prices are configured and every call reported usage.
+  Helpers: `evals/live_policy_eval.py`. Report: provider, model, start/finish timestamps, per-suite metrics, usage, cost.
+- Tests (offline, no network): `tests/ai/audit/test_eval_reporting.py` +15 (selection table incl. "a key for the other
+  provider never causes a switch" and "no key is echoed"; explicit provider in every subprocess; provider-switch and
+  incomplete-suite → FAILED; no subprocess unless READY; exit codes; usage meter never invents cost; provider error =
+  failed case; one budget per question; live test is opt-in). One existing test was adapted: `test_live_eval_is_never_faked`
+  now passes its environment explicitly (same Anthropic expectation; additionally asserts that the harness's `fake`
+  provider is never treated as live).
+- Executed: focused files 34 passed / 1 skipped; `tests/ai/audit` + `tests/ai/rag` with `--network none`: 368 passed,
+  1 skipped (the opt-in live test); offline `run_evals` 139/139; `--live` without a key → NOT_RUN (exit 0); OpenAI
+  without a model → NOT_RUN. Offline wiring probe of the live policy path (`--network none`, quoting stand-in named
+  `openai`): 11 cases scored, provider recorded, 8 calls, usage unreported → cost null. gitleaks `--no-git` on the
+  changed files: no leaks. **No external model was called** (Gate B).
+- Docs: `ai_eval_results.md` §4 and limits, README, `CLAUDE.md`, `ai-components-architecture-and-production-readiness.md`,
+  `architecture/phase-8-audit-observability.md` updated.
+- Limits: live SQL generation and action extraction are not covered by a live suite; live retrieval uses the offline
+  hash embedder; the per-user rate limit and daily token budget (HTTP dependencies) do not apply to the evaluation.

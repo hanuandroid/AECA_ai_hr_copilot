@@ -92,9 +92,184 @@ def test_summary_and_render_use_actual_numbers_and_flag_missing_suites():
 
 
 def test_live_eval_is_never_faked(monkeypatch):
+    # Capstone phase 4: the live provider is now selected from the environment (anthropic or openai). This test used to
+    # call run_live(True) with the harness environment and expect the Anthropic message; it now passes the environment
+    # explicitly. Same expectation for Anthropic, plus the harness's fake provider is never treated as a live model.
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     assert run_evals.run_live(False)["status"] == "NOT_RUN"
-    assert run_evals.run_live(True) == {"status": "NOT_RUN", "reason": "ANTHROPIC_API_KEY is not set"}
+    assert run_evals.run_live(True, env={"AI_LLM_PROVIDER": "anthropic"}) == {
+        "status": "NOT_RUN", "reason": "ANTHROPIC_API_KEY is not set"}
+    assert run_evals.run_live(True)["status"] == "NOT_RUN"  # the harness sets AI_LLM_PROVIDER=fake
+
+
+SYNTHETIC_KEY = "synthetic-not-a-key"
+
+
+@pytest.mark.parametrize(("env", "expected"), [
+    ({}, {"status": "NOT_RUN", "reason": "ANTHROPIC_API_KEY is not set"}),  # the application default provider
+    ({"ANTHROPIC_API_KEY": SYNTHETIC_KEY}, {"status": "READY", "provider": "anthropic", "model": "application default"}),
+    ({"AI_LLM_PROVIDER": "Anthropic", "ANTHROPIC_API_KEY": SYNTHETIC_KEY, "AI_LLM_MODEL": "model-a"},
+     {"status": "READY", "provider": "anthropic", "model": "model-a"}),
+    ({"AI_LLM_PROVIDER": "openai"}, {"status": "NOT_RUN", "reason": "OPENAI_API_KEY is not set"}),
+    ({"AI_LLM_PROVIDER": "openai", "OPENAI_API_KEY": SYNTHETIC_KEY},
+     {"status": "NOT_RUN", "reason": "AI_OPENAI_MODEL is not set"}),  # no default OpenAI model is ever assumed
+    ({"AI_LLM_PROVIDER": "openai", "OPENAI_API_KEY": "  ", "AI_OPENAI_MODEL": "model-o"},
+     {"status": "NOT_RUN", "reason": "OPENAI_API_KEY is not set"}),
+    ({"AI_LLM_PROVIDER": "openai", "OPENAI_API_KEY": SYNTHETIC_KEY, "AI_OPENAI_MODEL": "model-o"},
+     {"status": "READY", "provider": "openai", "model": "model-o"}),
+    # a key for the other provider never causes a switch
+    ({"AI_LLM_PROVIDER": "openai", "ANTHROPIC_API_KEY": SYNTHETIC_KEY, "AI_OPENAI_MODEL": "model-o"},
+     {"status": "NOT_RUN", "reason": "OPENAI_API_KEY is not set"}),
+    ({"AI_LLM_PROVIDER": "fake", "ANTHROPIC_API_KEY": SYNTHETIC_KEY},
+     {"status": "NOT_RUN", "reason": "AI_LLM_PROVIDER=fake gives scripted output, not a live model"}),
+    ({"AI_LLM_PROVIDER": "litellm", "OPENAI_API_KEY": SYNTHETIC_KEY},
+     {"status": "CONFIG_ERROR", "reason": "unsupported AI_LLM_PROVIDER for a live run: 'litellm' (use anthropic or openai)"}),
+])
+def test_live_provider_selection(env, expected):
+    selection = run_evals.select_live_provider(env)
+    assert selection == expected
+    assert SYNTHETIC_KEY not in json.dumps(selection)  # a key is never echoed
+
+
+def _fake_live_subprocesses(monkeypatch, *, used_provider: str, policy_returncode: int = 0):
+    """Stands in for both live subprocesses (no network): records each call's environment and writes canned results."""
+    calls = []
+
+    def fake_run(command, cwd, env, capture_output, text):
+        calls.append({"command": command, "env": env})
+        details = {"provider": used_provider, "model": "model-o"}
+        if "evals.live_router_eval" in command:
+            result = SuiteResult("router_live", 2, 2, {"route_accuracy": 1.0}, mode="live-model", details=details)
+            return SimpleNamespace(returncode=0, stdout=json.dumps(result.to_dict()) + "\n", stderr="")
+        usage = {"calls": 3, "input_tokens": 300, "output_tokens": 30, "calls_without_usage": 0, "estimated_cost_usd": None}
+        result = SuiteResult("policy_live", 3, 2, {"grounding": 0.5}, ["pol-002"], mode="live-model",
+                             details={**details, "usage": usage, "cases": []})
+        Path(env[reporting.RESULTS_ENV], "policy_live.json").write_text(json.dumps(result.to_dict()), encoding="utf-8")
+        return SimpleNamespace(returncode=policy_returncode, stdout="", stderr="")
+
+    monkeypatch.setattr(run_evals.subprocess, "run", fake_run)
+    return calls
+
+
+OPENAI_ENV = {"AI_LLM_PROVIDER": "openai", "OPENAI_API_KEY": SYNTHETIC_KEY, "AI_OPENAI_MODEL": "model-o"}
+
+
+def test_live_run_passes_the_selected_provider_to_every_suite(monkeypatch):
+    calls = _fake_live_subprocesses(monkeypatch, used_provider="openai")
+    live = run_evals.run_live(True, env=OPENAI_ENV)
+    assert live["status"] == "RUN" and live["errors"] == []
+    assert (live["provider"], live["model"]) == ("openai", "model-o")
+    assert [suite["suite"] for suite in live["suites"]] == ["router_live", "policy_live"]
+    assert live["started_at"] and live["finished_at"]
+    assert len(calls) == 2
+    for call in calls:
+        assert call["env"]["AI_LLM_PROVIDER"] == "openai"
+        assert call["env"][run_evals.LIVE_FLAG] == "1" and call["env"][run_evals.LIVE_PROVIDER_ENV] == "openai"
+    assert run_evals.LIVE_TESTS[0] in calls[1]["command"]
+    text = reporting.render(reporting.summarize([], live=live))
+    assert "provider: openai   model: model-o" in text
+    assert "estimated cost not available (no prices configured)" in text and "failures: pol-002" in text
+    assert SYNTHETIC_KEY not in text and SYNTHETIC_KEY not in json.dumps(live)
+
+
+def test_live_run_reports_a_provider_switch_or_an_incomplete_suite_as_failed(monkeypatch):
+    _fake_live_subprocesses(monkeypatch, used_provider="anthropic")
+    switched = run_evals.run_live(True, env=OPENAI_ENV)
+    assert switched["status"] == "FAILED"
+    assert any("used provider 'anthropic', expected 'openai'" in error for error in switched["errors"])
+    _fake_live_subprocesses(monkeypatch, used_provider="openai", policy_returncode=1)
+    incomplete = run_evals.run_live(True, env=OPENAI_ENV)
+    assert incomplete["status"] == "FAILED"
+    assert incomplete["errors"] == ["live policy answer evaluation did not complete"]
+
+
+def test_no_subprocess_runs_unless_a_live_provider_is_ready(monkeypatch):
+    monkeypatch.setattr(run_evals.subprocess, "run", lambda *a, **k: pytest.fail("no live call may be attempted"))
+    for env in ({}, {"AI_LLM_PROVIDER": "fake"}, {"AI_LLM_PROVIDER": "openai", "OPENAI_API_KEY": SYNTHETIC_KEY},
+                {"AI_LLM_PROVIDER": "other", "OPENAI_API_KEY": SYNTHETIC_KEY}):
+        assert run_evals.run_live(True, env=env)["status"] in {"NOT_RUN", "CONFIG_ERROR"}
+
+
+def test_a_requested_live_run_that_cannot_run_correctly_sets_the_exit_code(monkeypatch, tmp_path):
+    offline = [SuiteResult(name, 1, 1, {}).to_dict() for name in reporting.SUITES]
+    monkeypatch.setattr(run_evals, "run_offline", lambda results_dir: (0, offline))
+    monkeypatch.setattr(run_evals, "run_live", lambda requested: {"status": "CONFIG_ERROR", "reason": "x"})
+    assert run_evals.main(["--results-dir", str(tmp_path), "--live"]) == 1
+    monkeypatch.setattr(run_evals, "run_live", lambda requested: {"status": "NOT_RUN", "reason": "OPENAI_API_KEY is not set"})
+    assert run_evals.main(["--results-dir", str(tmp_path), "--live"]) == 0
+
+
+# --- live policy helpers (offline, with fakes) ------------------------------------------------------------------
+
+
+async def test_usage_meter_counts_reported_usage_and_never_invents_cost():
+    from app.services.ai.llm.base import LLMMessage, LLMUsage, report_usage, usage_sink
+    from evals.live_policy_eval import UsageMeter
+
+    class Reporting:
+        name, model = "openai", "model-o"
+
+        def __init__(self, usage):
+            self._usage = usage
+
+        async def generate_structured(self, messages, schema, **kwargs):
+            report_usage(*self._usage)
+            return schema.model_validate({"answer": "a", "grounded": True, "citations": []})
+
+    from app.services.ai.rag.models import PolicyLLMOutput
+
+    for usage, expected_unreported in (((100, 10), 0), ((None, None), 1)):
+        meter = UsageMeter(Reporting(usage))
+        token = usage_sink.set(LLMUsage())
+        try:
+            await meter.generate_structured([LLMMessage(role="user", content="q")], PolicyLLMOutput)
+        finally:
+            usage_sink.reset(token)
+        summary = meter.usage()
+        assert summary["calls"] == 1 and summary["calls_without_usage"] == expected_unreported
+        assert summary["estimated_cost_usd"] is None  # no prices configured in tests, or usage missing
+
+
+async def test_a_provider_error_is_a_failed_case_never_a_correct_refusal():
+    from app.services.ai.errors import AIUnavailableError
+    from evals.live_policy_eval import BudgetedService, UsageMeter, live_suite
+    from evals.policy_rag_eval import CaseResult, EvalReport
+
+    class Failing:
+        async def answer(self, ctx, question):
+            raise AIUnavailableError()
+
+    budgeted = BudgetedService(Failing())
+    answer = await budgeted.answer(None, "Can I bring my pet to the office?")
+    assert (answer.grounded, answer.sources) == (False, [])  # looks like a refusal ...
+    cases = [{"id": "pol-x", "question": "Can I bring my pet to the office?"}]
+    report = EvalReport([CaseResult("pol-x", "refuse", None, True, None, True, "")])
+    suite = live_suite(report, cases, budgeted.errors, UsageMeter(SimpleNamespace(name="openai", model="m")))
+    assert (suite.total, suite.passed, suite.failures) == (1, 0, ["pol-x"])  # ... but is scored as a failure
+    assert suite.details["cases"][0]["error_code"] == "AI_UNAVAILABLE"
+
+
+async def test_each_live_question_gets_its_own_request_budget():
+    from app.services.ai import limits
+    from evals.live_policy_eval import BudgetedService
+
+    seen = []
+
+    class Recording:
+        async def answer(self, ctx, question):
+            seen.append(limits._request_budget.get())
+            return SimpleNamespace(answer="a", grounded=True, sources=[])
+
+    budgeted = BudgetedService(Recording())
+    await budgeted.answer(None, "q1")
+    await budgeted.answer(None, "q2")
+    assert all(budget is not None for budget in seen) and seen[0] is not seen[1]
+    assert limits._request_budget.get() is None  # restored afterwards
+
+
+def test_the_live_policy_test_is_opt_in_only():
+    source = Path(BACKEND_DIR, "tests/ai/rag/test_policy_eval_live.py").read_text(encoding="utf-8")
+    assert 'os.environ.get("AI_LIVE_EVAL") != "1"' in source and "pytest.mark.skipif" in source
 
 
 def test_runner_never_imports_the_application():

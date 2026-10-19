@@ -28,6 +28,7 @@ class SuiteResult:
     failures: list[str] = field(default_factory=list)
     mode: str = OFFLINE
     notes: str = ""
+    details: dict[str, Any] | None = None  # live runs only: provider, model, usage and per-case outcomes
 
     @property
     def failed(self) -> int:
@@ -38,7 +39,10 @@ class SuiteResult:
         return round(self.passed / self.total, 4) if self.total else 0.0
 
     def to_dict(self) -> dict[str, Any]:
-        return {**asdict(self), "failed": self.failed, "pass_rate": self.pass_rate}
+        data = {**asdict(self), "failed": self.failed, "pass_rate": self.pass_rate}
+        if self.details is None:
+            del data["details"]  # offline results keep their established shape
+        return data
 
 
 def _rate(values: list[bool]) -> float:
@@ -175,4 +179,29 @@ def render(summary: dict[str, Any]) -> str:
                  f"Pass rate: {summary['pass_rate'] * 100:.1f}%")
     live = summary["live_model_eval"]
     lines.append(f"LIVE_MODEL_EVAL = {live['status']}" + (f" ({live['reason']})" if live.get("reason") else ""))
+    lines.extend(render_live(live))
     return "\n".join(lines)
+
+
+def render_live(live: dict[str, Any]) -> list[str]:
+    """Live results, reported separately from the offline suites (only present after a live run was attempted)."""
+    if live.get("status") not in {"RUN", "FAILED"}:
+        return []
+    lines = [f"    provider: {live.get('provider')}   model: {live.get('model')}   "
+             f"started: {live.get('started_at')}   finished: {live.get('finished_at')}"]
+    for suite in live.get("suites", []):
+        lines.append(f"    {suite['suite']:<14} Cases: {suite['total']:<4} Passed: {suite['passed']:<4} "
+                     f"Failed: {suite['failed']:<3} Pass rate: {suite['pass_rate'] * 100:.1f}%")
+        for name, value in suite["metrics"].items():
+            lines.append(f"        {name:<30} {value * 100:.1f}%")
+        usage = (suite.get("details") or {}).get("usage")
+        if usage:
+            cost = usage.get("estimated_cost_usd")
+            lines.append(f"        usage: {usage.get('calls')} calls, {usage.get('input_tokens')} input / "
+                         f"{usage.get('output_tokens')} output tokens; estimated cost "
+                         + ("not available (no prices configured)" if cost is None else f"USD {cost}"))
+        if suite["failures"]:
+            lines.append(f"        failures: {', '.join(suite['failures'])}")
+    for error in live.get("errors", []):
+        lines.append(f"    error: {error}")
+    return lines
