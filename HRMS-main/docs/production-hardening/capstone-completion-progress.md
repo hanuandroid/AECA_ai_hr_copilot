@@ -26,7 +26,7 @@ not committed). Treat the code and freshly observed results as authoritative; th
 | 2 | Architecture doc corrections + deliverable map | DONE | see log |
 | 3 | G-11 operator documentation | DONE | see log |
 | 4 | Live evaluation runner: OpenAI selection + answer-level scoring (offline tests only; never executed live) | DONE | see log |
-| 5 | `docs/demo-script.md` | PENDING | |
+| 5 | `docs/demo-script.md` | DONE | see log |
 | 6 | Step-up failure-mode tests on every protected page | DONE | see log |
 | 7 | Browser walkthrough evidence (or NOT_RUN checklist) | PENDING | |
 | 8 | Offline evaluation evidence refresh | PENDING | |
@@ -138,3 +138,16 @@ CI gate tests `.github/scripts` **25 passed**.
   `architecture/phase-8-audit-observability.md` updated.
 - Limits: live SQL generation and action extraction are not covered by a live suite; live retrieval uses the offline
   hash embedder; the per-user rate limit and daily token budget (HTTP dependencies) do not apply to the evaluation.
+
+### Phase 5 — Demo script · DONE (2026-10-19)
+
+- New `docs/demo-script.md` (linked from the README): disposable checkout (the dev stack's DB is
+  `backend/storage/hrms.db` and `seed.py` recreates it), prerequisites, provider choice and its privacy/cost
+  implications (no key → `AI_UNAVAILABLE`; `fake` is not for demos), configuration, build/migrate/seed/ingest commands,
+  a read-only synthetic-data check (employee count 1003 = 3 fixed + 1000 Faker), the three seeded accounts, role-based
+  prompts with expected outcomes (policy with citations and an unanswerable question, SQL with scope limits, actions
+  with confirmation and the Copilot password step, security refusals), audit/usage pages, the G-11 dialogs and what
+  `log` mode does (wrong password logged, not blocked; `enforce` not to be switched on), teardown, and the no-key
+  automated evidence.
+- Every UI label, route, account, prompt and expectation was checked against the code, `seed.py`,
+  `assignment_eval.json` and the README. The commands were **not executed** in this phase (the document says so).

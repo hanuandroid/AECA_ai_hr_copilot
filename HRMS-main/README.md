@@ -352,6 +352,7 @@ Docs:
 - AI architecture and contracts: [`ai_architecture.md`](docs/ai_architecture.md), [`architecture/`](docs/architecture/)
 - AI permissions: [`ai_permissions_matrix.md`](docs/ai_permissions_matrix.md); AI evaluation results: [`ai_eval_results.md`](docs/ai_eval_results.md)
 - Final AI report: [`phase-10-final-report.md`](docs/phase-10-final-report.md)
+- Demo walkthrough (setup to teardown, synthetic data): [`demo-script.md`](docs/demo-script.md)
 
 
 Copyright (c) Codebasics. All rights reserved.
