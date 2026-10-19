@@ -31,7 +31,7 @@ not committed). Treat the code and freshly observed results as authoritative; th
 | 7 | Browser walkthrough evidence (or NOT_RUN checklist) | DONE (checklist; browser NOT_RUN) | see log |
 | 8 | Offline evaluation evidence refresh | DONE | see log |
 | 9 | Harness and CI reproducibility | DONE | see log |
-| 10 | Final verification at one HEAD | PENDING | |
+| 10 | Final verification at one HEAD | DONE | see log |
 | 11 | Rubric-to-evidence matrix and submission report | PENDING | |
 
 ## 2. Gates (never crossed without explicit approval)
@@ -202,3 +202,27 @@ CI gate tests `.github/scripts` **25 passed**.
 - Review of the rest: phase workflow with approval gates, characterization tests, negative tests per rule, deliberate
   regression checks, per-phase local commits and the trackers are in place; resumability now runs through
   `capstone-completion-progress.md` plus the handoff.
+
+### Phase 10 — Final verification at one commit · DONE (2026-10-19, HEAD `165e96e`)
+
+| Check | Command | Result at `165e96e` |
+|---|---|---|
+| Backend suite (includes step-up, SQL, RAG, authorization, actions, audit-privacy, hardening, characterization) | `sh HRMS-main/scripts/verify-backend.sh` (`python:3.11` container, Python 3.11.17, FastAPI 0.133.1, keys blanked, no `.env`) | **3172 passed, 1 skipped** (opt-in live test), 0 failed, 313.9 s |
+| Offline AI evaluations | same script (`python -m evals.run_evals`) | **139/139**; `LIVE_MODEL_EVAL = NOT_RUN` |
+| CI advisory-gate tests | same script (`pytest .github/scripts`) | **25 passed** |
+| Frontend suite | `npx vitest run` (host Node 24.13.0) | **238 passed** (16 files) |
+| TypeScript | `npx tsc --noEmit` | 0 errors |
+| Production build | `npm run build` | PASS |
+| Secret scan, history | gitleaks v8.18.4 `detect` (78 commits) | no leaks |
+| Secret scan, programme files | gitleaks `--no-git` on the 35 files changed since `29ca184` | no leaks |
+| Live-model evaluation | — | **NOT_RUN** (Gate B) |
+| Browser walkthrough | — | **NOT_RUN** (no browser tooling; checklist ready) |
+| CI on GitHub, pip-audit | — | **NOT_RUN** (not pushed, Gate A; pip-audit runs in CI) |
+
+Cumulative diff review `29ca184..165e96e` (35 files, +1496/−132): **no change** under `backend/app/`, `alembic/`,
+`frontend/app|components|lib/` or `storage/` — so no authorization, business-endpoint or migration change; changes are
+evaluation tooling and its tests, one frontend test file, documentation, the env templates (`STEP_UP_ENFORCEMENT=log`,
+the existing default; `config.py` default still `log`), the harness files and the verification script. The live
+evaluation paths call the model only through `observe(...)` (provider boundary kept). Passwords in tests are synthetic
+and only in headers or form fields; no real personal data; no protected `writing-block*.md` file is tracked or
+changed. Documentation claims were checked against code during each phase.
