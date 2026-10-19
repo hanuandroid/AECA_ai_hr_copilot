@@ -9,6 +9,6 @@
 - Never remove existing tests to make CI pass.
 - Never weaken assertions without documenting the reason in the test and in `docs/phase-status.md`.
 - If a test fails, find the root cause. Do not skip it, xfail it or loosen it.
-- Tests never call real LLM or embedding APIs. Use `llm/fake.py` and the hash embedding. Real-provider runs belong to `evals/run_evals.py --provider real`.
+- Tests never call real LLM or embedding APIs. Use `llm/fake.py` and the hash embedding (`embeddings.FakeEmbeddingProvider`). Real-provider runs belong to `python -m evals.run_evals --live`, only with approval (external calls that cost money).
 - Tests use an isolated temp SQLite DB built by running Alembic migrations. Never use `storage/hrms.db`.
 - Run from `HRMS-main/backend`: `pytest -q`. The frontend is checked with `npm run build` in `HRMS-main/frontend`.

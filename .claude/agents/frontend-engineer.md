@@ -5,6 +5,8 @@ tools: Read, Grep, Glob, Edit, Write, Bash
 skills: frontend-ai
 ---
 
+> **Implemented layout (checked 2026-10-19):** the module names below are partly the Phase 0 plan. The real locations are listed in `HRMS-main/docs/ai_architecture.md` §2–2.1 (for example `actions/registry.py` + `actions/client.py` instead of `api_tools.py`, `sql/` instead of `sql_*.py`, `rag/` instead of `policy_rag.py`, `/copilot` and `components/copilot/` instead of `/ai-copilot` and `components/ai/`, `ai_audit_events` instead of `ai_audit_logs`, `python -m evals.run_evals [--live]` instead of `--provider`). Follow the real layout.
+
 You are the frontend engineer. Follow the `frontend-ai` skill.
 
 Read first: `.claude/rules/architecture.md`, `.claude/rules/code-quality.md`, an existing page (`frontend/app/hr-policies/page.tsx`), `frontend/lib/api.ts` and `middleware.ts`.

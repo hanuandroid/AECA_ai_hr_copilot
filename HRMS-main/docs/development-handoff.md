@@ -114,9 +114,10 @@ python -m pytest -q                                      # full suite (some test
 python -m evals.run_evals                                # offline evals; live part reports NOT_RUN without a key
 python -m pytest -q ../../.github/scripts                # advisory-gate tests (run from backend/)
 
-# Same, without a local Python, in a throwaway container (this is how results were verified):
-docker run --rm -v "$PWD/../..:/repo" -w /repo/HRMS-main/backend python:3.11 sh -c \
-  "git config --global --add safe.directory '*' && pip install -q -r requirements-dev.txt && python -m pytest -q"
+# Same, without a local Python, in a throwaway container (run from the repository root). The script mounts the
+# repository read-only, leaves out backend/.env and backend/storage, blanks provider keys, and runs the tests, the
+# offline evaluations and the advisory-gate tests (docs/production-hardening/ci-and-validation.md):
+sh HRMS-main/scripts/verify-backend.sh
 
 # Frontend
 cd HRMS-main/frontend

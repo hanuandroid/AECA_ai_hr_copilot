@@ -100,6 +100,8 @@ Policy RAG index (after migrate + seed, or after policy changes; idempotent):
 docker-compose exec api python scripts/ingest_policies.py
 ```
 
+Without a local Python 3.11: `sh HRMS-main/scripts/verify-backend.sh` (throwaway container; no `.env`, keys blanked). All validation commands and the CI status: `HRMS-main/docs/production-hardening/ci-and-validation.md`.
+
 The harness (`tests/conftest.py`) builds a temp DB via Alembic and never touches `storage/hrms.db`. It restores both the DB and the policy files before each test. Fixtures: `client`, `auth("admin"|"manager"|"employee"|"outsider"|"inactive")`, `db`.
 
 ## Non-negotiables (details in `.claude/rules/`)

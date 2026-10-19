@@ -30,7 +30,7 @@ not committed). Treat the code and freshly observed results as authoritative; th
 | 6 | Step-up failure-mode tests on every protected page | DONE | see log |
 | 7 | Browser walkthrough evidence (or NOT_RUN checklist) | DONE (checklist; browser NOT_RUN) | see log |
 | 8 | Offline evaluation evidence refresh | DONE | see log |
-| 9 | Harness and CI reproducibility | PENDING | |
+| 9 | Harness and CI reproducibility | DONE | see log |
 | 10 | Final verification at one HEAD | PENDING | |
 | 11 | Rubric-to-evidence matrix and submission report | PENDING | |
 
@@ -123,7 +123,7 @@ CI gate tests `.github/scripts` **25 passed**.
   has its own AIS-10 request budget; a provider error is a failed case, never a correct refusal; usage is summed from
   provider-reported numbers and the estimated cost is null unless prices are configured and every call reported usage.
   Helpers: `evals/live_policy_eval.py`. Report: provider, model, start/finish timestamps, per-suite metrics, usage, cost.
-- Tests (offline, no network): `tests/ai/audit/test_eval_reporting.py` +15 (selection table incl. "a key for the other
+- Tests (offline, no network): `tests/ai/audit/test_eval_reporting.py` +15 test functions, +18 collected cases (selection table incl. "a key for the other
   provider never causes a switch" and "no key is echoed"; explicit provider in every subprocess; provider-switch and
   incomplete-suite → FAILED; no subprocess unless READY; exit codes; usage meter never invents cost; provider error =
   failed case; one budget per question; live test is opt-in). One existing test was adapted: `test_live_eval_is_never_faked`
@@ -176,3 +176,29 @@ CI gate tests `.github/scripts` **25 passed**.
   deliberate regression added to the mutation table; new §5 "Known limitations": no live result, 6 pinned false
   refusals on the benign set (G-10), SQL over-refusal, no entailment check in the grounding guard, the deliberate
   deviations, live-suite coverage limits.
+
+### Phase 9 — Harness engineering and CI reproducibility · DONE (2026-10-19)
+
+- **Committed verification script** `HRMS-main/scripts/verify-backend.sh` (replaces developer-specific scratchpad
+  scripts): throwaway `python:3.11` container, repository mounted read-only and copied without `backend/.env`,
+  `backend/storage`, `node_modules`, `.next` and the workspace notes; provider keys blanked; runs the backend suite,
+  offline evaluations and advisory-gate tests. Executed with the default `python:3.11` image: Python 3.11.17,
+  **3172 passed, 1 skipped** (the opt-in live test), evaluations **139/139**, gate tests **25 passed**, 7 min 10 s.
+  The handoff's old container command (which mounted `backend/.env` and did not blank keys) now points to the script.
+- **New `docs/production-hardening/ci-and-validation.md`:** supported environment, every local validation command
+  (backend, evaluations, frontend, `tsc`, build, gitleaks, dependency audits, live evaluation with approval), the CI
+  job map, CI status (**never run on GitHub; no branch protection**), pinning status and a proposal (actions to commit
+  SHAs, gitleaks image to a digest — not applied: unverifiable without network lookups and a CI run), and the
+  `braces` analysis.
+- **`braces` evidence (npm audit, 2026-10-19):** runtime dependencies 0 vulnerabilities; all dependencies 5 high +
+  2 moderate, all via the dev dependency `tailwindcss@3.4.19` → `chokidar@3.6.0` / `micromatch@4.0.8` →
+  `braces@3.0.3` (GHSA-vfj7-8cjw-p6xm, high, `<=3.0.3`, no patched release; only fix offered is `tailwindcss@4`,
+  major) and `postcss-selector-parser` (GHSA-rj75-hqrm-r3gf, moderate). Options documented (approve the exception,
+  Tailwind 4, no override possible, leave CI red). **Not decided; nothing suppressed** (Gate D). pip-audit not run here.
+- **Harness drift fixed:** `.claude/rules/ai-safety.md`, `architecture.md`, `testing.md` named modules and a flag that
+  do not exist (`api_tools.py`, `sql_executor.py`, `ai_audit_logs`, `--provider real`); corrected to the real
+  locations. Three agents and five skills that still describe the Phase 0 plan got a pointer to the implemented layout
+  (`ai_architecture.md` §2.1) instead of a rewrite. `CLAUDE.md` names the script and the validation document.
+- Review of the rest: phase workflow with approval gates, characterization tests, negative tests per rule, deliberate
+  regression checks, per-phase local commits and the trackers are in place; resumability now runs through
+  `capstone-completion-progress.md` plus the handoff.

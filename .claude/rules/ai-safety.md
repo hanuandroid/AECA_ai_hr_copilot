@@ -2,7 +2,7 @@
 
 ## Mutations
 - AI agents cannot directly mutate business tables. There is no INSERT/UPDATE/DELETE path from any agent to a business table.
-- HR actions are tool calls that wrap existing endpoints (`services/ai/api_tools.py`). Every mutating tool requires server-side confirmation (single-use, user-bound, TTL). Permissions are re-checked at confirmation time.
+- HR actions are tool calls that wrap existing endpoints (`services/ai/actions/registry.py` + `actions/client.py`). Every mutating tool requires server-side confirmation (single-use, user-bound, TTL). Permissions are re-checked at confirmation time.
 - Tools offered to the LLM are pre-filtered by role. Tool arguments are validated with Pydantic. Invalid or ambiguous arguments lead to a clarification question, never a guess.
 
 ## SQL Agent

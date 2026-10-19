@@ -72,7 +72,7 @@ Two router accuracy gaps found by the formal set were fixed in Phase 10, with th
 
 ## 3. Test suites
 
-Current (fresh, 2026-10-19): backend **3154 passed** at `4e37fb8` (capstone phase 4 then added 15 offline tests and
+Current (fresh, 2026-10-19): backend **3154 passed** at `4e37fb8` (capstone phase 4 then added 18 offline test cases and
 one opt-in live test that is skipped in normal runs), frontend **238 passed** at `5d4a20b`, TypeScript 0 errors.
 Final counts at one commit: `production-hardening/capstone-completion-progress.md` (phase 10).
 

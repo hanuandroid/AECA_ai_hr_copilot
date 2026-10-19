@@ -13,7 +13,7 @@ Do not introduce architectural changes without first explaining **what, why, fil
 ## Dependency direction
 
 ```text
-endpoints/chat.py → services/ai/* → (llm | embeddings | vector_store | sql_executor | api_tools | repositories for AI-owned tables)
+endpoints/chat.py → services/ai/* → (llm | embeddings | rag/vector_store | sql/executor | actions/client | repositories for AI-owned tables)
 services/ai/*     → core/*, models/* (read), services/auth (context only)
 services/ai/*     ✗→ endpoints/* (never import business endpoint functions)
 business endpoints ✗→ services/ai/* (existing app must not depend on AI)
@@ -23,9 +23,9 @@ business endpoints ✗→ services/ai/* (existing app must not depend on AI)
 
 - `services/ai/authorization/` is deterministic, with no LLM. Its only I/O is loading the caller's direct reports when building `AIUserContext`. Every other AI module calls `authorize` / `require` / `run_authorized` with a `Capability`. Never check `ctx.role` directly.
 - `llm/` is the only place with provider SDK imports. `embeddings.py` is the only place with embedding SDK imports.
-- `sql_executor.py` is the only module that executes agent-generated SQL. It uses its own read-only connection.
-- `api_tools.py` is the only module that calls business endpoints. It uses HTTP with the user's token.
-- AI-owned tables (`policy_chunks`, `ai_audit_logs`, `ai_pending_actions`) are written only by their repository functions.
+- `sql/executor.py` is the only module that executes agent-generated SQL. It uses its own read-only connection.
+- `actions/client.py` is the only module that calls business endpoints. It uses HTTP (in-process `httpx.ASGITransport`) with the user's token.
+- AI-owned tables (`policy_chunks`, `ai_pending_actions`, `ai_conversations`, `ai_conversation_messages`, `ai_audit_events`) are written only by their repository functions.
 
 ## API conventions
 

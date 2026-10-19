@@ -3,6 +3,8 @@ name: agent-tool-calling
 description: Add or change HR Action Agent tools that wrap existing CB Nest endpoints (api_tools.py, action_agent.py, confirmations.py) — typed arg schemas, role filtering, team pre-checks, confirmation flow, httpx calls with the user's token, and error mapping. Use whenever an AI feature must perform an HR mutation.
 ---
 
+> **Implemented layout (checked 2026-10-19):** the module names below are partly the Phase 0 plan. The real locations are listed in `HRMS-main/docs/ai_architecture.md` §2–2.1 (for example `actions/registry.py` + `actions/client.py` instead of `api_tools.py`, `sql/` instead of `sql_*.py`, `rag/` instead of `policy_rag.py`, `/copilot` and `components/copilot/` instead of `/ai-copilot` and `components/ai/`, `ai_audit_events` instead of `ai_audit_logs`, `python -m evals.run_evals [--live]` instead of `--provider`). Follow the real layout.
+
 # Agent Tool Calling
 
 ## Purpose
