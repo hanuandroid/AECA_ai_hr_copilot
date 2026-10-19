@@ -283,7 +283,7 @@ remediation and G-11 password step-up done locally; the capstone completion prog
 ([`capstone-completion-progress.md`](docs/production-hardening/capstone-completion-progress.md) is the current
 source of truth for status and evidence).
 - **Production readiness: NOT YET PRODUCTION READY** (release gates: `docs/production-hardening/release-readiness.md` §6).
-- **Latest fresh results:** backend 3154 passed, offline evaluations 139/139 (scripted model output), CI gate tests 25 passed (container run 2026-10-19 at `4e37fb8`); frontend 238 passed and TypeScript 0 errors (host run 2026-10-19 at `5d4a20b`).
+- **Latest fresh results:** backend 3172 passed (1 opt-in live test skipped), offline evaluations 139/139 (scripted model output), CI gate tests 25 passed, frontend 238 passed, TypeScript 0 errors, build PASS, gitleaks clean — all at `165e96e` on 2026-10-19 (`docs/capstone-submission-report.md`).
 - **Not run yet:** live-model evaluation (needs approval for external calls and spending), browser walkthrough of the
   demo, CI on GitHub. The local commits are not on GitHub until a push is approved.
 
@@ -353,6 +353,7 @@ Docs:
 - AI permissions: [`ai_permissions_matrix.md`](docs/ai_permissions_matrix.md); AI evaluation results: [`ai_eval_results.md`](docs/ai_eval_results.md)
 - Final AI report: [`phase-10-final-report.md`](docs/phase-10-final-report.md)
 - Demo walkthrough (setup to teardown, synthetic data): [`demo-script.md`](docs/demo-script.md)
+- Capstone submission report (rubric-to-evidence matrix, verified results, open items): [`capstone-submission-report.md`](docs/capstone-submission-report.md)
 
 
 Copyright (c) Codebasics. All rights reserved.

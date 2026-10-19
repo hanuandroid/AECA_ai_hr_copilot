@@ -22,7 +22,7 @@ Assignment Phases 0–10 are complete. A separate **production-hardening program
   business APIs (`d570ab6`, `STEP_UP_ENFORCEMENT=log`; never switch to `enforce` without approval) with the admin UI
   dialog (`29ca184`). Capstone completion programme in progress:
   `HRMS-main/docs/production-hardening/capstone-completion-progress.md` (current status and evidence).
-- **Latest fresh results (2026-10-19):** backend 3154 passed, offline evaluations 139/139 (scripted model output), CI gate tests 25 passed (container run 2026-10-19 at `4e37fb8`); frontend 238 passed and TypeScript 0 errors (host run 2026-10-19 at `5d4a20b`). Earlier full runs (2026-10-17: 2778 backend, 152 frontend; Docker
+- **Latest fresh results (2026-10-19):** backend 3172 passed (1 opt-in live test skipped), offline evaluations 139/139 (scripted model output), CI gate tests 25 passed, frontend 238 passed, TypeScript 0 errors, build PASS, gitleaks clean — all at `165e96e` on 2026-10-19 (`docs/capstone-submission-report.md`). Earlier full runs (2026-10-17: 2778 backend, 152 frontend; Docker
   production smoke PASS) are historical. Live-model evaluation: NOT_RUN (the 10-check OpenAI smoke test in `0ca8326`
   is not that evaluation). Only SQLite is verified; downgrade below migration 0016 fails (S-07).
 - **Open decisions:** release gates in `release-readiness.md` §6. S-06 and S-08 fixed, S-04 closed, S-07 mitigated,

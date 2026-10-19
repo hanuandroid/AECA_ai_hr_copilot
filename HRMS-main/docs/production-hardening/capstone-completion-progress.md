@@ -21,18 +21,18 @@ not committed). Treat the code and freshly observed results as authoritative; th
 
 | Phase | Scope | Status | Commit |
 |---|---|---|---|
-| 0 | Preflight, baseline, this tracker | DONE | (this commit) |
-| 1 | Reconcile status documents (README, phase-status, ai_eval_results, CLAUDE.md, handoff) | DONE | see log |
-| 2 | Architecture doc corrections + deliverable map | DONE | see log |
-| 3 | G-11 operator documentation | DONE | see log |
-| 4 | Live evaluation runner: OpenAI selection + answer-level scoring (offline tests only; never executed live) | DONE | see log |
-| 5 | `docs/demo-script.md` | DONE | see log |
-| 6 | Step-up failure-mode tests on every protected page | DONE | see log |
-| 7 | Browser walkthrough evidence (or NOT_RUN checklist) | DONE (checklist; browser NOT_RUN) | see log |
-| 8 | Offline evaluation evidence refresh | DONE | see log |
-| 9 | Harness and CI reproducibility | DONE | see log |
-| 10 | Final verification at one HEAD | DONE | see log |
-| 11 | Rubric-to-evidence matrix and submission report | PENDING | |
+| 0 | Preflight, baseline, this tracker | DONE | `4e37fb8` |
+| 1 | Reconcile status documents (README, phase-status, ai_eval_results, CLAUDE.md, handoff) | DONE | `e9ed364` |
+| 2 | Architecture doc corrections + deliverable map | DONE | `d59933a` |
+| 3 | G-11 operator documentation | DONE | `721d095` |
+| 4 | Live evaluation runner: OpenAI selection + answer-level scoring (offline tests only; never executed live) | DONE | `b3ccc40` |
+| 5 | `docs/demo-script.md` | DONE | `3dd2c35` |
+| 6 | Step-up failure-mode tests on every protected page | DONE | `5d4a20b` |
+| 7 | Browser walkthrough evidence (or NOT_RUN checklist) | DONE (checklist; browser NOT_RUN) | `44603da` |
+| 8 | Offline evaluation evidence refresh | DONE | `75ac0c1` |
+| 9 | Harness and CI reproducibility | DONE | `165e96e` |
+| 10 | Final verification at one HEAD | DONE | `e1f3d5e` |
+| 11 | Rubric-to-evidence matrix and submission report | DONE | final docs commit |
 
 ## 2. Gates (never crossed without explicit approval)
 
@@ -226,3 +226,18 @@ the existing default; `config.py` default still `log`), the harness files and th
 evaluation paths call the model only through `observe(...)` (provider boundary kept). Passwords in tests are synthetic
 and only in headers or form fields; no real personal data; no protected `writing-block*.md` file is tracked or
 changed. Documentation claims were checked against code during each phase.
+
+### Phase 11 — Submission package · DONE (2026-10-19)
+
+- New `docs/capstone-submission-report.md` (linked from the README): verdicts (submission readiness: ready on offline
+  evidence once published; production readiness: **NOT YET PRODUCTION READY**), the rubric-to-evidence matrix for the
+  nine areas (implementation, tests, demo scenario, status, remaining limitation), verified results at `165e96e`,
+  historical results, NOT_RUN checks with what unblocks them, open governance decisions, missing external evidence.
+- README, `CLAUDE.md` and `phase-status.md` status lines now quote the final results at `165e96e`.
+
+## 4. Final state (2026-10-19)
+
+- Verified commit `165e96e`; later commits are documentation only. All work is local (`main` ahead of `origin/main`).
+- Completed: Phases 0–11. Browser walkthrough and live-model evaluation are prepared but **NOT_RUN**.
+- Gates still open: **A** push (needs approval), **B** live evaluation (provider, model, synthetic set, budget),
+  **C** G-11 `enforce` (stays `log`), **D** governance incl. `braces` and salary step-up scope, **E** infrastructure.
