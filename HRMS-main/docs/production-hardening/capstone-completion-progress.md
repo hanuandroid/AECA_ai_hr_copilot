@@ -29,7 +29,7 @@ not committed). Treat the code and freshly observed results as authoritative; th
 | 5 | `docs/demo-script.md` | DONE | see log |
 | 6 | Step-up failure-mode tests on every protected page | DONE | see log |
 | 7 | Browser walkthrough evidence (or NOT_RUN checklist) | DONE (checklist; browser NOT_RUN) | see log |
-| 8 | Offline evaluation evidence refresh | PENDING | |
+| 8 | Offline evaluation evidence refresh | DONE | see log |
 | 9 | Harness and CI reproducibility | PENDING | |
 | 10 | Final verification at one HEAD | PENDING | |
 | 11 | Rubric-to-evidence matrix and submission report | PENDING | |
@@ -156,9 +156,23 @@ CI gate tests `.github/scripts` **25 passed**.
 
 - Tooling check: no Playwright, Puppeteer or Cypress in `frontend/package.json` or `node_modules`; adding Playwright
   is workstream 3.7 (not approved); no browser was available to this session. Nothing was installed.
-- New `docs/production-hardening/browser-walkthrough.md`: 40 scenarios (setup; ≥5 policy questions; SQL and scope;
+- New `docs/production-hardening/browser-walkthrough.md`: 38 scenarios (setup; ≥5 policy questions; SQL and scope;
   action proposal/confirmation/cancel/authorization; negative security prompts; admin-page access; every G-11 dialog,
   `log`-mode behaviour with the log line, and why blocking is not exercised in a browser), each with expected outcome,
   empty *Actual*, Result **NOT_RUN**, and the automated test that covers the same behaviour (references checked).
   `demo-script.md` points to it. No defects recorded because nothing was run.
 - Remaining: a human (or an approved Playwright workstream) must run it; Copilot rows need an approved provider key.
+
+### Phase 8 — Offline evaluation evidence refreshed · DONE (2026-10-19)
+
+- Runs: `python -m evals.run_evals` at `4e37fb8` (baseline) and on the phase 4 tree (`b3ccc40`, `--network none`):
+  both **139/139**, all metrics 100%: policy 11 (retrieval, citation validity, grounding, refusal), SQL 20
+  (classification, security rejection, scope, no forbidden columns, no mutation), router 33, conversation 25,
+  actions 20, assignment 30 (policy, SQL, action, security and conversation categories; no mutation; not executed; no
+  sensitive values). `LIVE_MODEL_EVAL = NOT_RUN`. Dataset sizes counted from the JSON files match (139); no case was
+  added, removed or changed.
+- `docs/ai_eval_results.md`: header and §2 state the fresh run, its environment, and that offline means scripted
+  model output; §3 gives the current totals and keeps the 2026-10-03 breakdown as history; the capstone phase 6
+  deliberate regression added to the mutation table; new §5 "Known limitations": no live result, 6 pinned false
+  refusals on the benign set (G-10), SQL over-refusal, no entailment check in the grounding guard, the deliberate
+  deviations, live-suite coverage limits.
