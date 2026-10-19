@@ -28,7 +28,7 @@ not committed). Treat the code and freshly observed results as authoritative; th
 | 4 | Live evaluation runner: OpenAI selection + answer-level scoring (offline tests only; never executed live) | DONE | see log |
 | 5 | `docs/demo-script.md` | DONE | see log |
 | 6 | Step-up failure-mode tests on every protected page | DONE | see log |
-| 7 | Browser walkthrough evidence (or NOT_RUN checklist) | PENDING | |
+| 7 | Browser walkthrough evidence (or NOT_RUN checklist) | DONE (checklist; browser NOT_RUN) | see log |
 | 8 | Offline evaluation evidence refresh | PENDING | |
 | 9 | Harness and CI reproducibility | PENDING | |
 | 10 | Final verification at one HEAD | PENDING | |
@@ -151,3 +151,14 @@ CI gate tests `.github/scripts` **25 passed**.
   automated evidence.
 - Every UI label, route, account, prompt and expectation was checked against the code, `seed.py`,
   `assignment_eval.json` and the README. The commands were **not executed** in this phase (the document says so).
+
+### Phase 7 — Browser walkthrough evidence · DONE as a checklist; browser execution **NOT_RUN** (2026-10-19)
+
+- Tooling check: no Playwright, Puppeteer or Cypress in `frontend/package.json` or `node_modules`; adding Playwright
+  is workstream 3.7 (not approved); no browser was available to this session. Nothing was installed.
+- New `docs/production-hardening/browser-walkthrough.md`: 40 scenarios (setup; ≥5 policy questions; SQL and scope;
+  action proposal/confirmation/cancel/authorization; negative security prompts; admin-page access; every G-11 dialog,
+  `log`-mode behaviour with the log line, and why blocking is not exercised in a browser), each with expected outcome,
+  empty *Actual*, Result **NOT_RUN**, and the automated test that covers the same behaviour (references checked).
+  `demo-script.md` points to it. No defects recorded because nothing was run.
+- Remaining: a human (or an approved Playwright workstream) must run it; Copilot rows need an approved provider key.
