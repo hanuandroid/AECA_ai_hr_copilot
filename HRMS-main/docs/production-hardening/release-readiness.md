@@ -40,7 +40,7 @@ Owner "TBD" means a named human owner is still required.
 | No critical advisories | npm and pip audits re-run 2026-10-17 (pip-audit 2.9.0 runtime and dev; npm audit all and `--omit=dev`) | VERIFIED | — | Eng |
 | No high runtime advisories | 2026-10-17: npm `--omit=dev`: 0; pip runtime and dev: none flagged by the gate; postcss override pinned by `dependency-pins.test.ts` | VERIFIED | The override is unsupported by Next; remove it on `next@16`. New moderate build-time `postcss-selector-parser` GHSA-rj75-hqrm-r3gf (report only) | Eng |
 | High build-time advisories | `braces` GHSA-vfj7 (no patched release; Tailwind 4 removes it). Advisory gate re-run 2026-10-17: **FAIL** (exception PROPOSED, missing owner and approver) | **BLOCKED** (exception PROPOSED, no owner) | CI gate fails until approved or migrated | **TBD (owner / approver)** |
-| CI pipeline | `.github/workflows/ci.yml` | LOCAL (never run on GitHub) | Actions not pinned to SHAs; no branch protection | TBD |
+| CI pipeline | `.github/workflows/ci.yml`; GitHub runs 2026-10-14, 2026-10-15, 2026-10-20 (`2225fe7`: all jobs pass except the dependency-advisory gate) | RUNS ON GITHUB (advisory gate red, see above) | Actions not pinned to SHAs; no branch protection | TBD |
 
 ## 3. AI quality
 

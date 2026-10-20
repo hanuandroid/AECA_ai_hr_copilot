@@ -284,7 +284,7 @@ employee phone-number fix and session revocation on deactivation added on 2026-1
 ([`capstone-submission-report.md`](docs/capstone-submission-report.md) and
 [`final-security-readiness.md`](docs/final-security-readiness.md) hold the current status and evidence).
 - **Production readiness: NOT YET PRODUCTION READY** (release gates: `docs/production-hardening/release-readiness.md` §6).
-- **Latest local results (2026-10-20):** backend 3190 passed (1 opt-in live test skipped), offline evaluations 139/139
+- **Latest local results (2026-10-20):** backend 3190 passed (1 opt-in live test skipped) (3208 passed, 1 skipped after the live-harness tests were added; `verify-backend.sh`, 2026-10-21), offline evaluations 139/139
   (scripted model output), CI gate tests 25 passed — all three from `sh scripts/verify-backend.sh` (throwaway
   Python 3.11 container, repository read-only, no `.env`, provider keys blanked); frontend Vitest 268 passed,
   TypeScript 0 errors, production build PASS; Playwright 152 passed (0 failed, 0 skipped, 0 flaky); gitleaks clean
@@ -292,8 +292,14 @@ employee phone-number fix and session revocation on deactivation added on 2026-1
 - **Browser E2E:** `frontend/e2e/` (Playwright, Chromium) runs against the disposable stack in
   `docker-compose.e2e.yml` (own Compose project and volume, fake AI providers, synthetic seed); see
   [`frontend/e2e/README.md`](frontend/e2e/README.md) and the `e2e` job in `.github/workflows/ci.yml`.
-- **Not run yet:** live-model evaluation (needs approval for external calls and spending; real-model answer quality is
-  unmeasured), CI on GitHub. The local commits are not on GitHub until a push is approved.
+- **Live-model evaluation (2026-10-20, OpenAI `gpt-4o-mini`, one approved run):** router 33/33 and policy 11/11 passed
+  (`docs/ai_eval_results.md` §4.2). Live SQL generation, action extraction and prompt-injection resistance are not
+  covered by it.
+- **Not run yet:** the manual browser walkthrough.
+- **GitHub Actions:** the `ci` workflow ran on `2225fe7` (2026-10-20): backend, frontend, browser E2E, production image
+  builds and secret scan passed; the dependency-advisory gate failed (expected: the build-time `braces` advisory, whose
+  exception is still PROPOSED). Earlier runs on 2026-10-14 and 2026-10-15 failed only that gate too. Details:
+  `docs/production-hardening/ci-and-validation.md` §3.
 
 The NovaWorks PeopleOps Copilot adds AI to CB Nest without bypassing it:
 

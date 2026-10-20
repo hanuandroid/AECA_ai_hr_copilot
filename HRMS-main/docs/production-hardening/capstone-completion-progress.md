@@ -38,8 +38,8 @@ not committed). Treat the code and freshly observed results as authoritative; th
 
 | Gate | Decision required | Status |
 |---|---|---|
-| A | Push the local commits to GitHub | OPEN — awaiting user approval |
-| B | Live-model evaluation (provider, model, synthetic test set, spending limit) | OPEN — runner prepared offline only |
+| A | Push the local commits to GitHub | DONE 2026-10-20 (owner push; `origin/main` = `2225fe7`, checked with `git ls-remote`); CI results in `ci-and-validation.md` §3 |
+| B | Live-model evaluation (provider, model, synthetic test set, spending limit) | PARTLY DONE 2026-10-20: one approved OpenAI `gpt-4o-mini` run, router 33/33, policy 11/11 (`ai_eval_results.md` §4.2); SQL and action suites do not exist |
 | C | `STEP_UP_ENFORCEMENT=enforce` | OPEN — stays `log` (readiness review: NOT VERIFIABLE) |
 | D | Governance: provider data processing, retention/erasure, health data, salary step-up scope, external monitoring, `braces` advisory exception | OPEN — not decided here |
 | E | External infrastructure (proxy, monitoring, hosting) | OPEN |
@@ -187,7 +187,7 @@ CI gate tests `.github/scripts` **25 passed**.
   The handoff's old container command (which mounted `backend/.env` and did not blank keys) now points to the script.
 - **New `docs/production-hardening/ci-and-validation.md`:** supported environment, every local validation command
   (backend, evaluations, frontend, `tsc`, build, gitleaks, dependency audits, live evaluation with approval), the CI
-  job map, CI status (**never run on GitHub; no branch protection**), pinning status and a proposal (actions to commit
+  job map, CI status (**never run on GitHub; no branch protection**) [corrected 2026-10-20: GitHub runs existed since 2026-10-14; `ci-and-validation.md` §3], pinning status and a proposal (actions to commit
   SHAs, gitleaks image to a digest — not applied: unverifiable without network lookups and a CI run), and the
   `braces` analysis.
 - **`braces` evidence (npm audit, 2026-10-19):** runtime dependencies 0 vulnerabilities; all dependencies 5 high +
@@ -217,7 +217,7 @@ CI gate tests `.github/scripts` **25 passed**.
 | Secret scan, programme files | gitleaks `--no-git` on the 35 files changed since `29ca184` | no leaks |
 | Live-model evaluation | — | **NOT_RUN** (Gate B) |
 | Browser walkthrough | — | **NOT_RUN** (no browser tooling; checklist ready) |
-| CI on GitHub, pip-audit | — | **NOT_RUN** (not pushed, Gate A; pip-audit runs in CI) |
+| CI on GitHub, pip-audit | — | **NOT_RUN** (not pushed, Gate A; pip-audit runs in CI) [corrected 2026-10-20: GitHub runs existed since 2026-10-14; `ci-and-validation.md` §3] |
 
 Cumulative diff review `29ca184..165e96e` (35 files, +1496/−132): **no change** under `backend/app/`, `alembic/`,
 `frontend/app|components|lib/` or `storage/` — so no authorization, business-endpoint or migration change; changes are
@@ -259,7 +259,7 @@ employee phone-number fix (F-BUG-1), session revocation on deactivation/reactiva
 | Automated browser E2E (Playwright, Chromium, fake AI providers) | NOT_RUN (no tooling) | **152 passed**, 0 failed, 0 skipped, 0 flaky |
 | Manual browser walkthrough (`browser-walkthrough.md`) | NOT_RUN | **NOT_RUN** (not executed by a person; the automated suite covers most scenarios, but not live-model answers) |
 | gitleaks | no leaks (78 commits) | no leaks (80 commits; 46 uncommitted files) |
-| Live-model evaluation | NOT_RUN | **NOT_RUN** (Gate B) |
-| CI on GitHub | NOT_RUN | **NOT_RUN** (not pushed, Gate A; the `e2e` job's commands were run locally) |
+| Live-model evaluation | NOT_RUN | **router 33/33, policy 11/11** (OpenAI `gpt-4o-mini`, 2026-10-20 20:13–20:14 UTC; routing and policy only) |
+| CI on GitHub | NOT_RUN | run 39471328944 on `2225fe7`: backend, frontend, e2e, docker, secret-scan **success**; dependency advisories **failure** (expected `braces`) |
 
-Gates A–E unchanged. Release status: **NOT YET PRODUCTION READY**.
+Gate A done (push, 2026-10-20); gate B partly done (live routing and policy run); gates C–E unchanged. Release status: **NOT YET PRODUCTION READY**.

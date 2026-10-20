@@ -49,12 +49,17 @@ os.environ["ALLOWED_HOSTS"] = "test,localhost,127.0.0.1"  # httpx test client ho
 # set strict values via monkeypatch. Limiter state is reset before every test (fresh_db).
 os.environ["AI_RATE_LIMIT_PER_MINUTE"] = "100000"
 os.environ["AUTH_LOGIN_RATE_LIMIT_PER_MINUTE"] = "100000"
+# Opt-in live evaluation only (AI_LIVE_EVAL=1 from `run_evals --live`): keep the selected provider's key and model in
+# memory before they are blanked below. None in every ordinary run. See tests/support/live_credentials.py.
+from tests.support.live_credentials import capture_live_credentials  # noqa: E402
+
+LIVE_CREDENTIALS = capture_live_credentials(os.environ)
 os.environ["AI_LLM_PROVIDER"] = "fake"
 os.environ["AI_EMBEDDING_PROVIDER"] = "fake"
-os.environ.pop("ANTHROPIC_API_KEY", None)
-# Set (not just removed) so a developer's backend/.env or shell cannot leak a real OpenAI key or model into the
-# tests: environment variables take precedence over the .env file and over None passed to Settings(...).
-for _name in ("OPENAI_API_KEY", "AI_OPENAI_MODEL", "AI_OPENAI_FAST_MODEL", "AI_OPENAI_REASONING_EFFORT"):
+# Set (not just removed) so a developer's backend/.env or shell cannot leak a real key or model into the tests:
+# environment variables take precedence over the .env file and over None passed to Settings(...).
+for _name in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "AI_OPENAI_MODEL", "AI_OPENAI_FAST_MODEL",
+              "AI_OPENAI_REASONING_EFFORT"):
     os.environ[_name] = ""
 
 # App imports must come after the environment is configured.
@@ -115,6 +120,12 @@ async def fresh_db(template_db: Path) -> AsyncIterator[None]:
 
 def pytest_sessionfinish(session, exitstatus) -> None:
     shutil.rmtree(TEST_ROOT, ignore_errors=True)
+
+
+@pytest.fixture
+def live_credentials():
+    """The selected provider's credentials for an explicit live evaluation run; None in every ordinary run."""
+    return LIVE_CREDENTIALS
 
 
 @pytest.fixture

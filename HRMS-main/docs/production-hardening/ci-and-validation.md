@@ -45,8 +45,20 @@ image builds, Chromium with system packages, ~4 minutes of tests); downloads fro
 build), the npm registry, the Playwright CDN and apt mirrors; **no secrets and no paid services**. Its commands were
 executed locally on 2026-10-20 (same isolation check, stack, credentials file and test command).
 
-**Status:** the workflow has **never run on GitHub** (the local commits are not pushed; Gate A). Remote CI needs a push,
-which is not approved, so no remote result exists. Branch protection is
+**GitHub runs (verified 2026-10-20 from the repository's public run records; all `push` to `main`):**
+
+| Run | Commit | Date (UTC) | backend | frontend | e2e | docker | secret-scan | dependency-audit | Overall |
+|---|---|---|---|---|---|---|---|---|---|
+| 38524047626 | `c3d6928` | 2026-10-14 | success | success | (job not yet defined) | success | success | failure | failure |
+| 38792377654 | `86001f5` | 2026-10-15 | success | success | (job not yet defined) | success | success | failure | failure |
+| 39471328944 | `2225fe7` | 2026-10-20 | success | success | success | success | success | failure | failure |
+
+**Status:** every job passes on GitHub except `dependency-audit`, whose advisory-gate step exits 1 on every run. The
+step log that names the advisories needs an authenticated session and was not read; the expected cause is the
+`braces` advisory (§5), reproduced locally, with its exception still PROPOSED. The e2e job's Playwright step ran
+122 s and succeeded; its per-test counts are in the job log (not read). GitHub also warns that `actions/checkout@v4`,
+`actions/setup-node@v4` and `actions/setup-python@v5` target the deprecated Node 20 runtime. Earlier versions of this
+document said the workflow had never run on GitHub; that was wrong (runs exist since 2026-10-14). Branch protection is
 not configured. Every job's commands have local equivalents above; their latest local results are in
 `capstone-completion-progress.md`. The `dependency-audit` job is **expected to fail** until the `braces` decision (§5).
 
@@ -102,4 +114,4 @@ No exception was approved and no advisory was suppressed in this programme (Gate
 | gitleaks history / uncommitted files | clean / clean | clean (80 commits) / clean (46 files) |
 | npm audit | runtime 0; all: 5 high + 2 moderate (`tailwindcss@3` chain, `braces`) | unchanged |
 | pip-audit | not run locally (CI job) | NOT_TESTED locally |
-| GitHub CI | NOT_TESTED (never run) | NOT_TESTED (needs a push; not approved) |
+| GitHub CI | not part of this local verification | ran after the push of `2225fe7` (run 39471328944): see §3 |

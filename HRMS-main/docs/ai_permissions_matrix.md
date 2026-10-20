@@ -92,7 +92,7 @@ Inactive users are denied **every** capability, regardless of role.
 | Create announcement | ❌ | ✅ | ✅ | tool allowlist + existing API |
 | Assign employee to project | ❌ | ✅ TEAM | ✅ ALL | tool allowlist + team pre-check + existing API |
 | Create project | ❌ | ❌ | ✅ | tool allowlist (API allows MANAGER; AI is stricter per assignment) |
-| Deactivate / reactivate employee | ❌ | ❌ | ✅ | tool allowlist + existing API (ADMIN-only) |
+| Deactivate employee | ❌ | ❌ | ✅ | tool allowlist + existing API (ADMIN-only); reactivation is not an AI action (normal UI only) |
 | Payroll data via AI | ❌ (use Finance page) | ❌ ("Restricted" → blocked) | ✅ aggregate fields only | SQL table/column allowlist |
 | Bank / PAN / password / DOB / salary fields | ❌ | ❌ | ❌ | global forbidden-column set |
 | View AI audit log (`GET /api/v1/ai/audit`) | own events | own events | all events (+ filter by employee) | AUDIT_READ_OWN / AUDIT_READ_ORG (Phase 8) |

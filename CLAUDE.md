@@ -12,7 +12,7 @@ Assignment Phases 0–10 are complete. A separate **production-hardening program
 `HRMS-main/docs/production-hardening/`; resume from `HRMS-main/docs/development-handoff.md`). Release status:
 **NOT YET PRODUCTION READY**.
 
-- **Done (`origin/main` is at `86001f5`; everything after it is local only):** hardening Phases 0–2, the approved
+- **Done (`origin/main` was at `86001f5` until 2026-10-20; since then `main` up to `2225fe7` is on origin, checked with `git ls-remote`):** hardening Phases 0–2, the approved
   Phase 2 closure, the approved Phase 3 *offline* workstreams 3.3 / 3.6 / 3.8 / 3.9 (all on origin); locally, the
   OpenAI provider (`e3ec3d6`, `90e6582`, `0ca8326`) and the complete RBAC remediation plan, Steps 1–10
   (`HRMS-main/docs/production-hardening/rbac-remediation-plan.md`; Step 9 = `345ca96`). S-02, S-03 and S-05 fixed.
@@ -27,13 +27,12 @@ Assignment Phases 0–10 are complete. A separate **production-hardening program
   deactivation/reactivation, employee phone-number fix, test-only scripted fake model (`AI_FAKE_LLM_SCRIPT`, refused in
   production). Reports: `HRMS-main/docs/final-security-readiness.md`, `role-access-test-report.md`,
   `deep-workflow-test-report.md`.
-- **Latest fresh results (2026-10-20, local):** backend 3190 passed (1 opt-in live test skipped), offline evaluations 139/139 (scripted model output), CI gate tests 25 passed, frontend Vitest 268 passed, TypeScript 0 errors, build PASS, Playwright E2E 152 passed (0 failed, 0 skipped, 0 flaky), gitleaks clean (`docs/capstone-submission-report.md`). Manual browser walkthrough and GitHub CI: NOT_RUN. Earlier runs (2026-10-19 at `165e96e`: 3172 backend, 238 frontend; 2026-10-17: 2778 backend, 152 frontend; Docker
-  production smoke PASS) are historical. Live-model evaluation: NOT_RUN (the 10-check OpenAI smoke test in `0ca8326`
-  is not that evaluation). Only SQLite is verified; downgrade below migration 0016 fails (S-07).
+- **Latest fresh results (2026-10-20, local):** backend 3190 passed (1 opt-in live test skipped) (3208 passed, 1 skipped after the live-harness tests were added; `verify-backend.sh`, 2026-10-21), offline evaluations 139/139 (scripted model output), CI gate tests 25 passed, frontend Vitest 268 passed, TypeScript 0 errors, build PASS, Playwright E2E 152 passed (0 failed, 0 skipped, 0 flaky), gitleaks clean (`docs/capstone-submission-report.md`). Manual browser walkthrough: NOT_RUN. GitHub Actions on `2225fe7` (2026-10-20, run 39471328944): backend, frontend, e2e, docker and secret-scan jobs passed; the dependency-advisory gate failed (expected: the build-time `braces` advisory, reproduced locally; the run's step log was not read); see `HRMS-main/docs/production-hardening/ci-and-validation.md` §3. Earlier runs (2026-10-19 at `165e96e`: 3172 backend, 238 frontend; 2026-10-17: 2778 backend, 152 frontend; Docker
+  production smoke PASS) are historical. Live-model evaluation (2026-10-20, OpenAI `gpt-4o-mini`, one approved run): router 33/33, policy 11/11
+  (`HRMS-main/docs/ai_eval_results.md` §4.2); live SQL/action quality and injection resistance not measured. Only SQLite is verified; downgrade below migration 0016 fails (S-07).
 - **Open decisions:** release gates in `release-readiness.md` §6. S-06 and S-08 fixed, S-04 closed, S-07 mitigated,
   B-17 revocation and global sign-out done (tokens still in `localStorage`; strict script CSP pending) 2026-10-17 (forward-only migrations; the API refuses to start unless the DB is at the code's Alembic head).
-- **Blocked on approval:** live-model work (3.1/3.2/3.4/3.5), pushing (so GitHub CI, including the `e2e` job, has
-  never run), G-11 `enforce`, the `braces` advisory exception (stays PROPOSED; CI gate fails by design), data-governance, retention and
+- **Blocked on approval:** live-model work (3.1/3.2/3.4/3.5), further pushes, G-11 `enforce`, the `braces` advisory exception (stays PROPOSED; CI gate fails by design), data-governance, retention and
   backup decisions. Never push, deploy or approve exceptions without approval.
 - **Do not start a new phase automatically.** First inspect the current implementation and run the requested
   validation.

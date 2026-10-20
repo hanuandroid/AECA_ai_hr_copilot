@@ -99,6 +99,11 @@ def run_live(requested: bool, env: Mapping[str, str] | None = None) -> dict:
     child_env = {**env, "AI_LLM_PROVIDER": provider, LIVE_FLAG: "1", LIVE_PROVIDER_ENV: provider}
     report: dict = {"status": "RUN", "provider": provider, "model": selection["model"], "started_at": _now(),
                     "suites": [], "errors": []}
+    if provider == "openai":
+        # The router suite reads settings (and therefore backend/.env); pin its model in the environment, which wins
+        # over .env, so a live run uses only the models chosen in the process environment.
+        child_env["AI_OPENAI_FAST_MODEL"] = (env.get("AI_OPENAI_FAST_MODEL") or "").strip() or selection["model"]
+        report["fast_model"] = child_env["AI_OPENAI_FAST_MODEL"]
 
     router = subprocess.run([sys.executable, "-m", "evals.live_router_eval"], cwd=BACKEND, env=child_env,
                             capture_output=True, text=True)

@@ -8,7 +8,7 @@ Passing tests are necessary evidence, not a release decision: the open items in 
 **Classification:** VERIFIED (implementation inspected and an executed test proves it) · PARTIALLY_VERIFIED (proven in
 one layer only, or only part of the behaviour) · NOT_TESTED · POLICY_DECISION_REQUIRED · NOT_APPLICABLE.
 
-**Evidence runs (local, 2026-10-20):** backend 3190 passed / 1 skipped (opt-in live test), offline evaluations 139/139, CI gate tests 25; Vitest 268/268; TypeScript 0 errors; production build PASS; Playwright 152/152 on a fresh isolated stack using the CI e2e job's commands; gitleaks clean (history and all uncommitted files); npm audit runtime 0. GitHub CI has never run (no push approved): NOT_TESTED.
+**Evidence runs (local, 2026-10-20):** backend 3190 passed / 1 skipped (opt-in live test) (3208 passed, 1 skipped after the live-harness tests were added; `verify-backend.sh`, 2026-10-21), offline evaluations 139/139, CI gate tests 25; Vitest 268/268; TypeScript 0 errors; production build PASS; Playwright 152/152 on a fresh isolated stack using the CI e2e job's commands; gitleaks clean (history and all uncommitted files); npm audit runtime 0. GitHub Actions on `2225fe7` (2026-10-20, run 39471328944): backend, frontend, e2e, docker and secret-scan jobs passed; the dependency-advisory gate failed (expected: the build-time `braces` advisory, reproduced locally; the run's step log was not read; #18).
 
 ## 1. Findings
 
@@ -38,8 +38,8 @@ one layer only, or only part of the behaviour) · NOT_TESTED · POLICY_DECISION_
 | 22 | Token storage and browser hardening | POLICY_DECISION_REQUIRED | tokens in `localStorage`; security headers present; strict `script-src` CSP not adopted | Existing B-17 / CSP decision |
 | 23 | Data governance (provider data processing, retention, erasure, health data, backups) | POLICY_DECISION_REQUIRED | gates G-01..G-10, `release-readiness.md` §6 | |
 | 24 | Test-only scripted fake model cannot reach production | VERIFIED | `tests/ai/test_scripted_fake.py` (production refusal, fake-only selection, fail-closed script, schema-aware rules) | Production also refuses the fake provider itself |
-| 25 | Real-model answer and action-extraction quality | NOT_TESTED | live runner ready (`run_evals --live`, Anthropic/OpenAI), never executed | Needs approval, budget and synthetic data |
-| 26 | Deployment: reverse proxy, TLS, header logging, monitoring and alerts, backups and restore drill, GitHub CI | NOT_TESTED | runbook and alert catalogue exist (`production-hardening/`) | No target environment; no push approved |
+| 25 | Real-model answer and action-extraction quality | PARTIALLY_VERIFIED | one live run, 2026-10-20, OpenAI `gpt-4o-mini`: router 33/33, policy answers 11/11 (`ai_eval_results.md` §4.2) | Action extraction, SQL generation and injection resistance with a real model: NOT_TESTED |
+| 26 | Deployment: reverse proxy, TLS, header logging, monitoring and alerts, backups and restore drill | NOT_TESTED | runbook and alert catalogue exist (`production-hardening/`) | No target environment. GitHub CI itself runs (run 39471328944; all jobs pass except the advisory gate, #18) |
 | 27 | Production configuration guard (secrets, hosts, workers, fake providers, tracing, scripted fake) | VERIFIED | `tests/ai/hardening/test_production_config.py`, `test_scripted_fake.py`; CI `docker` job command | |
 | 28 | Secrets in the repository | VERIFIED | gitleaks: full history and every uncommitted file clean (2026-10-20) | `.gitleaksignore`: five exact synthetic-fixture fingerprints |
 
@@ -52,12 +52,12 @@ one layer only, or only part of the behaviour) · NOT_TESTED · POLICY_DECISION_
 | API (direct, real tokens) | `e2e/api.spec.ts` and the API checks inside every workflow test |
 | Concurrency | backend last-admin race; duplicate confirmation; double submission |
 | Failure recovery | network loss, stale data, simulated provider outage, business refusal during execution |
-| Live model | NOT_TESTED |
+| Live model | one run (2026-10-20): routing and policy answers only; SQL and actions NOT_TESTED |
 
 ## 3. Open decisions and gaps (not decided here)
 
-1. Push and run GitHub CI (Gate A); branch protection; pin actions to commit SHAs.
-2. Live-model evaluation with an approved provider, model, synthetic set and budget (Gate B).
+1. Branch protection; pin actions to commit SHAs (GitHub CI runs; only the advisory gate fails, #18).
+2. Live-model evaluation of SQL generation and action extraction (Gate B; routing and policy answers ran on 2026-10-20).
 3. G-11 `enforce` mode (Gate C) after proxy/header, client inventory, observation and alerting evidence.
 4. Role changes forcing a new sign-in (#6); persistent audit of business refusals and of deactivation/reactivation (#17).
 5. Phone validation policy and country-code list (#19).
