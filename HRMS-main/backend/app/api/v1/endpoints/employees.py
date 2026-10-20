@@ -1232,11 +1232,15 @@ async def deactivate_employee(
         )
     enforce_step_up(current_user, step_up_password, "employee.deactivate")  # G-11: before any change
 
+    # Session lifecycle (2026-10-20): deactivation also revokes every token issued so far (B-17 token_version, atomic
+    # SQL increment), so no earlier session can come back after a later reactivation.
+    revoke_sessions = Employee.token_version + 1
     if employee.role == Role.ADMIN:
         # RBAC step 4: never deactivate the last active administrator (atomic, race-safe guard).
-        await _remove_admin_guarded(db, employee.id, {"status": EmployeeStatus.INACTIVE})
+        await _remove_admin_guarded(db, employee.id, {"status": EmployeeStatus.INACTIVE, "token_version": revoke_sessions})
     else:
         employee.status = EmployeeStatus.INACTIVE
+        employee.token_version = revoke_sessions
     await db.commit()
     await db.refresh(employee)
     return success_response({"id": employee.id, "status": employee.status.value})
@@ -1263,6 +1267,9 @@ async def reactivate_employee(
     enforce_step_up(current_user, step_up_password, "employee.reactivate")  # G-11: before any change
 
     employee.status = EmployeeStatus.ACTIVE
+    # Session lifecycle (2026-10-20): reactivation never restores an old session; the person signs in again. The
+    # increment also covers accounts deactivated before deactivation started revoking tokens.
+    employee.token_version = Employee.token_version + 1
     await db.commit()
     await db.refresh(employee)
     return success_response({"id": employee.id, "status": employee.status.value})

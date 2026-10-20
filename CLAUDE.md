@@ -22,13 +22,18 @@ Assignment Phases 0–10 are complete. A separate **production-hardening program
   business APIs (`d570ab6`, `STEP_UP_ENFORCEMENT=log`; never switch to `enforce` without approval) with the admin UI
   dialog (`29ca184`). Capstone completion programme in progress:
   `HRMS-main/docs/production-hardening/capstone-completion-progress.md` (current status and evidence).
-- **Latest fresh results (2026-10-19):** backend 3172 passed (1 opt-in live test skipped), offline evaluations 139/139 (scripted model output), CI gate tests 25 passed, frontend 238 passed, TypeScript 0 errors, build PASS, gitleaks clean — all at `165e96e` on 2026-10-19 (`docs/capstone-submission-report.md`). Earlier full runs (2026-10-17: 2778 backend, 152 frontend; Docker
+- **Also done locally (2026-10-20):** Playwright role-access and business-workflow E2E suite (`HRMS-main/frontend/e2e/`,
+  isolated `HRMS-main/docker-compose.e2e.yml` stack, fake AI providers, CI `e2e` job), session revocation on
+  deactivation/reactivation, employee phone-number fix, test-only scripted fake model (`AI_FAKE_LLM_SCRIPT`, refused in
+  production). Reports: `HRMS-main/docs/final-security-readiness.md`, `role-access-test-report.md`,
+  `deep-workflow-test-report.md`.
+- **Latest fresh results (2026-10-20, local):** backend 3190 passed (1 opt-in live test skipped), offline evaluations 139/139 (scripted model output), CI gate tests 25 passed, frontend Vitest 268 passed, TypeScript 0 errors, build PASS, Playwright E2E 152 passed (0 failed, 0 skipped, 0 flaky), gitleaks clean (`docs/capstone-submission-report.md`). Manual browser walkthrough and GitHub CI: NOT_RUN. Earlier runs (2026-10-19 at `165e96e`: 3172 backend, 238 frontend; 2026-10-17: 2778 backend, 152 frontend; Docker
   production smoke PASS) are historical. Live-model evaluation: NOT_RUN (the 10-check OpenAI smoke test in `0ca8326`
   is not that evaluation). Only SQLite is verified; downgrade below migration 0016 fails (S-07).
 - **Open decisions:** release gates in `release-readiness.md` §6. S-06 and S-08 fixed, S-04 closed, S-07 mitigated,
   B-17 revocation and global sign-out done (tokens still in `localStorage`; strict script CSP pending) 2026-10-17 (forward-only migrations; the API refuses to start unless the DB is at the code's Alembic head).
-- **Blocked on approval:** live-model work (3.1/3.2/3.4/3.5), Playwright
-  (3.7), the `braces` advisory exception (stays PROPOSED; CI gate fails by design), data-governance, retention and
+- **Blocked on approval:** live-model work (3.1/3.2/3.4/3.5), pushing (so GitHub CI, including the `e2e` job, has
+  never run), G-11 `enforce`, the `braces` advisory exception (stays PROPOSED; CI gate fails by design), data-governance, retention and
   backup decisions. Never push, deploy or approve exceptions without approval.
 - **Do not start a new phase automatically.** First inspect the current implementation and run the requested
   validation.

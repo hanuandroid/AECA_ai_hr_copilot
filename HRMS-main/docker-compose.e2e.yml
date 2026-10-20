@@ -1,0 +1,116 @@
+# Disposable, isolated stack for the Playwright role-access suite (frontend/e2e). NOT for development or production.
+#
+#   docker compose -f docker-compose.e2e.yml config            # inspect: project hrms-e2e, one named volume, no bind mounts
+#   docker compose -f docker-compose.e2e.yml up -d --build --wait
+#   (cd frontend && npx playwright test)
+#   docker compose -f docker-compose.e2e.yml down -v           # removes ONLY this project's containers and volume
+#
+# Isolation from the development stack (docker-compose.yml, project "hrms-main", bind mount ./backend and
+# backend/storage/hrms.db): its own project name, its own named volume for the database and uploads, no bind mounts,
+# no env_file and no variable interpolation (so no .env is read), different host ports bound to 127.0.0.1 only.
+# Same production images as docker-compose.prod.yml, run with a non-production ENVIRONMENT so the fake AI providers are
+# allowed (empty provider keys: no model can be called). Every `up` re-runs migrate + seed + index: synthetic data only.
+name: hrms-e2e
+
+x-api-environment: &api-environment
+  ENVIRONMENT: e2e
+  DATABASE_URL: sqlite+aiosqlite:///./storage/hrms.db
+  # Synthetic signing key for this throwaway stack only (never used anywhere else).
+  JWT_SECRET_KEY: e2e-only-synthetic-signing-key-not-a-real-secret-0001
+  ACCESS_TOKEN_EXPIRE_MINUTES: "120"
+  ALLOWED_HOSTS: 127.0.0.1,localhost,api
+  CORS_ALLOW_ORIGINS: http://127.0.0.1:13000
+  # Many logins per run; also the step-up attempt limit (same setting).
+  AUTH_LOGIN_RATE_LIMIT_PER_MINUTE: "600"
+  AI_RATE_LIMIT_PER_MINUTE: "600"
+  AI_ENABLED: "true"
+  AI_LLM_PROVIDER: fake
+  AI_EMBEDDING_PROVIDER: fake
+  ANTHROPIC_API_KEY: ""
+  OPENAI_API_KEY: ""
+  # Scripted fake model output for the Copilot action tests (frontend/e2e/workflow-copilot-actions.spec.ts): only
+  # ActionProposal requests matching these phrases get an answer; every other model call still fails as before. The
+  # backend refuses this setting in production. Everything after the proposal is the real application flow.
+  AI_FAKE_LLM_SCRIPT: >-
+    [
+    {"schema": "ActionProposal", "contains": "urgent ticket titled", "capture": "titled (.+)$",
+     "output": {"action": "TICKET_CREATE", "arguments": {"title": "{capture}", "description": "Synthetic E2E ticket body.",
+                "category": "IT", "priority": "URGENT"}}},
+    {"schema": "ActionProposal", "contains": "ticket titled", "capture": "titled (.+)$",
+     "output": {"action": "TICKET_CREATE", "arguments": {"title": "{capture}", "description": "Synthetic E2E ticket body.",
+                "category": "IT", "priority": "HIGH"}}},
+    {"schema": "ActionProposal", "contains": "approve leave request", "capture": "#([0-9]+)",
+     "output": {"action": "LEAVE_APPROVE", "resource_id": "{capture:int}"}},
+    {"schema": "ActionProposal", "contains": "announcement titled", "capture": "titled (.+)$",
+     "output": {"action": "ANNOUNCEMENT_CREATE", "arguments": {"title": "{capture}", "body": "Synthetic E2E announcement body."}}}
+    ]
+  ALLOW_EXTERNAL_TRACING: "false"
+  STEP_UP_ENFORCEMENT: log
+
+services:
+  setup:
+    build:
+      context: ./backend
+      target: production
+    image: hrms-api:e2e
+    environment: *api-environment
+    volumes:
+      - e2e_storage:/app/storage
+    read_only: true
+    tmpfs:
+      - /tmp
+    command: >
+      sh -c "alembic -c alembic.ini upgrade head && python scripts/seed.py && python scripts/ingest_policies.py"
+    restart: "no"
+
+  api:
+    image: hrms-api:e2e
+    environment: *api-environment
+    volumes:
+      - e2e_storage:/app/storage
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "127.0.0.1:18000:8000"
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys, urllib.request; req = urllib.request.Request('http://127.0.0.1:8000/api/v1/health', headers={'Host': '127.0.0.1'}); sys.exit(0 if urllib.request.urlopen(req, timeout=4).status == 200 else 1)"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+
+  web:
+    build:
+      context: ./frontend
+      target: production
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:18000
+    image: hrms-web:e2e
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "127.0.0.1:13000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+
+volumes:
+  e2e_storage:

@@ -31,6 +31,10 @@ vi.mock("@/components/ui/date-picker", () => ({
   ),
 }));
 
+// The employee create/edit flows type two long form steps; they take ~2-4 s alone and came close to Vitest's default
+// 5 s under full-suite parallel load (flake F-TEST-1, docs/role-access-test-report.md). Timeout only; no assertion changed.
+vi.setConfig({ testTimeout: 15_000 });
+
 const PW = "Synthetic-Admin-Pass-42";
 const TEMP_PW = "Synthetic-Temp-8"; // the new account's synthetic temporary password
 const HEADER = "X-Step-Up-Password";

@@ -38,3 +38,9 @@ backend/storage/profile-photos/
 *.pyc
 # Generated AI evaluation reports (python -m evals.run_evals)
 backend/evals/results/
+
+# Playwright E2E outputs and local settings (frontend/e2e; docker-compose.e2e.yml)
+frontend/playwright-report/
+frontend/test-results/
+frontend/e2e/.runtime/
+frontend/.env.e2e

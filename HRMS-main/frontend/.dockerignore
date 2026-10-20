@@ -6,3 +6,9 @@ node_modules/
 coverage/
 *.tsbuildinfo
 npm-debug.log*
+
+# Playwright E2E (frontend/e2e): not part of the web image
+e2e/
+playwright.config.ts
+playwright-report/
+test-results/

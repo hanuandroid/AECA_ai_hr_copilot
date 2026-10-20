@@ -76,6 +76,65 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm run build
 
+  e2e:
+    # Playwright role-access + business-workflow suite (HRMS-main/frontend/e2e) against the disposable stack in
+    # HRMS-main/docker-compose.e2e.yml: own Compose project (hrms-e2e), own named volume, no bind mounts, no env_file,
+    # fake AI providers with empty keys (+ a scripted fake proposal model), synthetic seed data, STEP_UP_ENFORCEMENT=log.
+    # No repository secrets are used. Expected runtime ~15-20 min (two image builds, Chromium, ~4 min of tests).
+    name: browser E2E (Playwright, isolated stack)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: HRMS-main
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: HRMS-main/frontend/package-lock.json
+      - name: Install frontend dependencies (pinned @playwright/test from the lockfile)
+        working-directory: HRMS-main/frontend
+        run: npm ci
+      - name: Install Chromium only
+        working-directory: HRMS-main/frontend
+        run: npx playwright install --with-deps chromium
+      - name: Check that the E2E stack is isolated
+        run: |
+          docker compose -f docker-compose.e2e.yml config --format json > "$RUNNER_TEMP/e2e-config.json"
+          python3 - "$RUNNER_TEMP/e2e-config.json" <<'PY'
+          import json, sys
+          config = json.load(open(sys.argv[1]))
+          services = config["services"].values()
+          assert config["name"] == "hrms-e2e", config["name"]
+          assert all(volume["type"] == "volume" for service in services for volume in service.get("volumes", [])), "bind mount"
+          assert not any(service.get("env_file") for service in services), "env_file"
+          assert all(service["environment"].get("STEP_UP_ENFORCEMENT") == "log" for service in services if "environment" in service)
+          print("isolated Compose project:", config["name"])
+          PY
+      - name: Build and start the isolated stack (migrate, seed, index; waits for health checks)
+        run: docker compose -f docker-compose.e2e.yml up -d --build --wait
+      - name: Synthetic E2E accounts (the seeded demo accounts of the disposable stack)
+        working-directory: HRMS-main/frontend
+        run: cp e2e/e2e.env.example .env.e2e
+      - name: Playwright
+        working-directory: HRMS-main/frontend
+        run: npx playwright test
+      - name: API logs on failure (synthetic stack; request headers are never logged)
+        if: failure()
+        run: docker compose -f docker-compose.e2e.yml logs --no-color api setup | tail -n 300
+      - name: Upload Playwright results on failure (JSON + screenshots; traces are off)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: HRMS-main/frontend/test-results/
+          retention-days: 7
+      - name: Tear down the isolated stack (project hrms-e2e only)
+        if: always()
+        run: docker compose -f docker-compose.e2e.yml down -v
+
   dependency-audit:
     name: dependency advisories
     runs-on: ubuntu-24.04

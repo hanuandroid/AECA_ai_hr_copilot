@@ -1,9 +1,9 @@
 # Phase Status
 
-Current status (2026-10-19): see the end of this file and
+Current status (2026-10-20): see the end of this file and
 [`production-hardening/capstone-completion-progress.md`](production-hardening/capstone-completion-progress.md).
-Release status: **NOT YET PRODUCTION READY**. Latest fresh results: backend 3172 passed (1 opt-in live test skipped), offline evaluations 139/139 (scripted model output), CI gate tests 25 passed, frontend 238 passed, TypeScript 0 errors, build PASS, gitleaks clean — all at `165e96e` on 2026-10-19 (`docs/capstone-submission-report.md`). Live-model evaluation and a browser
-walkthrough have **not** been run. (The 2026-10-03 "ready for final submission" note, with 1685 backend and 86
+Release status: **NOT YET PRODUCTION READY**. Latest fresh results (2026-10-20, local): backend 3190 passed (1 opt-in live test skipped), offline evaluations 139/139 (scripted model output), CI gate tests 25 passed, frontend Vitest 268 passed, TypeScript 0 errors, build PASS, Playwright E2E 152 passed (0 failed, 0 skipped, 0 flaky; isolated stack, fake AI providers), gitleaks clean (`docs/capstone-submission-report.md`). Live-model evaluation, the manual browser
+walkthrough and GitHub CI have **not** been run. (2026-10-19 at `165e96e`: 3172 backend, 238 frontend.) (The 2026-10-03 "ready for final submission" note, with 1685 backend and 86
 frontend tests, is historical.)
 
 ---

@@ -278,14 +278,22 @@ docker-compose exec api python scripts/seed.py
 
 ## AI Copilot
 
-Status (2026-10-19): assignment Phases 0–10 complete; production hardening, RBAC remediation, the AI security
-remediation and G-11 password step-up done locally; the capstone completion programme is in progress
-([`capstone-completion-progress.md`](docs/production-hardening/capstone-completion-progress.md) is the current
-source of truth for status and evidence).
+Status (2026-10-20): assignment Phases 0–10 complete; production hardening, RBAC remediation, the AI security
+remediation and G-11 password step-up done locally; role-wise and business-workflow browser E2E tests, the
+employee phone-number fix and session revocation on deactivation added on 2026-10-20
+([`capstone-submission-report.md`](docs/capstone-submission-report.md) and
+[`final-security-readiness.md`](docs/final-security-readiness.md) hold the current status and evidence).
 - **Production readiness: NOT YET PRODUCTION READY** (release gates: `docs/production-hardening/release-readiness.md` §6).
-- **Latest fresh results:** backend 3172 passed (1 opt-in live test skipped), offline evaluations 139/139 (scripted model output), CI gate tests 25 passed, frontend 238 passed, TypeScript 0 errors, build PASS, gitleaks clean — all at `165e96e` on 2026-10-19 (`docs/capstone-submission-report.md`).
-- **Not run yet:** live-model evaluation (needs approval for external calls and spending), browser walkthrough of the
-  demo, CI on GitHub. The local commits are not on GitHub until a push is approved.
+- **Latest local results (2026-10-20):** backend 3190 passed (1 opt-in live test skipped), offline evaluations 139/139
+  (scripted model output), CI gate tests 25 passed — all three from `sh scripts/verify-backend.sh` (throwaway
+  Python 3.11 container, repository read-only, no `.env`, provider keys blanked); frontend Vitest 268 passed,
+  TypeScript 0 errors, production build PASS; Playwright 152 passed (0 failed, 0 skipped, 0 flaky); gitleaks clean
+  (full history and all uncommitted files).
+- **Browser E2E:** `frontend/e2e/` (Playwright, Chromium) runs against the disposable stack in
+  `docker-compose.e2e.yml` (own Compose project and volume, fake AI providers, synthetic seed); see
+  [`frontend/e2e/README.md`](frontend/e2e/README.md) and the `e2e` job in `.github/workflows/ci.yml`.
+- **Not run yet:** live-model evaluation (needs approval for external calls and spending; real-model answer quality is
+  unmeasured), CI on GitHub. The local commits are not on GitHub until a push is approved.
 
 The NovaWorks PeopleOps Copilot adds AI to CB Nest without bypassing it:
 

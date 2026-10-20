@@ -1,14 +1,16 @@
 # Capstone submission report — Assignment 05, AI HR Operations Copilot
 
-**Date:** 2026-10-19 · **Verified commit:** `165e96e` (branch `main`) · Programme record:
-[`production-hardening/capstone-completion-progress.md`](production-hardening/capstone-completion-progress.md)
+**Date:** 2026-10-20 (first version 2026-10-19 at `165e96e`) · **Verified tree:** branch `main`, `1ce24e6` plus the
+browser E2E suite, the phone-number fix and session revocation, committed together with this update · Programme
+record: [`production-hardening/capstone-completion-progress.md`](production-hardening/capstone-completion-progress.md);
+security review: [`final-security-readiness.md`](final-security-readiness.md)
 
 ## 1. Verdicts
 
 | Question | Verdict |
 |---|---|
-| **Submission readiness** | **Ready for academic submission on offline evidence, once published.** Every rubric area has an implementation, tests and a demo scenario, and every offline check passes at one commit (§3). Three things a reviewer should know: the work is only local until a push is approved (Gate A); no live-model evaluation has been run, so real-model answer quality is unmeasured (runner ready; Gate B); the browser walkthrough has not been executed (checklist ready). |
-| **Production readiness** | **NOT YET PRODUCTION READY.** One of seven release gates is met (`production-hardening/release-readiness.md` §6). Governance decisions, live evaluation, CI on GitHub, proxy/monitoring, retention/backup and browser checks remain. |
+| **Submission readiness** | **Ready for academic submission on offline evidence, once published.** Every rubric area has an implementation, tests and a demo scenario, and every offline check passes at one commit (§3). Three things a reviewer should know: the work is only local until a push is approved (Gate A); no live-model evaluation has been run, so real-model answer quality is unmeasured (runner ready; Gate B); browser behaviour is verified by 152 automated Playwright tests on a disposable stack with fake AI providers, while the manual walkthrough checklist has not been executed by a person. |
+| **Production readiness** | **NOT YET PRODUCTION READY.** One of seven release gates is met (`production-hardening/release-readiness.md` §6). Governance decisions, live evaluation, CI on GitHub, proxy/monitoring and retention/backup remain; open findings in `final-security-readiness.md`. |
 
 ## 2. Rubric-to-evidence matrix
 
@@ -21,25 +23,27 @@ Tests are under `HRMS-main/backend/tests/` unless they start with `frontend/`. D
 | 2 | Safe read-only Text-to-SQL | `services/ai/sql/` (sqlglot parse, validator, schema registry, scope rewrite with bound parameters, read-only executor with `query_only` and an authorizer); `POST /api/v1/chat/sql` | `ai/sql/` (one test per blocked construct), `ai/hardening/`; `evals/sql_eval.json` 20/20 | demo §4.2, §4.4; walkthrough C1–C6, E6 | Implemented; offline-verified | Live SQL-generation accuracy not measured; some legitimate unusual queries are refused |
 | 3 | HR task automation through backend APIs | `services/ai/actions/` (registry of existing routes, typed params, single-use user-bound confirmation, `client.py` calling the existing endpoint with the user's token; password for 2 high-impact actions); `POST /chat/actions`, `/chat/actions/confirm` | `ai/actions/` (registry, parity with business endpoints, confirmation replay, step-up); `evals/action_eval.json` 20/20 | demo §4.3; walkthrough D1–D7 | Implemented; offline-verified | Live action-extraction accuracy not measured |
 | 4 | RBAC and backend authorization | `services/ai/authorization/` (deterministic matrix, DB-loaded role/team, INACTIVE rejected); business-route RBAC remediation; G-11 password step-up (`services/step_up.py`, `log` mode) | `ai/authorization/`, `rbac/` (incl. route-permission matrix, step-up API), `characterization/` | demo §4.4, §6; walkthrough D7, E1–E7, F1–F9 | Implemented; verified | `enforce` mode for G-11 not approved; frontend role checks are UX only by design |
-| 5 | Frontend workflow | `frontend/app/copilot/`, `components/copilot/` (chat, sources, data tables, confirmation cards with cancel and password), `/admin/ai-usage`, `/admin/ai-audit`; step-up dialog `components/security/step-up-dialog.tsx` | `frontend/tests/` (Copilot shell and scenarios, page access, step-up dialogs for all six protected operations) | demo §4–6; walkthrough all | Implemented; verified with mocked HTTP | **Browser walkthrough NOT_RUN**; no browser automation (Playwright not approved) |
+| 5 | Frontend workflow | `frontend/app/copilot/`, `components/copilot/` (chat, sources, data tables, confirmation cards with cancel and password), `/admin/ai-usage`, `/admin/ai-audit`; step-up dialog `components/security/step-up-dialog.tsx` | `frontend/tests/` (Copilot shell and scenarios, page access, step-up dialogs for all six protected operations) | demo §4–6; walkthrough all | Implemented; verified with mocked HTTP and in the browser (Playwright 152/152: 21 pages × 4 sessions, direct API authorization, step-up dialogs, employee/leave/ticket/policy/Copilot workflows, Copilot action confirmation) | Browser runs use fake AI providers and scripted proposals; manual walkthrough not executed by a person; confirmation expiry and in-process API outage covered by backend tests only |
 | 6 | Audit logging | `services/ai/audit/`, append-only table `ai_audit_events` (migration 0020; triggers); `GET /api/v1/ai/audit[/metrics]` | `ai/audit/` (append-only, no prompt/answer/PII persisted, metrics, eval reporting) | demo §5; walkthrough E7 | Implemented; verified | Deliberate deviation: no message text in audit (length + keyed fingerprint; redacted text only in the owner's conversation store) |
 | 7 | AI evaluation and security testing | `evals/` (6 offline suites, 139 cases; live runner for Anthropic/OpenAI), `tests/ai/hardening/` (adversarial matrix, red-team corpus, PII corpus) | `evals/run_evals.py` 139/139 offline; `ai/hardening/`, `ai/test_pii_detection_corpus.py`, `ai/test_provider_policy.py`; deliberate-regression checks all caught | demo §8 | Offline: complete. Live: NOT_RUN | No live-model result; 6 pinned false refusals on a benign set (G-10) |
 | 8 | Observability and operational readiness | request ids, provider-call audit (tokens, latency, cost when priced), `/admin/ai-usage`, budgets and limits (`limits.py`), production configuration checks, retention `--check`, runbook, alert catalogue | `ai/test_limits.py`, `ai/hardening/test_production_config.py`, `ai/test_retention.py`, `ai/audit/` | demo §5; runbook | Implemented locally | No monitoring tool, proxy or alert owners (G-08, Gate E); external tracing deliberately off; single worker only |
 | 9 | Reproducibility and documentation | README (deliverable map), `ai_architecture.md` §2.1, `ai_permissions_matrix.md`, `ai_eval_results.md`, `demo-script.md`, `ci-and-validation.md`, `scripts/verify-backend.sh`, CI workflow | this report §3 | demo §1–2, §7 | Documented and locally reproducible | CI never ran on GitHub; dependency gate fails by design until the `braces` decision |
 
-## 3. Verified results (fresh, at `165e96e`)
+## 3. Verified results (fresh, 2026-10-20, on the tree described in the header)
 
 | Check | Command | Result |
 |---|---|---|
-| Backend suite (all areas, incl. step-up, SQL, RAG, authorization, actions, audit privacy) | `sh HRMS-main/scripts/verify-backend.sh` (Python 3.11.17 container, keys blanked, no `.env`) | **3172 passed, 1 skipped** (the opt-in live test) |
+| Backend suite (all areas, incl. step-up, SQL, RAG, authorization, actions, audit privacy) | `sh HRMS-main/scripts/verify-backend.sh` (Python 3.11.17 container, keys blanked, no `.env`) | **3190 passed, 1 skipped** (the opt-in live test) |
 | Offline AI evaluations | same script | **139/139** (policy 11, SQL 20, router 33, conversation 25, actions 20, assignment 30) |
 | CI advisory-gate tests | same script | 25 passed |
-| Frontend suite | `npm test` | **238 passed** |
+| Frontend suite | `npm test` | **268 passed** |
 | TypeScript / production build | `npx tsc --noEmit` / `npm run build` | 0 errors / PASS |
-| Secret scan | gitleaks v8.18.4, full history (78 commits) and the files changed in this programme | no leaks |
+| Browser E2E (Chromium) | `docker compose -f docker-compose.e2e.yml up -d --build --wait`, then `npx playwright test` (the CI `e2e` job's commands; `frontend/e2e/README.md`) | **152 passed**, 0 failed, 0 skipped, 0 flaky |
+| Secret scan | gitleaks v8.18.4, full history (80 commits) and every uncommitted file (46) | no leaks |
 
-Offline evaluations use scripted model output: they verify pipelines and security boundaries, not live-model quality.
-Commands and environment: `production-hardening/ci-and-validation.md`. Commits after `165e96e` change documentation only.
+Offline evaluations and the browser suite use fake or scripted model output: they verify pipelines, authorization and
+security boundaries, not live-model quality. Commands and environment: `production-hardening/ci-and-validation.md` §6.
+These are local runs; the GitHub workflow (including the new `e2e` job) has never run.
 
 ## 4. Historical results (not re-run in this programme)
 
@@ -55,7 +59,7 @@ Commands and environment: `production-hardening/ci-and-validation.md`. Commits a
 | Check | Why | What unblocks it |
 |---|---|---|
 | Live-model evaluation (`run_evals --live`) | external calls and cost need approval (Gate B / G-06) | approved provider, model, synthetic test set and spending limit |
-| Browser walkthrough | no browser automation; not executed by a person yet | a manual run of `browser-walkthrough.md`, or approval of Playwright (3.7) |
+| Manual browser walkthrough | not executed by a person; automated Playwright coverage (§3) replaces most of it, but live-model answers in the browser are not covered | a manual run of `browser-walkthrough.md` with an approved live model |
 | CI on GitHub | commits not pushed (Gate A) | approval to push, then one workflow run |
 | G-11 `enforce` in a real deployment | not approved (Gate C) | proxy/header evidence, client inventory, `log`-mode observation, alerts |
 | pip-audit | needs registry access during package installation; CI runs it | a CI run |
@@ -72,5 +76,5 @@ Commands and environment: `production-hardening/ci-and-validation.md`. Commits a
 ## 7. External evidence still missing
 
 Reverse-proxy configuration and its header logging; the monitoring stack with alert owners; API clients outside this
-repository; a `log`-mode observation period; a GitHub CI run; a browser run; live-model results; a timed restore drill
+repository; a `log`-mode observation period; a GitHub CI run; a browser run against a deployed environment; live-model results; a timed restore drill
 in the target environment.

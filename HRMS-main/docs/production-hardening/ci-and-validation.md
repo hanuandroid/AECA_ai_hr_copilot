@@ -1,7 +1,8 @@
 # Local validation and CI status
 
-**Updated 2026-10-19 (capstone phase 9).** How to reproduce every check locally, what the CI workflow would run, and
-what is still unverified. Release status: **NOT YET PRODUCTION READY**.
+**Updated 2026-10-20 (CI automation and final security-readiness review; first version 2026-10-19).** How to
+reproduce every check locally, what the CI workflow would run, and what is still unverified. Final security review:
+[`../final-security-readiness.md`](../final-security-readiness.md). Release status: **NOT YET PRODUCTION READY**.
 
 ## 1. Supported environment
 
@@ -26,6 +27,7 @@ No API key and no `.env` are needed for any of these; tests build a throwaway da
 | Secret scan (history) | `docker run --rm -v "$PWD:/repo" -w /repo zricethezav/gitleaks:v8.18.4 detect --source /repo --redact --no-banner` | Same command as CI. On Git Bash use `MSYS_NO_PATHCONV=1` and `$(pwd -W)`. `.gitleaksignore` holds five exact fingerprints of synthetic test fixtures; never add broad rules. |
 | Dependency advisories | `cd HRMS-main/frontend && npm audit` / `npm audit --omit=dev`; `pip-audit -r HRMS-main/backend/requirements.txt` | Network calls to the package registries. The pass/fail decision is `.github/scripts/advisory_gate.py`. |
 | Live-model evaluation | `python -m evals.run_evals --live` | **Only with approval** (external calls, cost). See `../ai_eval_results.md` §4. |
+| Browser E2E (Playwright, Chromium) | from `HRMS-main/`: `docker compose -f docker-compose.e2e.yml up -d --build --wait`, then `cd frontend && cp e2e/e2e.env.example .env.e2e && npx playwright install chromium && npm run test:e2e`, then `docker compose -f docker-compose.e2e.yml down -v` | Disposable stack (project `hrms-e2e`, own volume, no bind mounts, no env file, fake AI providers + scripted proposals, synthetic seed, `STEP_UP_ENFORCEMENT=log`). Rebuild the API image with `--build` or `build setup` (the API image is built by the `setup` service). `frontend/e2e/README.md`. |
 
 ## 3. CI workflow (`.github/workflows/ci.yml`)
 
@@ -34,10 +36,17 @@ No API key and no `.env` are needed for any of these; tests build a throwaway da
 | backend | security regression suites first, then the rest of the suite; offline evaluations; advisory-gate unit tests |
 | frontend | `npm ci`, `npm test`, `npx tsc --noEmit`, `npm run build` |
 | dependency-audit | pip-audit and npm audit, then the advisory gate (fails on critical, and on high/unknown without an approved exception) |
+| e2e (**added 2026-10-20**) | `npm ci`; `npx playwright install --with-deps chromium`; isolation check of `docker-compose.e2e.yml` (project name, named volumes only, no env file, `STEP_UP_ENFORCEMENT=log`); `up -d --build --wait`; synthetic credentials from `e2e/e2e.env.example`; `npx playwright test`; on failure the API logs and the Playwright results (JSON + screenshots, no traces) are uploaded for 7 days; `down -v` of `hrms-e2e` always |
 | docker | production images build; the API image refuses an unsafe configuration; both images run as non-root |
 | secret-scan | gitleaks over the full history |
 
-**Status:** the workflow has **never run on GitHub** (the local commits are not pushed; Gate A). Branch protection is
+**e2e job cost and dependencies:** about 15-20 minutes per run on a standard `ubuntu-24.04` runner (two uncached
+image builds, Chromium with system packages, ~4 minutes of tests); downloads from Docker Hub, PyPI (inside the image
+build), the npm registry, the Playwright CDN and apt mirrors; **no secrets and no paid services**. Its commands were
+executed locally on 2026-10-20 (same isolation check, stack, credentials file and test command).
+
+**Status:** the workflow has **never run on GitHub** (the local commits are not pushed; Gate A). Remote CI needs a push,
+which is not approved, so no remote result exists. Branch protection is
 not configured. Every job's commands have local equivalents above; their latest local results are in
 `capstone-completion-progress.md`. The `dependency-audit` job is **expected to fail** until the `braces` decision (§5).
 
@@ -80,3 +89,17 @@ Options for the owner (`.github/security/advisory-exceptions.json` holds a PROPO
 4. **Leave it:** the dependency-audit job stays red, by design.
 
 No exception was approved and no advisory was suppressed in this programme (Gate D).
+
+## 6. Local verification of 2026-10-20 (the same commands the CI jobs run)
+
+| Check | Baseline (end of the previous phase) | Final (this phase) |
+|---|---|---|
+| Backend `scripts/verify-backend.sh` | 3190 passed, 1 skipped; evaluations 139/139; gate 25 | 3190 passed, 1 skipped; evaluations 139/139; gate 25 |
+| Vitest | 268/268 | 268/268 |
+| TypeScript | 0 errors | 0 errors |
+| Production build | PASS (earlier run) | PASS |
+| Playwright (fresh isolated stack, CI job commands) | 152/152 | 152/152 (0 skipped, 0 flaky), run with the e2e job's commands |
+| gitleaks history / uncommitted files | clean / clean | clean (80 commits) / clean (46 files) |
+| npm audit | runtime 0; all: 5 high + 2 moderate (`tailwindcss@3` chain, `braces`) | unchanged |
+| pip-audit | not run locally (CI job) | NOT_TESTED locally |
+| GitHub CI | NOT_TESTED (never run) | NOT_TESTED (needs a push; not approved) |

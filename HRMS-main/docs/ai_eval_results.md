@@ -1,7 +1,7 @@
 # AI Evaluation Results — NovaWorks PeopleOps Copilot
 
-**Latest offline run: 2026-10-19** (throwaway Python 3.11.17 container, FastAPI 0.133.1, API keys blanked; runs at
-`4e37fb8` and on the capstone phase 4 tree committed as `b3ccc40`, both 139/139). The first run of this report was
+**Latest offline run: 2026-10-20** (throwaway Python 3.11.17 container, FastAPI 0.133.1, API keys blanked; 139/139;
+earlier runs at `4e37fb8` and `b3ccc40` on 2026-10-19, also 139/139). The first run of this report was
 2026-10-03 (Windows 11, Python 3.12.10); its per-phase test table is kept in §3 as history. The final verification
 at one commit is recorded in `production-hardening/capstone-completion-progress.md`.
 
@@ -72,9 +72,13 @@ Two router accuracy gaps found by the formal set were fixed in Phase 10, with th
 
 ## 3. Test suites
 
-Current (fresh, 2026-10-19): backend **3154 passed** at `4e37fb8` (capstone phase 4 then added 18 offline test cases and
-one opt-in live test that is skipped in normal runs), frontend **238 passed** at `5d4a20b`, TypeScript 0 errors.
-Final counts at one commit: `production-hardening/capstone-completion-progress.md` (phase 10).
+Current (fresh, 2026-10-20, on the tree that adds the browser E2E suite, the phone-number fix and session
+revocation): backend **3190 passed, 1 skipped** (the opt-in live test), offline evaluations **139/139**, CI gate tests
+25 passed (all via `scripts/verify-backend.sh`, Python 3.11.17); frontend Vitest **268 passed**, TypeScript 0 errors,
+production build PASS; Playwright browser E2E **152 passed** (0 failed, 0 skipped, 0 flaky) on the disposable
+`docker-compose.e2e.yml` stack. Every one of these runs used fake or scripted model output: none measures live-model
+quality (§4). Evidence table: `final-security-readiness.md`; commands: `production-hardening/ci-and-validation.md` §6.
+Earlier counts: backend 3154 at `4e37fb8` and 3172 at `165e96e`, frontend 238 (2026-10-19).
 
 Historical breakdown from the first run (2026-10-03):
 

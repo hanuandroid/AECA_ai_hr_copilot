@@ -1,4 +1,6 @@
+import html
 import json
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -95,3 +97,76 @@ def _match(rules: list[tuple[Matcher, Any]], prompt: str) -> Any | None:
         elif matcher.lower() in lowered:
             return value
     return None
+
+
+@dataclass(frozen=True)
+class ScriptRule:
+    schema: str  # name of the requested output model, e.g. "ActionProposal"
+    contains: str  # case-insensitive phrase that must appear in the last user message
+    output: dict[str, Any]
+    capture: str | None = None  # optional regex; its first group replaces "{capture}" / "{capture:int}" in `output`
+
+
+class ScriptedFakeLLM:
+    """Deterministic fake for the isolated E2E stack only (AI_LLM_PROVIDER=fake + AI_FAKE_LLM_SCRIPT; refused in
+    production by core/production_checks). Unlike FakeLLMProvider it is schema-aware: a rule answers only requests for
+    its named output model, so a rule for an action proposal can never answer the router or the policy service. A
+    request no rule answers fails exactly like the rule-less fake (AIInvalidOutputError). Everything after the model
+    output - validation, authorization, confirmation, execution - is the real application flow."""
+
+    name = "fake"
+    model = "fake-scripted"
+
+    def __init__(self, rules: list[ScriptRule]):
+        self._rules = list(rules)
+
+    @classmethod
+    def from_json(cls, script: str) -> "ScriptedFakeLLM":
+        data = json.loads(script)
+        if not isinstance(data, list):
+            raise ValueError("AI_FAKE_LLM_SCRIPT must be a JSON list of rules")
+        return cls([ScriptRule(schema=str(rule["schema"]), contains=str(rule["contains"]), output=dict(rule["output"]),
+                               capture=rule.get("capture")) for rule in data])
+
+    async def generate(self, messages: list[LLMMessage], *, system: str | None = None, max_tokens: int | None = None,
+                       temperature: float | None = None) -> LLMResponse:
+        raise AIInvalidOutputError()  # free text is never scripted
+
+    async def generate_structured(self, messages: list[LLMMessage], schema: type[StructuredT], *, system: str | None = None,
+                                  max_tokens: int | None = None) -> StructuredT:
+        prompt = _request_text(_last_user_text(messages))
+        for rule in self._rules:
+            if rule.schema != schema.__name__ or rule.contains.lower() not in prompt.lower():
+                continue
+            output = rule.output
+            if rule.capture:
+                match = re.search(rule.capture, prompt)
+                if match is None:
+                    continue
+                output = _fill(output, match.group(1))
+            try:
+                return schema.model_validate(output)
+            except ValidationError as exc:
+                raise AIInvalidOutputError() from exc
+        raise AIInvalidOutputError()
+
+
+_REQUEST_RE = re.compile(r"<request>\n(.*?)\n</request>", re.DOTALL)
+
+
+def _request_text(prompt: str) -> str:
+    """Only the user's request inside the prompt (never the listed action descriptions); the whole text otherwise."""
+    match = _REQUEST_RE.search(prompt)
+    return html.unescape(match.group(1)) if match else prompt
+
+
+def _fill(value: Any, captured: str) -> Any:
+    if isinstance(value, dict):
+        return {key: _fill(item, captured) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_fill(item, captured) for item in value]
+    if value == "{capture:int}":
+        return int(captured)
+    if isinstance(value, str):
+        return value.replace("{capture}", captured)
+    return value

@@ -54,6 +54,8 @@ def production_problems(config: Settings, environ: Mapping[str, str] | None = No
     fingerprint_key = config.ai_audit_fingerprint_key.get_secret_value().strip() if config.ai_audit_fingerprint_key else ""
     if config.ai_audit_enabled and (len(fingerprint_key) < 32 or fingerprint_key == config.jwt_secret_key.strip()):
         problems.append("AI_AUDIT_FINGERPRINT_KEY must be set to a dedicated secret (at least 32 characters, not the JWT secret)")
+    if (config.ai_fake_llm_script or "").strip():
+        problems.append("AI_FAKE_LLM_SCRIPT is for the isolated E2E stack only")
     if config.ai_enabled:
         if config.ai_llm_provider.strip().lower() == "fake":
             problems.append("AI_LLM_PROVIDER=fake is for tests only")

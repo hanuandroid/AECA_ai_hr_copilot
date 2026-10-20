@@ -20,6 +20,7 @@ import {
   fetchProfile,
   updateEmployee,
 } from "@/lib/api";
+import { COUNTRY_CODES, composePhone, splitStoredPhone } from "@/lib/phone";
 import { endSession } from "@/lib/session";
 import {
   EmployeeSensitiveSnapshot,
@@ -59,6 +60,10 @@ function NewEmployeePageContent() {
   const stepUp = useStepUp();
   // G-11: the sensitive values as loaded for editing; a step-up is asked only when the submission changes one of them.
   const [originalSensitive, setOriginalSensitive] = useState<EmployeeSensitiveSnapshot | null>(null);
+  // F-BUG-1: the phone as loaded for editing. Saved back exactly as stored unless the admin changes the phone fields, so a
+  // number without a supported country code is never rewritten with an invented one.
+  const [storedPhone, setStoredPhone] = useState<{ value: string; supported: boolean } | null>(null);
+  const [phoneEdited, setPhoneEdited] = useState(false);
   const [createForm, setCreateForm] = useState({
     name: "",
     email: "",
@@ -84,15 +89,7 @@ function NewEmployeePageContent() {
     esiNo: "",
   });
   const stepCompletion = createStep === 1 ? 50 : 100;
-  const countryCodes = [
-    { label: "IN (+91)", value: "+91" },
-    { label: "US (+1)", value: "+1" },
-    { label: "UK (+44)", value: "+44" },
-    { label: "AE (+971)", value: "+971" },
-    { label: "SG (+65)", value: "+65" },
-    { label: "AU (+61)", value: "+61" },
-    { label: "DE (+49)", value: "+49" },
-  ];
+  const countryCodes = COUNTRY_CODES;
 
   const clearAuthAndRedirect = () => {
     endSession(router);
@@ -174,14 +171,12 @@ function NewEmployeePageContent() {
           bank_branch: employee.bank_branch ?? null, bank_ifsc: employee.bank_ifsc ?? null,
           pan_number: employee.pan_number ?? null, pan_name: employee.pan_name ?? null, pan_dob: employee.pan_dob ?? null,
         });
-        const parsedCountryCode =
-          employee.phone && employee.phone.startsWith("+")
-            ? (employee.phone.match(/^\+\d{1,3}/)?.[0] ?? "+91")
-            : "+91";
-        const localPhone =
-          employee.phone && employee.phone.startsWith(parsedCountryCode)
-            ? employee.phone.slice(parsedCountryCode.length)
-            : employee.phone || "";
+        // Longest supported country code, not "1-3 digits after +" (F-BUG-1: "+919..." was read as "+919").
+        const splitPhone = splitStoredPhone(employee.phone);
+        const parsedCountryCode = splitPhone.countryCode;
+        const localPhone = splitPhone.local;
+        setStoredPhone(employee.phone ? { value: employee.phone, supported: splitPhone.supported } : null);
+        setPhoneEdited(false);
 
         setCreateForm((current) => ({
           ...current,
@@ -292,7 +287,7 @@ function NewEmployeePageContent() {
       joining_date: createForm.joiningDate,
       date_of_birth: createForm.dateOfBirth,
       job_title: createForm.jobTitle.trim(),
-      phone: `${createForm.countryCode}${createForm.phone.replace(/[^\d]/g, "")}`,
+      phone: isEditMode && storedPhone && !phoneEdited ? storedPhone.value : composePhone(createForm.countryCode, createForm.phone),
       occupancy: createForm.occupancy.trim(),
       role: createForm.role as "ADMIN" | "MANAGER" | "EMPLOYEE",
       current_salary_usd: Number(createForm.currentSalaryUsd),
@@ -449,7 +444,10 @@ function NewEmployeePageContent() {
                         <select
                           className="h-10 min-w-28 rounded-md border border-border bg-white px-2 py-2 text-sm"
                           value={createForm.countryCode}
-                          onChange={(e) => updateCreateField("countryCode", e.target.value)}
+                          onChange={(e) => {
+                            setPhoneEdited(true);
+                            updateCreateField("countryCode", e.target.value);
+                          }}
                         >
                           {countryCodes.map((code) => (
                             <option key={code.value} value={code.value}>
@@ -460,9 +458,17 @@ function NewEmployeePageContent() {
                         <Input
                           placeholder="Local number"
                           value={createForm.phone}
-                          onChange={(e) => updateCreateField("phone", e.target.value)}
+                          onChange={(e) => {
+                            setPhoneEdited(true);
+                            updateCreateField("phone", e.target.value);
+                          }}
                         />
                       </div>
+                      {isEditMode && storedPhone && !storedPhone.supported && !phoneEdited ? (
+                        <span className="block text-xs text-amber-700">
+                          The saved number has no supported country code; it is kept as saved unless you edit it.
+                        </span>
+                      ) : null}
                     </label>
                     <label className="space-y-1">
                       <span className="text-xs text-slate-500">Employment Type</span>

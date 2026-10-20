@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # AI copilot settings. Secrets are read from the environment only; never hardcode keys.
     ai_enabled: bool = True
     ai_llm_provider: str = "anthropic"  # anthropic | openai | fake (no automatic fallback between real providers)
+    # E2E only (docker-compose.e2e.yml): JSON rules for a schema-aware scripted fake model, used only with
+    # AI_LLM_PROVIDER=fake. Refused in production (core/production_checks.py).
+    ai_fake_llm_script: str | None = None
     ai_llm_model: str = "claude-sonnet-5-5"  # Anthropic models (AI_LLM_PROVIDER=anthropic)
     ai_llm_fast_model: str = "claude-haiku-4-5-20251001"
     anthropic_api_key: SecretStr | None = None

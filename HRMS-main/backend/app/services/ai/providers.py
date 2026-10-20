@@ -6,7 +6,7 @@ from app.core.config import Settings, settings
 from app.services.ai.embeddings import EmbeddingProvider, FakeEmbeddingProvider, FastEmbedEmbeddingProvider
 from app.services.ai.errors import AIUnavailableError
 from app.services.ai.llm.base import LLMProvider
-from app.services.ai.llm.fake import FakeLLMProvider
+from app.services.ai.llm.fake import FakeLLMProvider, ScriptedFakeLLM
 
 logger = structlog.get_logger()
 
@@ -19,6 +19,13 @@ def build_llm_provider(config: Settings = settings) -> LLMProvider:
         raise AIUnavailableError()
     provider = config.ai_llm_provider.strip().lower()
     if provider == "fake":
+        # E2E only: a scripted, schema-aware fake (production refuses both the fake provider and the script).
+        if config.ai_fake_llm_script:
+            try:
+                return ScriptedFakeLLM.from_json(config.ai_fake_llm_script)
+            except (ValueError, KeyError, TypeError) as exc:  # malformed script: fail closed like a missing provider
+                logger.warning("ai.provider.invalid_fake_script", kind="llm")
+                raise AIUnavailableError() from exc
         return FakeLLMProvider()
     if provider == "anthropic":
         api_key = config.anthropic_api_key.get_secret_value() if config.anthropic_api_key else ""

@@ -235,9 +235,31 @@ changed. Documentation claims were checked against code during each phase.
   historical results, NOT_RUN checks with what unblocks them, open governance decisions, missing external evidence.
 - README, `CLAUDE.md` and `phase-status.md` status lines now quote the final results at `165e96e`.
 
-## 4. Final state (2026-10-19)
+## 4. Final state (2026-10-19; browser evidence and current counts superseded by §5)
 
 - Verified commit `165e96e`; later commits are documentation only. All work is local (`main` ahead of `origin/main`).
 - Completed: Phases 0–11. Browser walkthrough and live-model evaluation are prepared but **NOT_RUN**.
 - Gates still open: **A** push (needs approval), **B** live evaluation (provider, model, synthetic set, budget),
   **C** G-11 `enforce` (stays `log`), **D** governance incl. `braces` and salary step-up scope, **E** infrastructure.
+
+## 5. Update (2026-10-20): browser E2E, phone fix, session revocation
+
+Work after the programme above, on `1ce24e6` plus uncommitted changes (committed together with this update):
+Playwright role-access and business-workflow suite (`frontend/e2e/`, isolated `docker-compose.e2e.yml` stack),
+employee phone-number fix (F-BUG-1), session revocation on deactivation/reactivation, test-only scripted fake proposals
+(`AI_FAKE_LLM_SCRIPT`, refused in production), CI `e2e` job. Reports: `../role-access-test-report.md`,
+`../deep-workflow-test-report.md`, `../final-security-readiness.md`; commands: `ci-and-validation.md` §6.
+
+| Check | 2026-10-19 (§4, `165e96e`) | 2026-10-20 (local) |
+|---|---|---|
+| Backend (`scripts/verify-backend.sh`) | 3172 passed, 1 skipped | **3190 passed, 1 skipped** |
+| Offline evaluations / CI gate tests | 139/139 / 25 | **139/139 / 25** (scripted model output) |
+| Frontend Vitest | 238 | **268** |
+| TypeScript / production build | 0 / PASS | **0 / PASS** |
+| Automated browser E2E (Playwright, Chromium, fake AI providers) | NOT_RUN (no tooling) | **152 passed**, 0 failed, 0 skipped, 0 flaky |
+| Manual browser walkthrough (`browser-walkthrough.md`) | NOT_RUN | **NOT_RUN** (not executed by a person; the automated suite covers most scenarios, but not live-model answers) |
+| gitleaks | no leaks (78 commits) | no leaks (80 commits; 46 uncommitted files) |
+| Live-model evaluation | NOT_RUN | **NOT_RUN** (Gate B) |
+| CI on GitHub | NOT_RUN | **NOT_RUN** (not pushed, Gate A; the `e2e` job's commands were run locally) |
+
+Gates A–E unchanged. Release status: **NOT YET PRODUCTION READY**.
