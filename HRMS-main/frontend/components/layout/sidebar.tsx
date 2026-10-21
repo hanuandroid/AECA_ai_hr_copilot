@@ -24,11 +24,19 @@ const navItems = [
   { icon: Ticket, label: "Tickets", href: "/tickets" },
 ];
 
+// The one nav item to highlight: the most specific href matching the path exactly or at a "/" boundary, so
+// "/me/documents" selects My Documents only (not My Profile too), and "/employees/42" still selects Employees.
+export function activeNavHref(pathname: string, hrefs: string[]): string | null {
+  const matches = hrefs.filter((href) => href !== "#" && (pathname === href || pathname.startsWith(`${href}/`)));
+  return matches.reduce<string | null>((best, href) => (best === null || href.length > best.length ? href : best), null);
+}
+
 export function Sidebar() {
   const pathname = usePathname() || "";
   // RBAC step 9: one permission map (lib/permissions.ts). Until the server role is known, only shared pages are listed.
   const role = useViewerRole();
   const visibleItems = navItems.filter((item) => (role ? canAccess(role, item.href) : isOpenToEveryRole(item.href)));
+  const activeHref = activeNavHref(pathname, navItems.map((item) => item.href));
 
   return (
     <aside className="hidden w-72 border-r border-slate-900/80 bg-gradient-to-b from-[#0f1b33] via-[#0c1730] to-[#081121] md:block">
@@ -49,15 +57,16 @@ export function Sidebar() {
           <Link
             key={item.label}
             href={item.href}
+            aria-current={item.href === activeHref ? "page" : undefined}
             className={cn(
               "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-300 transition hover:bg-white/5 hover:text-white",
-              item.href !== "#" && pathname.startsWith(item.href) && "bg-gradient-to-r from-indigo-500/20 to-transparent text-white ring-1 ring-indigo-400/20"
+              item.href === activeHref && "bg-gradient-to-r from-indigo-500/20 to-transparent text-white ring-1 ring-indigo-400/20"
             )}
           >
             <span
               className={cn(
                 "inline-flex h-8 w-8 items-center justify-center rounded-lg bg-transparent transition group-hover:bg-white/5",
-                item.href !== "#" && pathname.startsWith(item.href) && "bg-indigo-400/10"
+                item.href === activeHref && "bg-indigo-400/10"
               )}
             >
               <item.icon className="h-4 w-4" />

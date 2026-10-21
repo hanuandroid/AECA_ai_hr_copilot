@@ -1,4 +1,6 @@
 // Sidebar navigation and role-dependent controls (UX only; the backend checks behind each control are in api.spec.ts).
+import type { Locator } from "@playwright/test";
+
 import { contextWithToken, expectPageTitle } from "./support/session";
 import { expect, test } from "./support/suite";
 
@@ -31,9 +33,17 @@ for (const role of ["EMPLOYEE", "MANAGER", "ADMIN"] as const) {
       await nav.getByRole("link", { name: item.label, exact: true }).click();
       await expect(page).toHaveURL(new RegExp(`${item.href}$`));
       await expectPageTitle(page, item.title);
+      await expectOnlyHighlighted(nav, item.label);
     }
     await context.close();
   });
+}
+
+// Exactly one sidebar item is selected (aria-current) and visibly highlighted, and it is the page just opened:
+// e.g. My Documents (/me/documents) must not also highlight My Profile (/me).
+async function expectOnlyHighlighted(nav: Locator, label: string): Promise<void> {
+  await expect(nav.locator('a[aria-current="page"]')).toHaveText([label]);
+  await expect(nav.locator("a.ring-1")).toHaveText([label]);
 }
 
 test("restricted controls are shown only to the roles that may use them", async ({ browser, tokens, data }) => {
