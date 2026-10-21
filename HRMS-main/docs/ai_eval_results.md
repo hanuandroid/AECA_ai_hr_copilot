@@ -75,7 +75,7 @@ Two router accuracy gaps found by the formal set were fixed in Phase 10, with th
 
 Current (fresh, 2026-10-20, on the tree that adds the browser E2E suite, the phone-number fix and session
 revocation): backend **3190 passed, 1 skipped** (the opt-in live test) (3208 passed, 1 skipped after the live-harness tests were added; `verify-backend.sh`, 2026-10-21), offline evaluations **139/139**, CI gate tests
-25 passed (all via `scripts/verify-backend.sh`, Python 3.11.17); frontend Vitest **268 passed**, TypeScript 0 errors,
+25 passed (all via `scripts/verify-backend.sh`, Python 3.11.17); frontend Vitest **268 passed** (277 at `6338adc`, which adds 9 sidebar tests), TypeScript 0 errors,
 production build PASS; Playwright browser E2E **152 passed** (0 failed, 0 skipped, 0 flaky) on the disposable
 `docker-compose.e2e.yml` stack. Every one of these runs used fake or scripted model output: none measures live-model
 quality (§4). Evidence table: `final-security-readiness.md`; commands: `production-hardening/ci-and-validation.md` §6.

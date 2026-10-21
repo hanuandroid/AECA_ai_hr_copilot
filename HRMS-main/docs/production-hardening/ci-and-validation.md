@@ -45,22 +45,24 @@ image builds, Chromium with system packages, ~4 minutes of tests); downloads fro
 build), the npm registry, the Playwright CDN and apt mirrors; **no secrets and no paid services**. Its commands were
 executed locally on 2026-10-20 (same isolation check, stack, credentials file and test command).
 
-**GitHub runs (verified 2026-10-20 from the repository's public run records; all `push` to `main`):**
+**GitHub runs (verified from the repository's public run records on 2026-10-20 and 2026-10-21; all `push` to `main`):**
 
 | Run | Commit | Date (UTC) | backend | frontend | e2e | docker | secret-scan | dependency-audit | Overall |
 |---|---|---|---|---|---|---|---|---|---|
 | 38524047626 | `c3d6928` | 2026-10-14 | success | success | (job not yet defined) | success | success | failure | failure |
 | 38792377654 | `86001f5` | 2026-10-15 | success | success | (job not yet defined) | success | success | failure | failure |
 | 39471328944 | `2225fe7` | 2026-10-20 | success | success | success | success | success | failure | failure |
+| 39493375853 | `e149cfc` | 2026-10-20 | success | success | success | success | success | failure | failure |
+| 39607243952 | `6338adc` | 2026-10-21 | success | success | success | success | success | failure | failure |
 
-**Status:** every job passes on GitHub except `dependency-audit`, whose advisory-gate step exits 1 on every run. The
-step log that names the advisories needs an authenticated session and was not read; the expected cause is the
-`braces` advisory (§5), reproduced locally, with its exception still PROPOSED. The e2e job's Playwright step ran
+**Status:** every job passes on GitHub except `dependency-audit`, whose advisory-gate step exits 1 on every run. It blocks
+on `braces` (build-time) and, since the advisories of 2026-10-20, on Pillow 12.3.0 (runtime; details in §5). This comes from the advisory-gate output of the latest CI run, relayed
+by the owner on 2026-10-21; the step log was not read directly. The `braces` exception is still PROPOSED. The e2e job's Playwright step ran
 122 s and succeeded; its per-test counts are in the job log (not read). GitHub also warns that `actions/checkout@v4`,
 `actions/setup-node@v4` and `actions/setup-python@v5` target the deprecated Node 20 runtime. Earlier versions of this
 document said the workflow had never run on GitHub; that was wrong (runs exist since 2026-10-14). Branch protection is
 not configured. Every job's commands have local equivalents above; their latest local results are in
-`capstone-completion-progress.md`. The `dependency-audit` job is **expected to fail** until the `braces` decision (§5).
+`capstone-completion-progress.md`. The `dependency-audit` job is **expected to fail** until the `braces` and Pillow decisions (§5).
 
 ## 4. Pinning
 
@@ -74,7 +76,7 @@ not configured. Every job's commands have local equivalents above; their latest 
 The SHA and digest pins were not applied here: they cannot be verified without network lookups and a CI run, and a
 wrong SHA would break CI silently. They remain a release-gate item (`release-readiness.md` §6, gate 3).
 
-## 5. The `braces` advisory (decision required; not decided here)
+## 5. Dependency advisories: `braces` and Pillow (decisions required; not decided here)
 
 Evidence from `npm audit` on 2026-10-19:
 
@@ -100,7 +102,29 @@ Options for the owner (`.github/security/advisory-exceptions.json` holds a PROPO
 3. **An npm override for `braces`:** not possible today, because no fixed `braces` release exists.
 4. **Leave it:** the dependency-audit job stays red, by design.
 
-No exception was approved and no advisory was suppressed in this programme (Gate D).
+### Pillow (runtime, blocking; investigated 2026-10-21; decision required)
+
+The advisory gate of the latest CI runs also fails on Pillow (per the advisory-gate output of the latest CI run as relayed by the owner on 2026-10-21; the step log was not read directly). Findings of the
+2026-10-21 investigation (PyPI JSON API, which is the data pip-audit uses; GitHub Advisory API; the production-stage
+backend image inspected with networking disabled). They have not been re-checked since.
+
+| Fact | Evidence |
+|---|---|
+| Installed | Pillow 12.3.0 in the production-stage backend image; not pinned; required by `fastembed==0.8.1` (`pillow>=10.3.0,<13.0` on Python 3.11) and `reportlab==4.2.5` (`pillow>=9.0.0`) |
+| Advisories | high: GHSA-p4wg-p73j-c528, GHSA-65qm-jvmh-6pqg, GHSA-58r4-6rv3-gfh8, GHSA-pchr-8j38-3x4p, GHSA-q45j-58j2-45rg, GHSA-c6hw-5grf-ff96; medium: GHSA-462x-pgg6-55fp, GHSA-vx6w-vv9f-6gvg. All published 2026-10-20 (the 2026-10-17 audit of the same version was clean); all fixed only in Pillow 13.0.0 |
+| Gate classification | RUNTIME; severity "unknown" because pip-audit reports none, and the gate blocks unknown like high |
+| Compatible fix | none: 12.3.0 is the last 12.x release, and `fastembed` 0.8.1 and 0.9.0 (the latest) both require `pillow<13` |
+| Exposure notes | app code never imports Pillow; payslips are text-only `reportlab` canvases; `fastembed` is used for text embeddings only; uploaded profile photos are stored, never decoded on the server; Ghostscript is absent from the image. This reduces exposure; **it does not fix the vulnerabilities** |
+
+Options for the owner: (1) pin `pillow==12.3.0` and approve a time-limited runtime exception listing the eight IDs,
+revisiting when `fastembed` allows Pillow 13; (2) replace `fastembed` (an architectural change that needs RAG
+re-validation). Forcing Pillow 13 against `fastembed`'s declared range is not supported. Nothing has been changed.
+
+`braces` was re-checked in the same investigation: npm's latest release is still 3.0.3, the GitHub advisory lists no
+patched version, and the production web image (`npm ci --omit=dev`) contains no `braces`, `micromatch`, `chokidar`,
+`fast-glob` or `tailwindcss`.
+
+No exception was approved, no dependency was changed and no advisory was suppressed (Gate D).
 
 ## 6. Local verification of 2026-10-20 (the same commands the CI jobs run)
 
@@ -114,4 +138,4 @@ No exception was approved and no advisory was suppressed in this programme (Gate
 | gitleaks history / uncommitted files | clean / clean | clean (80 commits) / clean (46 files) |
 | npm audit | runtime 0; all: 5 high + 2 moderate (`tailwindcss@3` chain, `braces`) | unchanged |
 | pip-audit | not run locally (CI job) | NOT_TESTED locally |
-| GitHub CI | not part of this local verification | ran after the push of `2225fe7` (run 39471328944): see §3 |
+| GitHub CI | not part of this local verification | ran after each push (latest: `6338adc`, run 39607243952): see §3 |

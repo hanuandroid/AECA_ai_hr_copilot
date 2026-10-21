@@ -260,6 +260,6 @@ employee phone-number fix (F-BUG-1), session revocation on deactivation/reactiva
 | Manual browser walkthrough (`browser-walkthrough.md`) | NOT_RUN | **NOT_RUN** (not executed by a person; the automated suite covers most scenarios, but not live-model answers) |
 | gitleaks | no leaks (78 commits) | no leaks (80 commits; 46 uncommitted files) |
 | Live-model evaluation | NOT_RUN | **router 33/33, policy 11/11** (OpenAI `gpt-4o-mini`, 2026-10-20 20:13–20:14 UTC; routing and policy only) |
-| CI on GitHub | NOT_RUN | run 39471328944 on `2225fe7`: backend, frontend, e2e, docker, secret-scan **success**; dependency advisories **failure** (expected `braces`) |
+| CI on GitHub | NOT_RUN | run 39471328944 on `2225fe7`, and later runs up to 39607243952 on `6338adc` (2026-10-21): backend, frontend, e2e, docker, secret-scan **success**; dependency advisories **failure** (`braces`; Pillow since 2026-10-20) |
 
 Gate A done (push, 2026-10-20); gate B partly done (live routing and policy run); gates C–E unchanged. Release status: **NOT YET PRODUCTION READY**.

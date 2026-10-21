@@ -9,7 +9,7 @@ security review: [`final-security-readiness.md`](final-security-readiness.md)
 
 | Question | Verdict |
 |---|---|
-| **Submission readiness** | **Ready for academic submission on offline evidence and one live-model run.** Every rubric area has an implementation, tests and a demo scenario, and every offline check passes at one commit (§3). Three things a reviewer should know: the work is on GitHub (`main` at `2225fe7`) and its CI run passed every job except the dependency-advisory gate (§3); one approved live-model run (OpenAI `gpt-4o-mini`, 2026-10-20) passed all 44 router and policy cases, but live SQL and action quality are unmeasured (`ai_eval_results.md` §4.2); browser behaviour is verified by 152 automated Playwright tests on a disposable stack with fake AI providers, while the manual walkthrough checklist has not been executed by a person. |
+| **Submission readiness** | **Ready for academic submission on offline evidence and one live-model run.** Every rubric area has an implementation, tests and a demo scenario, and every offline check passes at one commit (§3). Three things a reviewer should know: the work is on GitHub (`main` at `6338adc` when last checked) and its CI run passed every job except the dependency-advisory gate, which blocks on `braces` and Pillow (§3); one approved live-model run (OpenAI `gpt-4o-mini`, 2026-10-20) passed all 44 router and policy cases, but live SQL and action quality are unmeasured (`ai_eval_results.md` §4.2); browser behaviour is verified by 152 automated Playwright tests on a disposable stack with fake AI providers, while the manual walkthrough checklist has not been executed by a person. |
 | **Production readiness** | **NOT YET PRODUCTION READY.** One of seven release gates is met (`production-hardening/release-readiness.md` §6). Governance decisions, live evaluation beyond routing and policy answers, a passing dependency-advisory gate, proxy/monitoring and retention/backup remain; open findings in `final-security-readiness.md`. |
 
 ## 2. Rubric-to-evidence matrix
@@ -37,9 +37,9 @@ Tests are under `HRMS-main/backend/tests/` unless they start with `frontend/`. D
 | Offline AI evaluations | same script | **139/139** (policy 11, SQL 20, router 33, conversation 25, actions 20, assignment 30) |
 | CI advisory-gate tests | same script | 25 passed |
 | Live-model evaluation (one approved run, separate from the offline results) | `python -m evals.run_evals --live`, OpenAI `gpt-4o-mini`, 2026-10-20 20:13–20:14 UTC | router 33/33 (3 cases reached the model), policy 11/11; scope and limits in `ai_eval_results.md` §4.2 |
-| Frontend suite | `npm test` | **268 passed** |
-| TypeScript / production build | `npx tsc --noEmit` / `npm run build` | 0 errors / PASS |
-| Browser E2E (Chromium) | `docker compose -f docker-compose.e2e.yml up -d --build --wait`, then `npx playwright test` (the CI `e2e` job's commands; `frontend/e2e/README.md`) | **152 passed**, 0 failed, 0 skipped, 0 flaky |
+| Frontend suite | `npm test` | **268 passed** (2026-10-20); **277 passed** at `6338adc` (2026-10-21, adds 9 sidebar tests) |
+| TypeScript / production build | `npx tsc --noEmit` / `npm run build` | 0 errors / PASS (local, 2026-10-20); at `6338adc`: `tsc` 0 errors locally; the build passed in the CI frontend job (run 39607243952), not re-run locally |
+| Browser E2E (Chromium) | `docker compose -f docker-compose.e2e.yml up -d --build --wait`, then `npx playwright test` (the CI `e2e` job's commands; `frontend/e2e/README.md`) | **152 passed**, 0 failed, 0 skipped, 0 flaky (2026-10-20); after the `6338adc` sidebar fix: navigation 4/4 and pages 85/85 locally, and the CI `e2e` job passed |
 | Secret scan | gitleaks v8.18.4, full history (80 commits) and every uncommitted file (46) | no leaks |
 
 Offline evaluations and the browser suite use fake or scripted model output: they verify pipelines, authorization and
@@ -51,10 +51,13 @@ The results above are local runs. GitHub Actions (`ci` workflow, push to `main`;
 | 38524047626 | `c3d6928` | 2026-10-14 | success | success | (job not yet defined) | success | success | failure |
 | 38792377654 | `86001f5` | 2026-10-15 | success | success | (job not yet defined) | success | success | failure |
 | 39471328944 | `2225fe7` | 2026-10-20 | success | success | success | success | success | failure |
+| 39493375853 | `e149cfc` | 2026-10-20 | success | success | success | success | success | failure |
+| 39607243952 | `6338adc` | 2026-10-21 | success | success | success | success | success | failure |
 
-The dependency-advisory failure is the advisory-gate step (exit code 1); the step log that names the advisories needs an
-authenticated session and was not read. The expected cause is the build-time `braces` advisory reproduced locally
-(`production-hardening/ci-and-validation.md` §5); its exception stays PROPOSED. Per-test counts of the CI jobs are in
+The dependency-advisory failure is the advisory-gate step (exit code 1). It blocks on `braces` (high, build-time only)
+and on Pillow 12.3.0 (runtime; eight advisories published 2026-10-20, fixed only in Pillow 13, which `fastembed` does
+not yet allow). This comes from the advisory-gate output of the latest CI run, relayed by the owner on 2026-10-21; the step log was not read directly. Details and options: `production-hardening/ci-and-validation.md` §5. No fix or
+exception has been approved; the `braces` exception stays PROPOSED. Per-test counts of the CI jobs are in
 those logs and are not quoted here.
 
 ## 4. Historical results (not re-run in this programme)
@@ -82,7 +85,8 @@ those logs and are not quoted here.
 - G-05: Anthropic server-side fallback beta; G-07: pricing and cost budget; G-08: monitoring tooling and owners.
 - G-09: conversation storage minimisation; G-10: false-refusal tuning.
 - G-11: `enforce` mode, and whether salary, PF/ESI, DOB, policy publication and payslip uploads need step-up.
-- The `braces` advisory exception or a Tailwind 4 upgrade (`ci-and-validation.md` §5).
+- The `braces` advisory exception or a Tailwind 4 upgrade, and the Pillow runtime advisories (a time-limited exception
+  with a pin, or replacing `fastembed`) (`production-hardening/ci-and-validation.md` §5).
 
 ## 7. External evidence still missing
 

@@ -8,7 +8,7 @@ Passing tests are necessary evidence, not a release decision: the open items in 
 **Classification:** VERIFIED (implementation inspected and an executed test proves it) · PARTIALLY_VERIFIED (proven in
 one layer only, or only part of the behaviour) · NOT_TESTED · POLICY_DECISION_REQUIRED · NOT_APPLICABLE.
 
-**Evidence runs (local, 2026-10-20):** backend 3190 passed / 1 skipped (opt-in live test) (3208 passed, 1 skipped after the live-harness tests were added; `verify-backend.sh`, 2026-10-21), offline evaluations 139/139, CI gate tests 25; Vitest 268/268; TypeScript 0 errors; production build PASS; Playwright 152/152 on a fresh isolated stack using the CI e2e job's commands; gitleaks clean (history and all uncommitted files); npm audit runtime 0. GitHub Actions on `2225fe7` (2026-10-20, run 39471328944): backend, frontend, e2e, docker and secret-scan jobs passed; the dependency-advisory gate failed (expected: the build-time `braces` advisory, reproduced locally; the run's step log was not read; #18).
+**Evidence runs (local, 2026-10-20):** backend 3190 passed / 1 skipped (opt-in live test) (3208 passed, 1 skipped after the live-harness tests were added; `verify-backend.sh`, 2026-10-21), offline evaluations 139/139, CI gate tests 25; Vitest 268/268 (277/277 at `6338adc`, 2026-10-21); TypeScript 0 errors; production build PASS; Playwright 152/152 on a fresh isolated stack using the CI e2e job's commands; gitleaks clean (history and all uncommitted files); npm audit runtime 0. GitHub Actions on `6338adc` (2026-10-21, run 39607243952): backend, frontend (incl. `npm run build`), browser E2E, production image builds and secret scan passed; the dependency-advisory gate failed on `braces` (build-time) and Pillow 12.3.0 (runtime) (#18).
 
 ## 1. Findings
 
@@ -31,7 +31,7 @@ one layer only, or only part of the behaviour) · NOT_TESTED · POLICY_DECISION_
 | 15 | Step-up (G-11) | PARTIALLY_VERIFIED · POLICY_DECISION_REQUIRED | `rbac/test_step_up_api.py` (enforce mode on a test DB), `tests/ai/actions/test_step_up.py`; `e2e/step-up.spec.ts`, ACT-10 | Runs in `log` mode: a wrong or missing password is logged, **not blocked**, on the business API (the Copilot's own password check does block). `enforce` needs approval; readiness review: NOT VERIFIABLE (no proxy, unknown external clients, no observation period) |
 | 16 | AI audit events (requests, refusals, denials, action confirmation/execution) | VERIFIED | `tests/ai/audit/`; `e2e/workflow-copilot.spec.ts` AI-B, ACT-1/2 | Written right after the response (tests poll) |
 | 17 | Business-API refusals and employee deactivation/reactivation in an audit store | POLICY_DECISION_REQUIRED | behaviour VERIFIED: log lines only, nothing persisted (`e2e/api.spec.ts`) | Decide whether these need persistent audit records |
-| 18 | Dependency security | PARTIALLY_VERIFIED · POLICY_DECISION_REQUIRED | npm audit 2026-10-20: runtime 0; all 5 high + 2 moderate via build-time `tailwindcss@3` (`braces`, no patched release); pip-audit: CI only (NOT_TESTED locally) | `braces` exception or Tailwind 4: owner decision; CI dependency gate fails by design until then |
+| 18 | Dependency security | PARTIALLY_VERIFIED · POLICY_DECISION_REQUIRED | npm audit 2026-10-20: runtime 0; all 5 high + 2 moderate via build-time `tailwindcss@3` (`braces`, no patched release; absent from the production web image). **Pillow 12.3.0 (runtime):** eight advisories published 2026-10-20, fixed only in 13.0.0, which `fastembed` does not allow (investigation 2026-10-21; `ci-and-validation.md` §5); pip-audit itself: CI only | `braces` exception or Tailwind 4, and a Pillow exception with a pin or a `fastembed` replacement: owner decisions; the CI dependency gate fails until then; nothing approved |
 | 19 | Phone validation policy (country codes, backend format) | POLICY_DECISION_REQUIRED | frontend list of 7 codes in `lib/phone.ts`; the backend checks length only (update 6–20, create 10–20 characters) | |
 | 20 | Concurrency | VERIFIED (SQLite, single worker) | last-active-admin race `rbac/test_last_active_admin.py`; duplicate confirmation ACT-5; double submission INT-1 | Other databases and multi-worker: NOT_TESTED (production refuses more than one worker) |
 | 21 | Failure recovery in the UI (network loss, stale screens, validation then correction, provider outage) | VERIFIED | `e2e/workflow-integrity.spec.ts`, `workflow-copilot.spec.ts` AI-D, ACT-11; `frontend/tests/step-up-admin.test.tsx` | |
@@ -61,7 +61,7 @@ one layer only, or only part of the behaviour) · NOT_TESTED · POLICY_DECISION_
 3. G-11 `enforce` mode (Gate C) after proxy/header, client inventory, observation and alerting evidence.
 4. Role changes forcing a new sign-in (#6); persistent audit of business refusals and of deactivation/reactivation (#17).
 5. Phone validation policy and country-code list (#19).
-6. `braces` advisory exception or Tailwind 4 upgrade (#18).
+6. `braces` advisory exception or Tailwind 4 upgrade; Pillow runtime advisories (#18).
 7. Token storage / strict CSP (#22); data-governance gates (#23).
 8. Browser coverage gaps: confirmation expiry, in-process API outage, Copilot manager ticket scope, model-generated SQL
    (all covered by backend tests only).

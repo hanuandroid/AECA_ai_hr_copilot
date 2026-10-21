@@ -286,7 +286,7 @@ employee phone-number fix and session revocation on deactivation added on 2026-1
 - **Production readiness: NOT YET PRODUCTION READY** (release gates: `docs/production-hardening/release-readiness.md` §6).
 - **Latest local results (2026-10-20):** backend 3190 passed (1 opt-in live test skipped) (3208 passed, 1 skipped after the live-harness tests were added; `verify-backend.sh`, 2026-10-21), offline evaluations 139/139
   (scripted model output), CI gate tests 25 passed — all three from `sh scripts/verify-backend.sh` (throwaway
-  Python 3.11 container, repository read-only, no `.env`, provider keys blanked); frontend Vitest 268 passed,
+  Python 3.11 container, repository read-only, no `.env`, provider keys blanked); frontend Vitest 277 passed at `6338adc` (268 on 2026-10-20 before the sidebar tests),
   TypeScript 0 errors, production build PASS; Playwright 152 passed (0 failed, 0 skipped, 0 flaky); gitleaks clean
   (full history and all uncommitted files).
 - **Browser E2E:** `frontend/e2e/` (Playwright, Chromium) runs against the disposable stack in
@@ -296,10 +296,11 @@ employee phone-number fix and session revocation on deactivation added on 2026-1
   (`docs/ai_eval_results.md` §4.2). Live SQL generation, action extraction and prompt-injection resistance are not
   covered by it.
 - **Not run yet:** the manual browser walkthrough.
-- **GitHub Actions:** the `ci` workflow ran on `2225fe7` (2026-10-20): backend, frontend, browser E2E, production image
-  builds and secret scan passed; the dependency-advisory gate failed (expected: the build-time `braces` advisory, whose
-  exception is still PROPOSED). Earlier runs on 2026-10-14 and 2026-10-15 failed only that gate too. Details:
-  `docs/production-hardening/ci-and-validation.md` §3.
+- **GitHub Actions:** the latest run, on `6338adc` (2026-10-21), passed backend, frontend (including the production
+  build), browser E2E, production image builds and secret scan; the dependency-advisory gate failed, as on every run
+  since 2026-10-14. It blocks on `braces` (high, build-time only; exception still PROPOSED) and on Pillow 12.3.0
+  (runtime; eight advisories published 2026-10-20, fixed only in Pillow 13, which `fastembed` does not yet allow).
+  No fix or exception has been approved. Details: `docs/production-hardening/ci-and-validation.md` §3 and §5.
 
 The NovaWorks PeopleOps Copilot adds AI to CB Nest without bypassing it:
 

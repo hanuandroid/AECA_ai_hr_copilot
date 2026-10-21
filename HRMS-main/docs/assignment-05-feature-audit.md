@@ -117,7 +117,7 @@ role-specific modes, usage dashboard, token/latency tracking in audit metadata. 
 | Backend suite | local, `scripts/verify-backend.sh` (2026-10-20, log re-checked) | 3190 passed, 1 skipped |
 | Offline evaluations (6 suites, 139 cases) | local, same script | 139/139 (scripted/extractive model) |
 | CI advisory-gate unit tests | local | 25 passed |
-| Vitest / TypeScript / build | local (2026-10-20) | 268 / 0 errors / PASS |
+| Vitest / TypeScript / build | local (2026-10-20) | 268 / 0 errors / PASS (later: Vitest 277 at `6338adc`; build passed in CI run 39607243952) |
 | Playwright (Chromium, isolated stack) | local `results.json` (2026-10-20T16:27Z) | 152 expected, 0 unexpected, 0 skipped, 0 flaky |
 | GitHub Actions run `39471328944` on `2225fe7` | GitHub, 2026-10-20 18:02–18:11 UTC | backend, frontend, docker, secret-scan, e2e: success; dependency advisories: failure |
 | Real-embedding retrieval calibration | local, 2026-10-14 | Recall@4 1.000; proposal only |
@@ -157,9 +157,12 @@ Historical phase reports (e.g. `phase-2-report.md`) are dated records and should
 | `38524047626` | `c3d6928` | 2026-10-14 | success | success | success | success | (job not yet defined) | failure | failure |
 | `38792377654` | `86001f5` | 2026-10-15 | success | success | success | success | (job not yet defined) | failure | failure |
 | `39471328944` | `2225fe7` | 2026-10-20 | success | success | success | success | **success** | failure | failure |
+| `39493375853` | `e149cfc` | 2026-10-20 | success | success | success | success | success | failure | failure |
+| `39607243952` | `6338adc` | 2026-10-21 | success | success | success | success | success | failure | failure |
 
 Unresolved CI failure: the advisory gate (`tailwindcss@3` → `braces`, GHSA-vfj7-8cjw-p6xm, high; build-time only;
-runtime `npm audit` 0). Annotation: GitHub forces `actions/checkout@v4` and `actions/setup-node@v4` from Node 20 to
+runtime `npm audit` 0). **Update 2026-10-21:** the gate now also blocks on Pillow 12.3.0 (runtime; eight advisories
+published 2026-10-20, fixed only in Pillow 13, which `fastembed` does not allow; `ci-and-validation.md` §5). Annotation: GitHub forces `actions/checkout@v4` and `actions/setup-node@v4` from Node 20 to
 Node 24 (deprecation warning). Branch protection is not configured, so the red gate does not block merges.
 
 `braces` options (owner decision; nothing changed here):
@@ -210,7 +213,7 @@ Node 24 (deprecation warning). Branch protection is not configured, so the red g
 Open: release gates in `production-hardening/release-readiness.md` §6 — G-11 `enforce` (stays `log`), proxy/TLS and
 header logging, monitoring and alert owners, backups and a restore drill, data governance and retention (G-01..G-10),
 token storage and strict CSP, role changes forcing a new sign-in, persistent audit of business refusals, SHA-pinned
-actions and branch protection, the `braces` decision, non-SQLite databases and multiple workers (not verified),
+actions and branch protection, the `braces` and Pillow decisions, non-SQLite databases and multiple workers (not verified),
 real-model quality evaluations. Verdict: **NOT YET PRODUCTION READY**.
 
 ## 14. Verdict
