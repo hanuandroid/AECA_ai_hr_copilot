@@ -12,7 +12,7 @@ LangGraph router, all governed by a deterministic authorization boundary and an 
 | Offline evaluation | 139/139 on six suites with **scripted or extractive model output**. This proves the pipelines and guardrails, not real-model quality. | [ai_eval_results.md](ai_eval_results.md) §2–3 |
 | Live-model evaluation | One approved run, 2026-10-20, OpenAI `gpt-4o-mini`: router 33/33 (only 3 cases reached the model), policy 11/11 (the 3 refusals came from the retrieval threshold, before any model call; hash-embedding retrieval). Live SQL generation, action extraction and prompt-injection resistance are **not measured**. | [ai_eval_results.md](ai_eval_results.md) §4.2 |
 | Manual browser walkthrough | **NOT_RUN**: 38 scenarios prepared, none executed by a person. Playwright automation is not a substitute for it. | [production-hardening/browser-walkthrough.md](production-hardening/browser-walkthrough.md) |
-| CI (GitHub Actions) | Latest verified run (`6338adc`, 2026-10-21): backend, frontend, browser E2E, production images and secret scan passed; the **dependency-advisory gate failed** | [production-hardening/ci-and-validation.md](production-hardening/ci-and-validation.md) §3 |
+| CI (GitHub Actions) | Latest verified run (`859531f` (2026-10-21, run 39623606922; also `618e9d4` and `2023548`)): backend, frontend, browser E2E, production images and secret scan passed; the **dependency-advisory gate failed** | [production-hardening/ci-and-validation.md](production-hardening/ci-and-validation.md) §3 |
 | Production readiness | **NOT YET PRODUCTION READY.** The dependency-advisory gate is unresolved (`braces`, build-time, exception still PROPOSED; Pillow 12.3.0, runtime, no compatible fix, no exception), the manual walkthrough is pending, and further release gates are open. | [production-hardening/release-readiness.md](production-hardening/release-readiness.md) §6, [final-security-readiness.md](final-security-readiness.md) |
 
 ## Executive summary
@@ -70,7 +70,7 @@ flowchart TB
         RAG["Policy RAG"]
         SQLA["SQL agent"]
         ACT["HR action agent"]
-        AZ["services/ai/authorization<br/>deterministic capability matrix"]
+        AZ["services/ai/authorization<br/>deterministic capability matrix<br/>run_authorized before any work"]
     end
 
     subgraph AIDB["AI-owned tables - written only by AI repositories"]
@@ -85,11 +85,11 @@ flowchart TB
         BDB[("Business tables<br/>employees, leaves, tickets, projects, ...")]
     end
 
-    LLM["LLM provider<br/>Anthropic or OpenAI, behind the provider boundary"]
+    LLM["LLM provider - Anthropic or OpenAI<br/>reached only via observe and the provider policy"]
 
     UI -->|"Bearer JWT"| MW --> AUTH --> CTX --> ROUTER
     ROUTER --> RAG & SQLA & ACT
-    RAG & SQLA & ACT -.->|"run_authorized before any work"| AZ
+    RAG & SQLA & ACT -.-> AZ
     RAG -->|"read and index"| PC
     SQLA -->|"SELECT only, separate read-only connection"| BDB
     ACT -->|"proposal and single-use confirmation"| PA
@@ -97,7 +97,7 @@ flowchart TB
     HAPI -->|"the only write path"| BDB
     ROUTER --> CONV
     MW --> AUD
-    RAG & SQLA & ACT -.->|"observe and provider policy"| LLM
+    RAG & SQLA & ACT -.-> LLM
 ```
 
 - **No AI write path to business tables.** AI code writes only the four AI-owned tables shown. Business changes are
@@ -305,7 +305,7 @@ flowchart TB
     V2 --> EXEC["Read-only executor<br/>mode=ro, query_only, authorizer, timeout, row cap"]
     EXEC --> FMT["Redact rows, then format<br/>deterministic guard with fallback summary"]
     FMT --> ANS["Answer, columns, rows<br/>sql only with SQL_VIEW_RAW"]
-    PARSE -->|"mutation or admin node"| REJ["Safe rejection<br/>SQL_MUTATION_REJECTED or SQL_NOT_ALLOWED"]
+    PARSE -->|"mutation or admin node"| REJ["Safe rejection with a typed SQL_* code<br/>e.g. SQL_MUTATION_REJECTED, SQL_NOT_ALLOWED,<br/>SQL_TABLE_NOT_ALLOWED, SQL_SCOPE_VIOLATION"]
     V1 -->|"rule violated"| REJ
     V2 -->|"proof fails"| REJ
 ```

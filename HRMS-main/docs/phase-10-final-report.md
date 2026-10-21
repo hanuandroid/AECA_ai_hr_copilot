@@ -1,5 +1,10 @@
 # Phase 10: Final Report — NovaWorks PeopleOps Copilot on CB Nest
 
+> **Historical record (2026-10-03).** This report closed assignment Phase 10. Its "Ready for final submission" status
+> and test counts predate the production-hardening and capstone work; it is kept unchanged as a dated record. Current
+> status and evidence: [capstone-submission-report.md](capstone-submission-report.md) and
+> [final-security-readiness.md](final-security-readiness.md). Release status: **NOT YET PRODUCTION READY**.
+
 Date: 2026-10-03. Details: [ai_architecture.md](ai_architecture.md), [ai_permissions_matrix.md](ai_permissions_matrix.md),
 [ai_eval_results.md](ai_eval_results.md), [ai_threat_model.md](ai_threat_model.md),
 [architecture/phase-10-gap-analysis.md](architecture/phase-10-gap-analysis.md).

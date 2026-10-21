@@ -9,7 +9,7 @@ security review: [`final-security-readiness.md`](final-security-readiness.md)
 
 | Question | Verdict |
 |---|---|
-| **Submission readiness** | **Ready for academic submission on offline evidence and one live-model run.** Every rubric area has an implementation, tests and a demo scenario, and every offline check passes at one commit (§3). Three things a reviewer should know: the work is on GitHub (`main` at `6338adc` when last checked) and its CI run passed every job except the dependency-advisory gate, which blocks on `braces` and Pillow (§3); one approved live-model run (OpenAI `gpt-4o-mini`, 2026-10-20) passed all 44 router and policy cases, but live SQL and action quality are unmeasured (`ai_eval_results.md` §4.2); browser behaviour is verified by 152 automated Playwright tests on a disposable stack with fake AI providers, while the manual walkthrough checklist has not been executed by a person. |
+| **Submission readiness** | **Ready for academic submission on offline evidence and one live-model run.** Every rubric area has an implementation, tests and a demo scenario, and every offline check passes at one commit (§3). Three things a reviewer should know: the work is on GitHub (`main` at `859531f` when last checked) and its CI run passed every job except the dependency-advisory gate, which blocks on `braces` and Pillow (§3); one approved live-model run (OpenAI `gpt-4o-mini`, 2026-10-20) passed all 44 router and policy cases, but live SQL and action quality are unmeasured (`ai_eval_results.md` §4.2); browser behaviour is verified by 152 automated Playwright tests on a disposable stack with fake AI providers, while the manual walkthrough checklist has not been executed by a person. |
 | **Production readiness** | **NOT YET PRODUCTION READY.** One of seven release gates is met (`production-hardening/release-readiness.md` §6). Governance decisions, live evaluation beyond routing and policy answers, a passing dependency-advisory gate, proxy/monitoring and retention/backup remain; open findings in `final-security-readiness.md`. |
 
 ## 2. Rubric-to-evidence matrix
@@ -27,7 +27,7 @@ Tests are under `HRMS-main/backend/tests/` unless they start with `frontend/`. D
 | 6 | Audit logging | `services/ai/audit/`, append-only table `ai_audit_events` (migration 0020; triggers); `GET /api/v1/ai/audit[/metrics]` | `ai/audit/` (append-only, no prompt/answer/PII persisted, metrics, eval reporting) | demo §5; walkthrough E7 | Implemented; verified | Deliberate deviation: no message text in audit (length + keyed fingerprint; redacted text only in the owner's conversation store) |
 | 7 | AI evaluation and security testing | `evals/` (6 offline suites, 139 cases; live runner for Anthropic/OpenAI), `tests/ai/hardening/` (adversarial matrix, red-team corpus, PII corpus) | `evals/run_evals.py` 139/139 offline; `ai/hardening/`, `ai/test_pii_detection_corpus.py`, `ai/test_provider_policy.py`; deliberate-regression checks all caught | demo §8 | Offline: complete. Live: router 33/33, policy 11/11 (2026-10-20) | Live SQL, action and injection quality unmeasured; 6 pinned false refusals on a benign set (G-10) |
 | 8 | Observability and operational readiness | request ids, provider-call audit (tokens, latency, cost when priced), `/admin/ai-usage`, budgets and limits (`limits.py`), production configuration checks, retention `--check`, runbook, alert catalogue | `ai/test_limits.py`, `ai/hardening/test_production_config.py`, `ai/test_retention.py`, `ai/audit/` | demo §5; runbook | Implemented locally | No monitoring tool, proxy or alert owners (G-08, Gate E); external tracing deliberately off; single worker only |
-| 9 | Reproducibility and documentation | README (deliverable map), `ai_architecture.md` §2.1, `ai_permissions_matrix.md`, `ai_eval_results.md`, `demo-script.md`, `ci-and-validation.md`, `scripts/verify-backend.sh`, CI workflow | this report §3 | demo §1–2, §7 | Documented and locally reproducible | GitHub CI runs; every job passes except the dependency gate, which fails by design until the `braces` decision |
+| 9 | Reproducibility and documentation | README (deliverable map), `ai_architecture.md` §8.2, `ai_permissions_matrix.md`, `ai_eval_results.md`, `demo-script.md`, `ci-and-validation.md`, `scripts/verify-backend.sh`, CI workflow | this report §3 | demo §1–2, §7 | Documented and locally reproducible | GitHub CI runs; every job passes except the dependency gate, which fails by design until the `braces` decision |
 
 ## 3. Verified results (fresh, 2026-10-20, on the tree described in the header)
 
@@ -53,6 +53,9 @@ The results above are local runs. GitHub Actions (`ci` workflow, push to `main`;
 | 39471328944 | `2225fe7` | 2026-10-20 | success | success | success | success | success | failure |
 | 39493375853 | `e149cfc` | 2026-10-20 | success | success | success | success | success | failure |
 | 39607243952 | `6338adc` | 2026-10-21 | success | success | success | success | success | failure |
+| 39620252480 | `618e9d4` | 2026-10-21 | success | success | success | success | success | failure |
+| 39621297450 | `2023548` | 2026-10-21 | success | success | success | success | success | failure |
+| 39623606922 | `859531f` | 2026-10-21 | success | success | success | success | success | failure |
 
 The dependency-advisory failure is the advisory-gate step (exit code 1). It blocks on `braces` (high, build-time only)
 and on Pillow 12.3.0 (runtime; eight advisories published 2026-10-20, fixed only in Pillow 13, which `fastembed` does

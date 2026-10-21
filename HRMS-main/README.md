@@ -55,9 +55,13 @@ It is designed as a practical base for AI feature integration (RAG, assistants, 
 |   |   |-- db/
 |   |   |-- models/
 |   |   |-- schemas/
-|   |   `-- services/
+|   |   `-- services/            # services/ai/: authorization, rag, sql, actions, orchestration, audit
+|   |-- data/policies/           # synthetic demo HR policies (Policy RAG source)
+|   |-- evals/                   # offline and live AI evaluation runner and datasets
 |   |-- scripts/
+|   |   |-- ingest_policies.py
 |   |   `-- seed.py
+|   |-- tests/                   # pytest suites (characterization, rbac, ai)
 |   |-- storage/
 |   |   |-- hr-policies/
 |   |   `-- profile-photos/
@@ -67,8 +71,10 @@ It is designed as a practical base for AI feature integration (RAG, assistants, 
 |   `-- requirements.txt
 |-- frontend/
 |   |-- app/
+|   |   |-- admin/               # ai-usage, ai-audit (ADMIN)
 |   |   |-- announcements/
 |   |   |-- attendance/
+|   |   |-- copilot/             # AI Copilot chat
 |   |   |-- dashboard/
 |   |   |-- employees/
 |   |   |-- finance/
@@ -81,19 +87,30 @@ It is designed as a practical base for AI feature integration (RAG, assistants, 
 |   |   |-- team-calendar/
 |   |   `-- tickets/
 |   |-- components/
+|   |   |-- copilot/
 |   |   |-- layout/
+|   |   |-- security/            # password step-up dialog
 |   |   `-- ui/
+|   |-- e2e/                     # Playwright browser suite (isolated stack)
 |   |-- lib/
-|   |   `-- api.ts
+|   |   |-- api.ts
+|   |   `-- copilot-api.ts
+|   |-- tests/                   # Vitest unit and component tests
 |   |-- Dockerfile
 |   |-- middleware.ts
 |   `-- package.json
 |-- docs/
 |   |-- api/
+|   |-- architecture/            # AI design notes per phase
+|   |-- production-hardening/    # hardening, CI, release readiness
 |   |-- Learner_Guide.md
 |   |-- PRD.md
+|   |-- ai_architecture.md       # plus the other AI and submission documents (see Documentation)
 |   `-- db_tables_samples.md
+|-- scripts/verify-backend.sh    # backend tests + evaluations in a throwaway container
 |-- docker-compose.yml
+|-- docker-compose.e2e.yml        # disposable browser-test stack
+|-- docker-compose.prod.yml       # production-shaped stack
 `-- README.md
 ```
 
@@ -109,8 +126,8 @@ It is designed as a practical base for AI feature integration (RAG, assistants, 
 First-time setup:
 
 ```bash
-git clone <repo-url>
-cd HRMS
+git clone https://github.com/hanuandroid/AECA_ai_hr_copilot.git
+cd AECA_ai_hr_copilot/HRMS-main
 cp backend/.env.example backend/.env
 ```
 
@@ -179,8 +196,10 @@ Provider selection (Anthropic or OpenAI), setup, mocked tests and the approved s
 | `AI_AUDIT_ENABLED` | no | `true` | Persist AI audit events |
 | `AI_LLM_[FAST_]INPUT/OUTPUT_COST_PER_MTOK`, `AI_OPENAI_[FAST_]INPUT/OUTPUT_COST_PER_MTOK` | no | unset | Optional per-provider pricing for **estimated** cost in the usage dashboard (rates are never shared between providers) |
 
-With `ENVIRONMENT=production` the API refuses to start with the default `JWT_SECRET_KEY`, fake AI providers, or a
-missing key or model for the selected provider (`ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` + `AI_OPENAI_MODEL`).
+With `ENVIRONMENT=production` the API refuses to start with the default or a weak `JWT_SECRET_KEY`, a missing or reused
+`AI_AUDIT_FINGERPRINT_KEY`, wildcard `ALLOWED_HOSTS` or CORS origins, external tracing variables (unless
+`ALLOW_EXTERNAL_TRACING=true`), fake AI providers or `AI_FAKE_LLM_SCRIPT`, or a missing key or model for the selected
+provider (`ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` + `AI_OPENAI_MODEL`); see `app/core/production_checks.py`.
 
 ### Password step-up for high-impact admin operations (G-11)
 
@@ -296,7 +315,7 @@ employee phone-number fix and session revocation on deactivation added on 2026-1
   (`docs/ai_eval_results.md` §4.2). Live SQL generation, action extraction and prompt-injection resistance are not
   covered by it.
 - **Not run yet:** the manual browser walkthrough.
-- **GitHub Actions:** the latest run, on `6338adc` (2026-10-21), passed backend, frontend (including the production
+- **GitHub Actions:** the latest verified run, on `859531f` (2026-10-21), passed backend, frontend (including the production
   build), browser E2E, production image builds and secret scan; the dependency-advisory gate failed, as on every run
   since 2026-10-14. It blocks on `braces` (high, build-time only; exception still PROPOSED) and on Pillow 12.3.0
   (runtime; eight advisories published 2026-10-20, fixed only in Pillow 13, which `fastembed` does not yet allow).
@@ -323,7 +342,7 @@ Next.js /copilot ─► FastAPI /api/v1/chat ─► AI authorization (DB role, I
     explicit confirmation.
   - The SQL agent is read-only and scoped.
   - Passwords, bank, PAN, DOB, salary and payroll identifiers never leave via AI.
-- **Where each requirement lives** (full deliverable map: [`ai_architecture.md`](docs/ai_architecture.md) §2.1):
+- **Where each requirement lives** (full deliverable map: [`ai_architecture.md`](docs/ai_architecture.md) §8.2):
 
   | Requirement | Package / service (`backend/app/`) | Endpoint | Tests (`backend/tests/` unless noted) |
   |---|---|---|---|
@@ -332,7 +351,7 @@ Next.js /copilot ─► FastAPI /api/v1/chat ─► AI authorization (DB role, I
   | HR actions via existing APIs | `services/ai/actions/` (registry, confirmation, client with the user's token) | `POST /api/v1/chat/actions`, `/chat/actions/confirm` | `ai/actions/`, `evals/action_eval.json` |
   | Router (LangGraph) and conversations | `services/ai/orchestration/`, `services/ai/conversation/` | `POST /api/v1/chat`, `/chat/conversations` | `ai/orchestration/`, `ai/conversation/` |
   | RBAC and backend authorization | `services/ai/authorization/`; business routes in `api/v1/endpoints/` | `GET /api/v1/chat/permissions` | `ai/authorization/`, `rbac/`, `characterization/` |
-  | Audit logging | `services/ai/audit/`, table `ai_audit_events` (no message text; see `ai_architecture.md` §3.5) | `GET /api/v1/ai/audit[/metrics]` | `ai/audit/` |
+  | Audit logging | `services/ai/audit/`, table `ai_audit_events` (no message text; see `ai_architecture.md` §7.1) | `GET /api/v1/ai/audit[/metrics]` | `ai/audit/` |
   | Provider boundary and limits | `services/ai/provider_policy.py`, `services/ai/limits.py`, `services/ai/llm/` | all model-calling routes | `ai/test_provider_policy.py`, `ai/test_limits.py`, `ai/test_openai_provider.py` |
   | Frontend | `frontend/app/copilot/`, `frontend/components/copilot/`, `frontend/lib/copilot-*.ts` | — | `frontend/tests/copilot-*.test.tsx` |
 - **Policy index:** after migrate and seed, run
@@ -366,7 +385,10 @@ Docs:
 - Database schema reference: [`db_tables_samples.md`](docs/db_tables_samples.md)
 - AI architecture and contracts: [`ai_architecture.md`](docs/ai_architecture.md), [`architecture/`](docs/architecture/)
 - AI permissions: [`ai_permissions_matrix.md`](docs/ai_permissions_matrix.md); AI evaluation results: [`ai_eval_results.md`](docs/ai_eval_results.md)
-- Final AI report: [`phase-10-final-report.md`](docs/phase-10-final-report.md)
+- Assignment feature audit and gap analysis: [`assignment-05-feature-audit.md`](docs/assignment-05-feature-audit.md)
+- Security: [`final-security-readiness.md`](docs/final-security-readiness.md), [`ai_threat_model.md`](docs/ai_threat_model.md); release gates: [`release-readiness.md`](docs/production-hardening/release-readiness.md)
+- Validation commands and CI status: [`ci-and-validation.md`](docs/production-hardening/ci-and-validation.md); browser test reports: [`role-access-test-report.md`](docs/role-access-test-report.md), [`deep-workflow-test-report.md`](docs/deep-workflow-test-report.md)
+- Phase 10 report (historical, 2026-10-03): [`phase-10-final-report.md`](docs/phase-10-final-report.md)
 - Demo walkthrough (setup to teardown, synthetic data): [`demo-script.md`](docs/demo-script.md)
 - Capstone submission report (rubric-to-evidence matrix, verified results, open items): [`capstone-submission-report.md`](docs/capstone-submission-report.md)
 

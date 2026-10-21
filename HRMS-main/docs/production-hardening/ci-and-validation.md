@@ -54,6 +54,9 @@ executed locally on 2026-10-20 (same isolation check, stack, credentials file an
 | 39471328944 | `2225fe7` | 2026-10-20 | success | success | success | success | success | failure | failure |
 | 39493375853 | `e149cfc` | 2026-10-20 | success | success | success | success | success | failure | failure |
 | 39607243952 | `6338adc` | 2026-10-21 | success | success | success | success | success | failure | failure |
+| 39620252480 | `618e9d4` | 2026-10-21 | success | success | success | success | success | failure | failure |
+| 39621297450 | `2023548` | 2026-10-21 | success | success | success | success | success | failure | failure |
+| 39623606922 | `859531f` | 2026-10-21 | success | success | success | success | success | failure | failure |
 
 **Status:** every job passes on GitHub except `dependency-audit`, whose advisory-gate step exits 1 on every run. It blocks
 on `braces` (build-time) and, since the advisories of 2026-10-20, on Pillow 12.3.0 (runtime; details in §5). This comes from the advisory-gate output of the latest CI run, relayed
@@ -138,4 +141,4 @@ No exception was approved, no dependency was changed and no advisory was suppres
 | gitleaks history / uncommitted files | clean / clean | clean (80 commits) / clean (46 files) |
 | npm audit | runtime 0; all: 5 high + 2 moderate (`tailwindcss@3` chain, `braces`) | unchanged |
 | pip-audit | not run locally (CI job) | NOT_TESTED locally |
-| GitHub CI | not part of this local verification | ran after each push (latest: `6338adc`, run 39607243952): see §3 |
+| GitHub CI | not part of this local verification | ran after each push (latest verified: `859531f`, run 39623606922): see §3 |

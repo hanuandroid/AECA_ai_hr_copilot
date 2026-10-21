@@ -1,6 +1,9 @@
 # AI provider setup: Anthropic or OpenAI
 
-**Status (2026-10-16):** both providers are implemented behind the `LLMProvider` abstraction and **verified only with mocked clients**. **No live call has been made with either provider.** Do not send real employee data to either provider until the data-processing decisions are approved (`production-hardening/data-processing.md` §5, including the OpenAI items 7–11).
+**Status (2026-10-16):** both providers are implemented behind the `LLMProvider` abstraction and **verified only with mocked clients**. **No live call has been made with either provider.**
+**Update:** OpenAI has since been called live: a 10-check smoke test with `gpt-4o-mini` on 2026-10-16 and one approved
+evaluation run (router 33/33, policy 11/11) on 2026-10-20 ([ai_eval_results.md](ai_eval_results.md) §4.1–4.2).
+Anthropic has still not been called live. Do not send real employee data to either provider until the data-processing decisions are approved (`production-hardening/data-processing.md` §5, including the OpenAI items 7–11).
 
 ## 1. Choosing a provider
 
@@ -93,7 +96,8 @@ Use synthetic content only and a dev database seeded with demo data (`scripts/se
 
 ## 6. Known limitations and blockers
 
-- **No live verification yet:** schema acceptance by a specific model, output quality, latency and cost are unverified.
+- **Live verification is narrow:** only OpenAI `gpt-4o-mini` has been exercised live (one smoke test, one evaluation
+  run of 44 cases); Anthropic has not. Output quality beyond those cases, latency and billed cost are unverified.
 - **Strict mode:** a model without Structured Outputs support will fail with `AI_PROVIDER_ERROR` (400) or `AI_UNAVAILABLE` (404). That's safe, but the Copilot won't answer.
 - **Anthropic-only options:** `AI_LLM_EFFORT` and `AI_LLM_SERVER_FALLBACKS` are ignored when `AI_LLM_PROVIDER=openai`. Use `AI_OPENAI_REASONING_EFFORT` instead.
 - **Thresholds:** retrieval thresholds and the offline evals are provider-independent, but answer-quality acceptance needs a live evaluation per provider.

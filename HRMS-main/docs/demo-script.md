@@ -140,7 +140,7 @@ with the signed-in user's own token, so the endpoint's normal permission checks 
 ## 5. Audit and usage (ADMIN)
 
 - `/admin/ai-audit`: one entry per request with route, status, capability/action, error code and timestamp. No
-  message text is stored, only its length and a keyed fingerprint (`docs/ai_architecture.md` §3.5).
+  message text is stored, only its length and a keyed fingerprint (`docs/ai_architecture.md` §7.1).
 - `/admin/ai-usage`: request, refusal and action counts, latency, tokens; cost shows only if prices are configured.
 
 ## 6. Password step-up on high-impact admin pages (G-11)

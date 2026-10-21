@@ -57,4 +57,5 @@ See the [security review](HRMS-main/docs/final-security-readiness.md) and [relea
 
 ## License
 
-No license file is included in this repository.
+No license file is included in this repository. The application README ends with the notice "Copyright (c) Codebasics.
+All rights reserved."

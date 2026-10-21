@@ -40,7 +40,7 @@ Owner "TBD" means a named human owner is still required.
 | No critical advisories | npm and pip audits re-run 2026-10-17 (pip-audit 2.9.0 runtime and dev; npm audit all and `--omit=dev`) | VERIFIED | — | Eng |
 | No high runtime advisories | 2026-10-17: npm `--omit=dev`: 0; pip runtime and dev: none flagged by the gate. **Since 2026-10-20:** Pillow 12.3.0 (runtime, transitive via `fastembed`/`reportlab`) has eight advisories (six high on GitHub), fixed only in 13.0.0, which `fastembed` does not allow; the CI gate fails on them (`ci-and-validation.md` §5, investigation 2026-10-21); postcss override pinned by `dependency-pins.test.ts` | **BLOCKED** (Pillow; no compatible fix; no exception) | The override is unsupported by Next; remove it on `next@16`. New moderate build-time `postcss-selector-parser` GHSA-rj75-hqrm-r3gf (report only) | Eng |
 | High build-time advisories | `braces` GHSA-vfj7 (no patched release; Tailwind 4 removes it). Advisory gate re-run 2026-10-17: **FAIL** (exception PROPOSED, missing owner and approver) | **BLOCKED** (exception PROPOSED, no owner) | CI gate fails until approved or migrated | **TBD (owner / approver)** |
-| CI pipeline | `.github/workflows/ci.yml`; GitHub runs 2026-10-14 to 2026-10-21 (latest `6338adc`: all jobs pass except the dependency-advisory gate) | RUNS ON GITHUB (advisory gate red, see above) | Actions not pinned to SHAs; no branch protection | TBD |
+| CI pipeline | `.github/workflows/ci.yml`; GitHub runs 2026-10-14 to 2026-10-21 (latest verified `859531f`: all jobs pass except the dependency-advisory gate) | RUNS ON GITHUB (advisory gate red, see above) | Actions not pinned to SHAs; no branch protection | TBD |
 
 ## 3. AI quality
 

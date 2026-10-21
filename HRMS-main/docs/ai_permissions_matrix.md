@@ -166,7 +166,7 @@ Code source of truth: `backend/app/services/ai/actions/registry.py` (`ACTION_REG
 | LEAVE_REJECT | POST `/api/v1/leaves/requests/{id}/reject` | anyone except self | direct reports | — | same |
 | TICKET_CREATE | POST `/api/v1/tickets` | self | self | self | caller |
 | TICKET_ASSIGN | POST `/api/v1/tickets/{id}/assign` | any ticket | team-raised tickets | — | ticket by id/title, plus assignee (ACTIVE, within HR read scope) |
-| TICKET_STATUS_UPDATE | POST `/api/v1/tickets/{id}/status` | any ticket | team-raised tickets | — (D7, exception E1: also the employee assignee) | ticket by id/title; status ∈ OPEN/IN_PROGRESS/RESOLVED |
+| TICKET_STATUS_UPDATE | POST `/api/v1/tickets/{id}/status` | any ticket | team-raised tickets | — (also for an employee who is the ticket's assignee: the API allows that, the Copilot does not; stricter by exception E1) | ticket by id/title; status ∈ OPEN/IN_PROGRESS/RESOLVED |
 | ANNOUNCEMENT_CREATE | POST `/api/v1/announcements` | ✓ (audience ORG) | ✓ (audience TEAM) | — | — (audience from the grant, never from the model) |
 | PROJECT_ASSIGN | POST `/api/v1/employees/{id}/projects` | anyone | team | — | employee (ACTIVE) + project from the catalog |
 | PROJECT_CREATE | POST `/api/v1/employees/projects/catalog` | ✓ | — (API is ADMIN-only too since RBAC step 6) | — | — |
@@ -260,12 +260,15 @@ The tools available to the LLM are **filtered by role before the LLM call**. A t
 
 ## 4. Standard refusal messages
 
+Implemented codes and messages come from `backend/app/services/ai/errors.py` (the complete list, including rate-limit,
+budget and step-up codes); the Phase 0 names kept below for traceability are marked as such and are not error codes.
+
 | Code | Message |
 |---|---|
-| `AI_PERMISSION_DENIED` | You do not have permission to perform this action. |
-| `AI_SENSITIVE_DATA_BLOCKED` | I can't provide bank, PAN, password, date-of-birth or salary information. |
-| `AI_PAYROLL_DENIED` | You do not have permission to view payroll information through the assistant. |
-| `AI_OUT_OF_SCOPE` | You can only view information about yourself (EMPLOYEE) / your team (MANAGER). |
+| `AI_PERMISSION_DENIED` (403) | Authorization-boundary denials (no capability, out of scope, unknown target): "You are not authorized to access this resource." Other call sites use the default "You do not have permission to perform this action." |
+| `AI_SENSITIVE_DATA_BLOCKED` | *(Phase 0 name, not an error code. Sensitive columns are refused as `SQL_COLUMN_NOT_ALLOWED` / `SQL_TABLE_NOT_ALLOWED`; a policy answer that would touch personal data gets the policy out-of-scope message below)* |
+| `AI_PAYROLL_DENIED` | *(Phase 0 name, not an error code. Payroll tables and columns are refused as `SQL_TABLE_NOT_ALLOWED` / `SQL_COLUMN_NOT_ALLOWED` unless the role holds PAYROLL_READ_ORG)* |
+| `AI_OUT_OF_SCOPE` | *(Phase 0 name, not an error code. Out-of-scope requests return `SQL_SCOPE_VIOLATION` or the generic `AI_PERMISSION_DENIED`)* |
 | `AI_UNSAFE_SQL` | *(Phase 0 name; implemented as the `SQL_*` codes below)* |
 | `SQL_SCOPE_VIOLATION` (403) | You can only ask about data within your authorized scope: your own records, or your team's if you manage a team. |
 | `SQL_COLUMN_NOT_ALLOWED` / `SQL_TABLE_NOT_ALLOWED` (403) | That information is not available through the assistant. |
@@ -273,8 +276,9 @@ The tools available to the LLM are **filtered by role before the LLM call**. A t
 | `SQL_NOT_ALLOWED` (403) | That query uses an operation the assistant is not allowed to run. |
 | `SQL_PARSE_ERROR` / `SQL_QUERY_TOO_COMPLEX` (422) | The assistant could not build a valid query… / That question needs a query that is too complex… |
 | `SQL_EXECUTION_ERROR` (500) | The assistant could not run the query. Please try again. |
-| `AI_ACTION_NOT_SUPPORTED` | That action isn't supported by the assistant. |
-| `AI_INSUFFICIENT_CONTEXT` | I couldn't find this in the HR policy library. Please contact HR. |
+| `AI_ACTION_NOT_SUPPORTED` | *(Phase 0 name, not an error code. Unsupported requests are refused by the router: response status `refused`)* |
+| `AI_INSUFFICIENT_CONTEXT` | *(Phase 0 name, not an error code. The policy answer has `grounded=false`, no sources, and the message "I couldn't find enough information in the available HR policies to answer that confidently. …")* |
+| Policy out of scope *(not an error code)* | I can only answer questions about NovaWorks HR policies. I can't share employee personal data or perform HR actions. |
 | `AI_CONFIRMATION_INVALID` (400) | This confirmation is invalid or has expired. Please ask again. *(identical for unknown, other user's, used, expired or tampered)* |
 | `AI_TARGET_NOT_FOUND` (404) | I couldn't find a matching record that you're allowed to act on. *(identical for non-existent and out-of-scope)* |
 | `AI_BACKEND_UNAVAILABLE` (502) | The HR system could not complete this action right now. Please try again later. |

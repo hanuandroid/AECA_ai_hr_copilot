@@ -55,7 +55,7 @@ Paths are under `HRMS-main/backend/app/` (code) and `HRMS-main/backend/tests/` (
 | AUD-1 | Log every AI interaction: user id, role, message, intent, tool/API, status, timestamp; no secrets | `services/ai/audit/` table `ai_audit_events` (append-only triggers): `employee_id`, `actor_role`, `intents`, `capability`/`route`/`endpoint`, `status`, `created_at`, `action`, `target_employee_id`, `resource_id` | `ai/audit/` (privacy: no prompt, answer or PII persisted) | VERIFIED, with a deliberate deviation | the **message** is stored as length + keyed fingerprint, not text (redacted text lives only in the owner's conversation store); documented | — |
 | FE-1 | Chat input, history, loading, error, sources, SQL table, action confirmation, role-aware UI | `frontend/app/copilot/[[...conversation]]`, `components/copilot/*`, `lib/copilot-*.ts` | Vitest (mocked HTTP); Playwright 152 incl. Copilot workflows and action lifecycle | PARTIALLY VERIFIED | a grounded policy answer **with sources** is not shown end-to-end in the browser (needs a model or a scripted rule) | P2 |
 | FE-2 | Recommended section "Recent AI Actions" | `/admin/ai-audit` (ADMIN); `GET /api/v1/ai/audit` already returns a user's own events | — | MISSING for non-admin users (recommended, not a minimum) | no per-user view | P2 |
-| DOC-1 | `ai_architecture.md`, `ai_permissions_matrix.md`, `ai_eval_results.md`, README updates | present; deliverable-name map in `ai_architecture.md` §2.1 | read during this audit | VERIFIED | inaccuracies in §8 | P1/P2 |
+| DOC-1 | `ai_architecture.md`, `ai_permissions_matrix.md`, `ai_eval_results.md`, README updates | present; deliverable-name map in `ai_architecture.md` §8.2 | read during this audit | VERIFIED | inaccuracies in §8 | P1/P2 |
 | CQ-1 | Modular design, typed schemas, clean errors | one package per concern, Pydantic models, `AI_*` error codes | 3190 backend tests; CI backend job green | VERIFIED | — | — |
 
 **Minimum passing requirements:** ≥5 policy questions answered correctly: VERIFIED (offline, plus one live
@@ -141,7 +141,7 @@ and are owner-scoped; retention periods are an open governance decision (G-03/G-
 |---|---|---|---|
 | D-1 | "CI never ran on GitHub" / "NOT_RUN" is false: runs exist on 2026-10-14, 2026-10-15 and 2026-10-20 (all green except the advisory gate) | `capstone-submission-report.md` (§1, §3, §5, §7), `ci-and-validation.md` §3/§6, `final-security-readiness.md` (#26, header), `README.md`, `production-hardening/capstone-completion-progress.md` §5, `release-readiness.md`, `development-handoff.md`, workspace `CLAUDE.md` | P1 |
 | D-2 | Assignment action list not mapped to agents (§4 above) | `ai_permissions_matrix.md` | P2 |
-| D-3 | Matrix §1 says "Deactivate / reactivate employee" via AI; reactivation is not an AI action (`ai_architecture.md` §3.3 says so) | `ai_permissions_matrix.md` §1 | P3 |
+| D-3 | Matrix §1 says "Deactivate / reactivate employee" via AI; reactivation is not an AI action (`ai_architecture.md` §5 says so) | `ai_permissions_matrix.md` §1 | P3 |
 | D-4 | Broken sentence "The original router harness It never calls the services…" | `ai_eval_results.md` §4 | P3 |
 
 **Update 2026-10-20 (later the same day):** D-1, D-3 and D-4 corrected in the listed files. Not changed: the
@@ -159,6 +159,9 @@ Historical phase reports (e.g. `phase-2-report.md`) are dated records and should
 | `39471328944` | `2225fe7` | 2026-10-20 | success | success | success | success | **success** | failure | failure |
 | `39493375853` | `e149cfc` | 2026-10-20 | success | success | success | success | success | failure | failure |
 | `39607243952` | `6338adc` | 2026-10-21 | success | success | success | success | success | failure | failure |
+| `39620252480` | `618e9d4` | 2026-10-21 | success | success | success | success | success | failure | failure |
+| `39621297450` | `2023548` | 2026-10-21 | success | success | success | success | success | failure | failure |
+| `39623606922` | `859531f` | 2026-10-21 | success | success | success | success | success | failure | failure |
 
 Unresolved CI failure: the advisory gate (`tailwindcss@3` → `braces`, GHSA-vfj7-8cjw-p6xm, high; build-time only;
 runtime `npm audit` 0). **Update 2026-10-21:** the gate now also blocks on Pillow 12.3.0 (runtime; eight advisories

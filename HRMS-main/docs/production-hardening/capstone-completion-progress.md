@@ -198,7 +198,7 @@ CI gate tests `.github/scripts` **25 passed**.
 - **Harness drift fixed:** `.claude/rules/ai-safety.md`, `architecture.md`, `testing.md` named modules and a flag that
   do not exist (`api_tools.py`, `sql_executor.py`, `ai_audit_logs`, `--provider real`); corrected to the real
   locations. Three agents and five skills that still describe the Phase 0 plan got a pointer to the implemented layout
-  (`ai_architecture.md` §2.1) instead of a rewrite. `CLAUDE.md` names the script and the validation document.
+  (`ai_architecture.md` §2.1; §8.2 since the 2026-10-21 restructure) instead of a rewrite. `CLAUDE.md` names the script and the validation document.
 - Review of the rest: phase workflow with approval gates, characterization tests, negative tests per rule, deliberate
   regression checks, per-phase local commits and the trackers are in place; resumability now runs through
   `capstone-completion-progress.md` plus the handoff.
